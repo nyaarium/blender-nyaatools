@@ -12,6 +12,13 @@
 	"quoteProps": "consistent",
 	"overrides": [
 		{
+			"files": "*.py",
+			"options": {
+				"tabWidth": 4,
+				"useTabs": false
+			}
+		},
+		{
 			"files": "*.md",
 			"options": {
 				"tabWidth": 2,
