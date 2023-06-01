@@ -6,6 +6,7 @@ import numpy as np
 import webbrowser
 from typing import Optional
 from collections import defaultdict
+import traceback
 
 # ctx = bpy.context.copy()
 
@@ -42,7 +43,7 @@ BONE_DESC_MAP = {
     "Chest": {
         "common_names": ["Chest", "Breast Root", "Shoulder.L", "Shoulder.R"],
         "parent": "Spine",
-        "children": ["Neck"],
+        "children": ["Neck", "Breast Root"],
         "mirror": None
     },
     "Neck": {
@@ -71,22 +72,22 @@ BONE_DESC_MAP = {
     },
 
     "Breast Root": {
-        "common_names": ["Breast Root"],
-        "parent": "Spine",
+        "common_names": ["Breast Root", "Boob Root"],
+        "parent": "Chest",
         "children": ["Breast.R", "Breast.L"],
         "mirror": None
     },
-    "Breast.R": {
-        "common_names": ["Breast", "Right Breast"],
-        "parent": "Breast Root",
-        "children": None,
-        "mirror": "Breast.L"
-    },
     "Breast.L": {
-        "common_names": ["Breast", "Left Breast"],
+        "common_names": ["Breast", "BreastUpper2_L", "Left Breast"],
         "parent": "Breast Root",
         "children": None,
         "mirror": "Breast.R"
+    },
+    "Breast.R": {
+        "common_names": ["Breast", "BreastUpper2_R", "Right Breast"],
+        "parent": "Breast Root",
+        "children": None,
+        "mirror": "Breast.L"
     },
 
     "Thigh.L": {
@@ -98,7 +99,7 @@ BONE_DESC_MAP = {
     "Knee.L": {
         "common_names": ["Knee.L", "Lower Leg.L", "Left Knee"],
         "parent": "Thigh.L",
-        "children": ["Left Ankle"],
+        "children": ["Ankle.L"],
         "mirror": "Knee.R"
     },
     "Ankle.L": {
@@ -123,7 +124,7 @@ BONE_DESC_MAP = {
     "Knee.R": {
         "common_names": ["Knee.R", "Lower Leg.R", "Right Knee"],
         "parent": "Thigh.R",
-        "children": ["Right Ankle"],
+        "children": ["Ankle.R"],
         "mirror": "Knee.L"
     },
     "Ankle.R": {
@@ -190,182 +191,182 @@ BONE_DESC_MAP = {
     },
 
     "Thumb 1.L": {
-        "common_names": ["Thumb0_L"],
+        "common_names": ["Thumb0.L"],
         "parent": "Wrist.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R"
     },
     "Thumb 2.L": {
-        "common_names": ["Thumb1_L"],
+        "common_names": ["Thumb1.L"],
         "parent": "Thumb 1.L",
         "children": ["Thumb 3.L"],
         "mirror": "Thumb 2.R"
     },
     "Thumb 3.L": {
-        "common_names": ["Thumb2_L"],
+        "common_names": ["Thumb2.L"],
         "parent": "Thumb 2.L",
         "children": None,
         "mirror": "Thumb 3.R"
     },
     "Index Finger 1.L": {
-        "common_names": ["IndexFinger1_L"],
+        "common_names": ["IndexFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R"
     },
     "Index Finger 2.L": {
-        "common_names": ["IndexFinger2_L"],
+        "common_names": ["IndexFinger2.L"],
         "parent": "Index Finger 1.L",
         "children": ["Index Finger 3.L"],
         "mirror": "Index Finger 2.R"
     },
     "Index Finger 3.L": {
-        "common_names": ["IndexFinger3_L"],
+        "common_names": ["IndexFinger3.L"],
         "parent": "Index Finger 2.L",
         "children": None,
         "mirror": "Index Finger 3.R"
     },
     "Middle Finger 1.L": {
-        "common_names": ["MiddleFinger1_L"],
+        "common_names": ["MiddleFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R"
     },
     "Middle Finger 2.L": {
-        "common_names": ["MiddleFinger2_L"],
+        "common_names": ["MiddleFinger2.L"],
         "parent": "Middle Finger 1.L",
         "children": ["Middle Finger 3.L"],
         "mirror": "Middle Finger 2.R"
     },
     "Middle Finger 3.L": {
-        "common_names": ["MiddleFinger3_L"],
+        "common_names": ["MiddleFinger3.L"],
         "parent": "Middle Finger 2.L",
         "children": None,
         "mirror": "Middle Finger 3.R"
     },
     "Ring Finger 1.L": {
-        "common_names": ["RingFinger1_L"],
+        "common_names": ["RingFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R"
     },
     "Ring Finger 2.L": {
-        "common_names": ["RingFinger2_L"],
+        "common_names": ["RingFinger2.L"],
         "parent": "Ring Finger 1.L",
         "children": ["Ring Finger 3.L"],
         "mirror": "Ring Finger 2.R"
     },
     "Ring Finger 3.L": {
-        "common_names": ["RingFinger3_L"],
+        "common_names": ["RingFinger3.L"],
         "parent": "Ring Finger 2.L",
         "children": None,
         "mirror": "Ring Finger 3.R"
     },
     "Little Finger 1.L": {
-        "common_names": ["LittleFinger1_L"],
+        "common_names": ["LittleFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R"
     },
     "Little Finger 2.L": {
-        "common_names": ["LittleFinger2_L"],
+        "common_names": ["LittleFinger2.L"],
         "parent": "Little Finger 1.L",
         "children": ["Little Finger 3.L"],
         "mirror": "Little Finger 2.R"
     },
     "Little Finger 3.L": {
-        "common_names": ["LittleFinger3_L"],
+        "common_names": ["LittleFinger3.L"],
         "parent": "Little Finger 2.L",
         "children": None,
         "mirror": "Little Finger 3.R"
     },
 
     "Thumb 1.R": {
-        "common_names": ["Thumb0_R"],
+        "common_names": ["Thumb0.R"],
         "parent": "Wrist.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L"
     },
     "Thumb 2.R": {
-        "common_names": ["Thumb1_R"],
+        "common_names": ["Thumb1.R"],
         "parent": "Thumb 1.R",
         "children": ["Thumb 3.R"],
         "mirror": "Thumb 2.L"
     },
     "Thumb 3.R": {
-        "common_names": ["Thumb2_R"],
+        "common_names": ["Thumb2.R"],
         "parent": "Thumb 2.R",
         "children": None,
         "mirror": "Thumb 3.L"
     },
     "Index Finger 1.R": {
-        "common_names": ["IndexFinger1_R"],
+        "common_names": ["IndexFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L"
     },
     "Index Finger 2.R": {
-        "common_names": ["IndexFinger2_R"],
+        "common_names": ["IndexFinger2.R"],
         "parent": "Index Finger 1.R",
         "children": ["Index Finger 3.R"],
         "mirror": "Index Finger 2.L"
     },
     "Index Finger 3.R": {
-        "common_names": ["IndexFinger3_R"],
+        "common_names": ["IndexFinger3.R"],
         "parent": "Index Finger 2.R",
         "children": None,
         "mirror": "Index Finger 3.L"
     },
     "Middle Finger 1.R": {
-        "common_names": ["MiddleFinger1_R"],
+        "common_names": ["MiddleFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L"
     },
     "Middle Finger 2.R": {
-        "common_names": ["MiddleFinger2_R"],
+        "common_names": ["MiddleFinger2.R"],
         "parent": "Middle Finger 1.R",
         "children": ["Middle Finger 3.R"],
         "mirror": "Middle Finger 2.L"
     },
     "Middle Finger 3.R": {
-        "common_names": ["MiddleFinger3_R"],
+        "common_names": ["MiddleFinger3.R"],
         "parent": "Middle Finger 2.R",
         "children": None,
         "mirror": "Middle Finger 3.L"
     },
     "Ring Finger 1.R": {
-        "common_names": ["RingFinger1_R"],
+        "common_names": ["RingFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L"
     },
     "Ring Finger 2.R": {
-        "common_names": ["RingFinger2_R"],
+        "common_names": ["RingFinger2.R"],
         "parent": "Ring Finger 1.R",
         "children": ["Ring Finger 3.R"],
         "mirror": "Ring Finger 2.L"
     },
     "Ring Finger 3.R": {
-        "common_names": ["RingFinger3_R"],
+        "common_names": ["RingFinger3.R"],
         "parent": "Ring Finger 2.R",
         "children": None,
         "mirror": "Ring Finger 3.L"
     },
     "Little Finger 1.R": {
-        "common_names": ["LittleFinger1_R"],
+        "common_names": ["LittleFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L"
     },
     "Little Finger 2.R": {
-        "common_names": ["LittleFinger2_R"],
+        "common_names": ["LittleFinger2.R"],
         "parent": "Little Finger 1.R",
         "children": ["Little Finger 3.R"],
         "mirror": "Little Finger 2.L"
     },
     "Little Finger 3.R": {
-        "common_names": ["LittleFinger3_R"],
+        "common_names": ["LittleFinger3.R"],
         "parent": "Little Finger 2.R",
         "children": None,
         "mirror": "Little Finger 3.L"
@@ -457,7 +458,8 @@ def removeUnusedShapeKeys(obj):
         obj.shape_key_remove(obj.data.shape_keys.key_blocks[kb_name])
 
 
-def removeUnusedMaterials():
+def removeUnusedMaterials(obj):
+    # FIXME: obj wasn't defined
     mat_slots = {}
     for p in obj.data.polygons:
         mat_slots[p.material_index] = 1
@@ -657,7 +659,7 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
             "] not in bones_map! Expected an exact name of a Bone Descriptor."
         )
 
-    def check_parent(bone_desc_name, bone, stop_counter=2):
+    def probability_parent(bone_desc_name, bone, stop_counter=0):
         def debug_print(*msgs):
             # print("   ", "   ", *msgs)
             return
@@ -666,22 +668,30 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
             raise TypeError("bone_desc_name must be type str")
 
         # This check only happens if there is a parent to compare
-        if bone.parent and BONE_DESC_MAP[bone_desc_name]["parent"] and 0 < stop_counter:
+        if bone.parent and BONE_DESC_MAP[bone_desc_name]["parent"] and stop_counter < 3:
             parent_name = bone.parent.name
 
             # Parent descriptor
             parent_desc_name = BONE_DESC_MAP[bone_desc_name]["parent"]
-            debug_print("Comparing ",  parent_name, " to:", parent_desc_name)
+
+            # If exact match, return bone
+            if parent_name == parent_desc_name:
+                debug_print("* Exact match ",  parent_name,
+                            " == ", parent_desc_name)
+                return 1
+
+            debug_print("Comparing ", parent_name, " to ",  parent_desc_name)
 
             # If the parent is a match, return the bone
             if 0.8 <= similarity_to_common_names(parent_name, parent_desc_name):
                 debug_print(bone.name, " seems to be ", bone_desc_name)
-                return check_parent(parent_desc_name, bone.parent, stop_counter - 1)
+                return probability_parent(parent_desc_name, bone.parent, stop_counter + 1)
             else:
                 debug_print("* Not a match!")
                 return 0
 
         s = similarity_to_common_names(bone.name, bone_desc_name)
+        s += 0.1 * stop_counter
         if 0.8 <= s:
             debug_print("* Likely match: ", bone.name, " == ", bone_desc_name)
             return s
@@ -689,49 +699,7 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
             debug_print("* Not a match!")
             return 0
 
-    debug_print("find_bone(", bone_desc_name, ")")
-
-    # Switch to Edit mode
-    bpy.ops.object.mode_set(mode="EDIT")
-
-    bone_matches = []
-
-    # All bones in armature that are similar to the common_names
-    for bone in armature.data.edit_bones:
-        # If exact match, return bone
-        if bone.name == bone_desc_name:
-            return bone
-
-        if 0.8 <= similarity_to_common_names(bone.name, bone_desc_name):
-            bone_matches.append(bone)
-
-    debug_print("Similar names:", [b.name for b in bone_matches])
-
-    if len(bone_matches) == 0:
-        return None
-
-    # Loop over bone_matches and store pairs of [likeliness, bone]
-    likely_bone = []
-    for bone in bone_matches:
-        if bone.parent:
-            if check_parent(bone_desc_name, bone):
-                likely_bone.append([
-                    similarity_to_common_names(bone.name, bone_desc_name),
-                    bone
-                ])
-
-    # DEBUG DISABLE
-    likely_bone = []  # DEBUG DISABLE
-    # DEBUG DISABLE
-
-    # If a likely one was found, return it
-    if len(likely_bone):
-        debug_print("Very likely matches:", [(b[1].name) for b in likely_bone])
-        return max(likely_bone)[1]
-
-    # Check immediate bones, and if they look like what BONE_DESC_MAP describes, add them to likely_bone
-
-    def check_child(bone_desc_name, bone) -> bpy.types.EditBone:
+    def check_child(bone_desc_name, bone):
         def debug_print(*msgs):
             # print("   ", "   ", *msgs)
             return
@@ -748,15 +716,57 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
             for child_desc_name in BONE_DESC_MAP[bone_desc_name]["children"]:
                 debug_print("Comparing it to:", child_desc_name)
 
+                # If exact match, return bone
+                if child_name == child_desc_name:
+                    debug_print("* Exact match ",  child_name,
+                                " == ", child_desc_name)
+                    return True
+
                 # If the child is a match, return the bone
                 if 0.8 <= similarity_to_common_names(child_name, child_desc_name):
-                    debug_print("Child is a good match",
+                    debug_print("* Child is a good match",
                                 bone.name, " is ", bone_desc_name)
-                    return bone
+                    return True
 
+        return False
+
+    debug_print("find_bone(", bone_desc_name, ")")
+
+    # Switch to Edit mode
+    bpy.ops.object.mode_set(mode="EDIT")
+
+    bone_matches = []
+
+    # All bones in armature that are similar to the common_names
+    for bone in armature.data.edit_bones:
+        # If exact match, return bone
+        if bone.name == bone_desc_name:
+            return bone
+
+        if 0.75 <= similarity_to_common_names(bone.name, bone_desc_name):
+            bone_matches.append(bone)
+
+    debug_print("Similar names:", [b.name for b in bone_matches])
+
+    if len(bone_matches) == 0:
         return None
 
-    # If there is no parent to compare, check children
+    # Loop over bone_matches and store pairs of [likeliness, bone]
+    likely_bone = []
+    for bone in bone_matches:
+        if bone.parent:
+            if probability_parent(bone_desc_name, bone):
+                likely_bone.append([
+                    similarity_to_common_names(bone.name, bone_desc_name),
+                    bone
+                ])
+
+    # If a likely one was found, return the max of likely_bone[1]
+    if len(likely_bone):
+        debug_print("Very likely matches:", [(b[1].name) for b in likely_bone])
+        return max(likely_bone, key=lambda b: b[0])[1]
+
+    # Check immediate bones, and if they look like what BONE_DESC_MAP describes, add them to likely_bone
     if bone.children:
         for bone in bone_matches:
             if check_child(bone_desc_name, bone):
@@ -771,14 +781,18 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
         if len(likely_bone):
             debug_print("Very likely matches:", [
                         (b[1].name) for b in likely_bone])
-            return max(likely_bone)[1]
+            return max(likely_bone, key=lambda b: b[0])[1]
 
     return None
 
 
-def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> bool:
+def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> float:
     if not isinstance(bone_desc_name, str):
         raise TypeError("bone_desc_name must be type str")
+
+    # Regex removes substr .001, .002, etc. from name
+    bone_name = re.sub(r"\.\d{3}", "", bone_name)
+    bone_name = re.sub(r"_", ".", bone_name)
 
     common_names = BONE_DESC_MAP[bone_desc_name]["common_names"]
     if common_names:
@@ -820,6 +834,36 @@ def string_similarity(str1: str, str2: str) -> float:
     return (match * 2) / (len(str1) + len(str2) - ((substring_length - 1) * 2))
 
 
+def normalize_armature_rename_bones(armature: bpy.types.Armature):
+    def debug_print(*msgs):
+        print("   ", *msgs)
+        return
+
+    # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
+    for bone_desc_name in BONE_DESC_MAP:
+        bone = find_bone(armature, bone_desc_name)
+        if bone == None:
+            debug_print("Couldn't find bone: ", bone_desc_name)
+            continue
+
+        if bone.name == bone_desc_name:
+            debug_print("Name is good: ", bone.name)
+
+        if bone.name != bone_desc_name:
+            debug_print("Renaming: ", bone.name, " to ", bone_desc_name)
+            bone.name = bone_desc_name
+
+
+def normalize_armature_t_pose(armature: bpy.types.Armature):
+    def debug_print(*msgs):
+        print("   ", *msgs)
+        return
+
+    # Switch to pose mode
+    bpy.ops.object.mode_set(mode="POSE")
+
+    # TODO
+
 #############################################
 # Operators
 
@@ -831,33 +875,32 @@ class NyaaToolsNormalizeArmature(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        obj = bpy.context.active_object
+        try:
+            obj = bpy.context.active_object
 
-        if obj == None:
-            self.report({"ERROR"}, "Expected an armature object, got: None")
+            if obj == None:
+                self.report(
+                    {"ERROR"}, "Expected an armature object, got: None")
+                return {"CANCELLED"}
+
+            if obj.type != "ARMATURE":
+                self.report(
+                    {"ERROR"}, "Expected an armature object, got: " + obj.type)
+                return {"CANCELLED"}
+
+            # {bpy.types.Armature}  The armature to normalize
+            armature = obj
+
+            # Rename bones
+            normalize_armature_rename_bones(armature)
+
+            # Set T-Pose
+            normalize_armature_t_pose(armature)
+
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-
-        if obj.type != "ARMATURE":
-            self.report(
-                {"ERROR"}, "Expected an armature object, got: " + obj.type)
-            return {"CANCELLED"}
-
-        armature = obj
-
-        # Normalize the root bone
-        # fixArmatureRoot(obj)
-
-        print("")
-        print("")
-        print("")
-        print("")
-        print("")
-        print("")
-
-        print("Hips", find_bone(armature, "Hips"))
-        print("Spine", find_bone(armature, "Spine"))
-        print("Thumb 2.L", find_bone(armature, "Thumb 2.L"))
-        print("Little Finger 2.L", find_bone(armature, "Little Finger 2.L"))
 
         return {"FINISHED"}
 
@@ -869,75 +912,82 @@ class NyaaToolsInitMods(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        obj = bpy.context.active_object
+        try:
+            obj = bpy.context.active_object
 
-        if obj is None:
-            self.report({"ERROR"}, "Expected a mesh object, got: None")
-            return {"CANCELLED"}
+            if obj is None:
+                self.report({"ERROR"}, "Expected a mesh object, got: None")
+                return {"CANCELLED"}
 
-        if obj.type != "MESH":
-            self.report({"ERROR"}, "Expected a mesh object, got: " + obj.type)
-            return {"CANCELLED"}
+            if obj.type != "MESH":
+                self.report(
+                    {"ERROR"}, "Expected a mesh object, got: " + obj.type)
+                return {"CANCELLED"}
 
-        # Delete all armatures
-        for mod in obj.modifiers:
-            if (mod.type == "ARMATURE"):
+            # Delete all armatures
+            for mod in obj.modifiers:
+                if (mod.type == "ARMATURE"):
+                    obj.modifiers.remove(mod)
+
+            name = "Final - DataTransfer"
+            mod = obj.modifiers.get(name)
+            if (mod):
                 obj.modifiers.remove(mod)
+            mod = obj.modifiers.new(name, "DATA_TRANSFER")
+            mod.show_expanded = False
+            mod.show_on_cage = True
+            mod.show_in_editmode = True
+            mod.use_vert_data = True
+            mod.data_types_verts = {"VGROUP_WEIGHTS"}
+            mod.vert_mapping = "POLYINTERP_NEAREST"
 
-        name = "Final - DataTransfer"
-        mod = obj.modifiers.get(name)
-        if (mod):
-            obj.modifiers.remove(mod)
-        mod = obj.modifiers.new(name, "DATA_TRANSFER")
-        mod.show_expanded = False
-        mod.show_on_cage = True
-        mod.show_in_editmode = True
-        mod.use_vert_data = True
-        mod.data_types_verts = {"VGROUP_WEIGHTS"}
-        mod.vert_mapping = "POLYINTERP_NEAREST"
+            name = "Final - Decimate"
+            mod = obj.modifiers.get(name)
+            if (mod):
+                obj.modifiers.remove(mod)
+            mod = obj.modifiers.new(name, "DECIMATE")
+            mod.show_expanded = False
+            mod.show_render = False
+            mod.decimate_type = "COLLAPSE"
+            mod.ratio = 0.75
+            mod.delimit = {"NORMAL", "MATERIAL", "SEAM", "SHARP", "UV"}
+            mod.use_dissolve_boundaries = True
 
-        name = "Final - Decimate"
-        mod = obj.modifiers.get(name)
-        if (mod):
-            obj.modifiers.remove(mod)
-        mod = obj.modifiers.new(name, "DECIMATE")
-        mod.show_expanded = False
-        mod.show_render = False
-        mod.decimate_type = "COLLAPSE"
-        mod.ratio = 0.75
-        mod.delimit = {"NORMAL", "MATERIAL", "SEAM", "SHARP", "UV"}
-        mod.use_dissolve_boundaries = True
+            name = "Final - Triangulate"
+            mod = obj.modifiers.get(name)
+            if (mod):
+                obj.modifiers.remove(mod)
+            mod = obj.modifiers.new(name, "TRIANGULATE")
+            mod.show_expanded = False
+            mod.show_in_editmode = False
+            mod.show_render = False
+            mod.min_vertices = 5
 
-        name = "Final - Triangulate"
-        mod = obj.modifiers.get(name)
-        if (mod):
-            obj.modifiers.remove(mod)
-        mod = obj.modifiers.new(name, "TRIANGULATE")
-        mod.show_expanded = False
-        mod.show_in_editmode = False
-        mod.show_render = False
-        mod.min_vertices = 5
+            # Make an armature for every PROP_TARGET_AVATARS defined
+            key = getProp(obj, PROP_TARGET_AVATARS)
+            if (key != None):
+                keySplit = key.split(",")
+                for path in keySplit:
+                    pathParts = path.split("/")
+                    targetAvatarName = pathParts[0].strip()
+                    meshLayerName = pathParts[1].strip()
 
-        # Make an armature for every PROP_TARGET_AVATARS defined
-        key = getProp(obj, PROP_TARGET_AVATARS)
-        if (key != None):
-            keySplit = key.split(",")
-            for path in keySplit:
-                pathParts = path.split("/")
-                targetAvatarName = pathParts[0].strip()
-                meshLayerName = pathParts[1].strip()
+                    target = getAvatarArmature(targetAvatarName)
+                    print(target)
+                    if (target != None):
+                        name = "--( " + targetAvatarName + " )"
+                        mod = obj.modifiers.new(name, "ARMATURE")
+                        mod.show_expanded = False
+                        mod.show_on_cage = True
+                        mod.show_in_editmode = True
+                        mod.show_viewport = True
+                        mod.show_render = True
+                        mod.object = target
 
-                target = getAvatarArmature(targetAvatarName)
-                print(target)
-                if (target != None):
-                    name = "--( " + targetAvatarName + " )"
-                    mod = obj.modifiers.new(name, "ARMATURE")
-                    mod.show_expanded = False
-                    mod.show_on_cage = True
-                    mod.show_in_editmode = True
-                    mod.show_viewport = True
-                    mod.show_render = True
-                    mod.object = target
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
 
         return {"FINISHED"}
 
@@ -954,94 +1004,98 @@ class NyaaToolsMergeExport(Operator):
     )
 
     def execute(self, context):
-        self.report({"INFO"}, "Merge & Export")
-        print("\n\n")
-
-        # Create "Export" collection
-        collectionExport = bpy.data.collections.new("Export")
-
-        bpy.context.scene.collection.children.link(collectionExport)
-        collectionExport.color_tag = "COLOR_01"
-
-        armature = bpy.context.scene.objects.get(self.armatureName)
-        avatarName = getProp(armature, PROP_AVATAR)
-
-        # Rename all objects to avoid collisions
-        for obj in bpy.data.objects:
-            obj.name = "____" + obj.name
-
-        # Rename & move Armature to exports
-        armature.name = "Armature"
-        armature.data.name = "Armature"
-        armature.parent = None
-
         try:
-            selectAdd(armature)
-            bpy.ops.object.transform_apply(
-                location=True, rotation=True, scale=True)
-            bpy.data.collections[EXPORT_COLLECTION].objects.link(armature)
-        except:
-            None
+            # Create "Export" collection
+            collectionExport = bpy.data.collections.new("Export")
 
-        # Perform layer merges on meshes
-        for meshName in getAvatarMeshes(avatarName):
-            mesh = bpy.context.scene.objects.get(meshName)
-            if (mesh != None):
-                key = getProp(mesh, PROP_TARGET_AVATARS)
-                if (key != None):
-                    keySplit = key.split(",")
-                    for path in keySplit:
-                        pathParts = path.split("/")
-                        targetAvatarName = pathParts[0].strip()
-                        meshLayerName = pathParts[1].strip()
-                        if (avatarName == targetAvatarName):
-                            mergeOntoTarget(meshLayerName, meshName, armature)
-            else:
-                print("    BUG: Mesh doesn't exist, skipping for now:  " + meshName)
+            bpy.context.scene.collection.children.link(collectionExport)
+            collectionExport.color_tag = "COLOR_01"
 
-        # Cleanup
-        for obj in bpy.data.objects:
-            if (obj.name.startswith("____")):
-                bpy.data.objects.remove(obj)
+            armature = bpy.context.scene.objects.get(self.armatureName)
+            avatarName = getProp(armature, PROP_AVATAR)
 
-        for obj in bpy.data.objects:
-            if (obj.type == "MESH"):
-                cleanupMesh(obj)
+            # Rename all objects to avoid collisions
+            for obj in bpy.data.objects:
+                obj.name = "____" + obj.name
 
-        for col in bpy.context.scene.collection.children:
-            if (col.name != "Export"):
-                bpy.data.collections.remove(col)
+            # Rename & move Armature to exports
+            armature.name = "Armature"
+            armature.data.name = "Armature"
+            armature.parent = None
 
-        # Export
-        selectCollection(EXPORT_COLLECTION)
+            try:
+                selectAdd(armature)
+                bpy.ops.object.transform_apply(
+                    location=True, rotation=True, scale=True)
+                bpy.data.collections[EXPORT_COLLECTION].objects.link(armature)
+            except:
+                None
 
-        if getProp(armature, PROP_EXPORT_PATH):
-            path = getProp(armature, PROP_EXPORT_PATH)
-            if (path):
-                if (path[-1] == "/" or path[-1] == "\\"):
-                    path = bpy.path.abspath(
-                        "//" + path + targetAvatarName + ".fbx")
+            # Perform layer merges on meshes
+            for meshName in getAvatarMeshes(avatarName):
+                mesh = bpy.context.scene.objects.get(meshName)
+                if (mesh != None):
+                    key = getProp(mesh, PROP_TARGET_AVATARS)
+                    if (key != None):
+                        keySplit = key.split(",")
+                        for path in keySplit:
+                            pathParts = path.split("/")
+                            targetAvatarName = pathParts[0].strip()
+                            meshLayerName = pathParts[1].strip()
+                            if (avatarName == targetAvatarName):
+                                mergeOntoTarget(
+                                    meshLayerName, meshName, armature)
                 else:
-                    path = bpy.path.abspath("//" + path)
+                    print("    BUG: Mesh doesn't exist, skipping for now:  " + meshName)
 
-            bpy.ops.export_scene.fbx(
-                filepath=path,
-                check_existing=False,
-                filter_glob="*.fbx",
-                use_active_collection=True,
+            # Cleanup
+            for obj in bpy.data.objects:
+                if (obj.name.startswith("____")):
+                    bpy.data.objects.remove(obj)
 
-                apply_scale_options="FBX_SCALE_UNITS",
-                axis_forward="-Y",
-                axis_up="Z",
-                use_mesh_modifiers=False,
-                mesh_smooth_type="FACE",
-                # primary_bone_axis="X",
-                # secondary_bone_axis="-Y",
-                add_leaf_bones=False,
+            for obj in bpy.data.objects:
+                if (obj.type == "MESH"):
+                    cleanupMesh(obj)
 
-                bake_anim=False
-                # bake_anim_use_all_actions=False,
-            )
+            for col in bpy.context.scene.collection.children:
+                if (col.name != "Export"):
+                    bpy.data.collections.remove(col)
+
+            # Export
+            selectCollection(EXPORT_COLLECTION)
+
+            if getProp(armature, PROP_EXPORT_PATH):
+                path = getProp(armature, PROP_EXPORT_PATH)
+                if (path):
+                    if (path[-1] == "/" or path[-1] == "\\"):
+                        path = bpy.path.abspath(
+                            "//" + path + targetAvatarName + ".fbx")
+                    else:
+                        path = bpy.path.abspath("//" + path)
+
+                bpy.ops.export_scene.fbx(
+                    filepath=path,
+                    check_existing=False,
+                    filter_glob="*.fbx",
+                    use_active_collection=True,
+
+                    apply_scale_options="FBX_SCALE_UNITS",
+                    axis_forward="-Y",
+                    axis_up="Z",
+                    use_mesh_modifiers=False,
+                    mesh_smooth_type="FACE",
+                    # primary_bone_axis="X",
+                    # secondary_bone_axis="-Y",
+                    add_leaf_bones=False,
+
+                    bake_anim=False
+                    # bake_anim_use_all_actions=False,
+                )
+
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
 
         return {"FINISHED"}
 
