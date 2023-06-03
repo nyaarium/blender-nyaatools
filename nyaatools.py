@@ -894,6 +894,196 @@ def string_similarity(str1: str, str2: str) -> float:
     return (match * 2) / (len(str1) + len(str2) - ((substring_length - 1) * 2))
 
 
+def find_meshes_affected_by_armature_modifier(armature):
+    ret = []
+    for obj in bpy.data.objects:
+        # Must be a mesh
+        if obj.type != "MESH":
+            continue
+
+        mesh = obj
+
+        # Must be using this armature in the "Armature" modifier
+        # KNOWN ISSUE: If the mesh uses this armature in 2 armature modifiers, something not good will happen
+        using_armature = False
+        which_modifier = None
+        for mod in mesh.modifiers:
+            if mod.type == "ARMATURE":
+                if mod.object == armature:
+                    using_armature = True
+                    which_modifier = mod
+                    break
+        if not using_armature:
+            continue
+
+        # Add to affected_meshes pair: [ mesh, modifier ]
+        ret.append([mesh, which_modifier])
+
+    return ret
+
+
+# Apply pose onto all meshes (retains the Armature modifier)
+def apply_pose(armature, mesh_modifier_pairs):
+    def debug_print(*msgs):
+        print("   ", *msgs)
+        return
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for mesh, modifier in mesh_modifier_pairs:
+        # Select the mesh
+        mesh.select_set(True)
+        bpy.context.view_layer.objects.active = mesh
+
+        debug_print("Applying pose to mesh ", mesh.name, modifier.name)
+        # Duplicate modifier & apply it
+        modifier_copy = mesh.modifiers.new(modifier.name, modifier.type)
+        debug_print("Copied modifier", modifier_copy.name)
+        modifier_copy.object = modifier.object
+
+        # If shape keys exist (note that shape_keys may be None)
+        if mesh.data.shape_keys != None:
+            applyModifierForObjectWithShapeKeys(
+                bpy.context, [modifier_copy.name], True)
+        else:
+            bpy.ops.object.modifier_apply(modifier=modifier_copy.name)
+
+        # Unselect
+        mesh.select_set(False)
+        bpy.context.view_layer.objects.active = None
+
+    # Select the armature
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+
+    # Set pose as rest pose
+    bpy.ops.object.mode_set(mode="POSE")
+    bpy.ops.pose.armature_apply()
+
+
+# Clear all pose bones that may be in a pose
+def clear_pose(armature):
+    for bone in armature.pose.bones:
+        bone.matrix_basis.identity()
+
+
+# Align a bone onto an axis
+def align_bone_to_axis(armature, bone, axis, direction):
+    def debug_print(*msgs):
+        print("   ", *msgs)
+        return
+
+    def needs_align(bone, axis, direction):
+        debug_print("Checking if bone ", bone.name, " needs alignment")
+        head = bone.head
+        tail = bone.tail
+        target = None
+        if axis == "x":
+            target = Vector((head[0] + direction, head[1], head[2]))
+        elif axis == "y":
+            target = Vector((head[0], head[1] + direction, head[2]))
+        elif axis == "z":
+            target = Vector((head[0], head[1], head[2] + direction))
+        else:
+            raise ValueError(
+                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+        # Vector from head to tail
+        tv = target - head
+        bv = tail - head
+        rot = tv.rotation_difference(bv)
+        debug_print("v: ", tv)
+        debug_print("bv: ", bv)
+        debug_print("rot: ", rot)
+
+        # If bone rotation is already aligned, return False
+        if rot.angle == 0:
+            debug_print("Bone ", bone.name, " is already aligned")
+            return False
+
+        # If the bone is not aligned, return True
+        debug_print("Bone ", bone.name, " is not aligned")
+        return True
+
+    def _helper_align(bone, axis, direction):
+        # Set target to be 1 meter in an axis direction away from head
+        head = bone.head
+        tail = bone.tail
+        target = None
+        if axis == "x":
+            target = Vector((head[0] + direction, head[1], head[2]))
+        elif axis == "y":
+            target = Vector((head[0], head[1] + direction, head[2]))
+        elif axis == "z":
+            target = Vector((head[0], head[1], head[2] + direction))
+        else:
+            raise ValueError(
+                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+        debug_print("Aligning bone ", bone.name, " to axis ", axis,
+                    " in direction ", direction, " to target ", target)
+
+        # Vector from head to tail
+        tv = target - head
+        bv = tail - head
+        debug_print("v: ", tv)
+        debug_print("bv: ", bv)
+
+        # Quaternion that rotates bv to v
+        rd = bv.rotation_difference(tv)
+        debug_print("rd: ", rd)
+
+        # Matrix that rotates bone to v
+        M = (
+            Matrix.Translation(head) @
+            rd.to_matrix().to_4x4() @
+            Matrix.Translation(-head)
+        )
+
+        bone.matrix = M @ bone.matrix
+
+    if axis != "x" and axis != "y" and axis != "z":
+        raise ValueError("axis must be 'x', 'y', or 'z'")
+    if direction != 1 and direction != -1:
+        raise ValueError("direction must be 1 or -1")
+
+    bone_name = bone.name
+
+    if needs_align(bone, axis, direction):
+        # If bone ends in .L or .R, apply it on the mirrored bone as well
+        if bone_name.endswith(".L") or bone_name.endswith(".R"):
+            # Run on bone
+            _helper_align(bone, axis, direction)
+
+            # And then the mirrored bone
+            mirrored_bone_name = BONE_DESC_MAP[bone_name]["mirror"]
+
+            # If bone a type of bpy.types.PoseBone, use find_pose_bone
+            if isinstance(bone, bpy.types.PoseBone):
+                mirrored_bone = find_pose_bone(armature, mirrored_bone_name)
+            else:
+                mirrored_bone = find_bone(armature, mirrored_bone_name)
+
+            if mirrored_bone != None:
+                debug_print("Mirrored bone found: ", mirrored_bone_name)
+
+                # Flip direction only if x-axis
+                if axis == "x":
+                    direction *= -1
+
+                # Run on mirrored bone
+                _helper_align(mirrored_bone, axis, direction)
+        else:
+            # Run it as requested
+            _helper_align(bone, axis, direction)
+
+        return True
+    else:
+        return False
+
+
 def normalize_armature_rename_bones(armature: bpy.types.Armature):
     def debug_print(*msgs):
         print("   ", *msgs)
@@ -932,226 +1122,22 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
         print("   ", *msgs)
         return
 
-    def find_affected_meshes(armature):
-        ret = []
-        for obj in bpy.data.objects:
-            # Must be a mesh
-            if obj.type != "MESH":
-                continue
-
-            mesh = obj
-
-            # Must be using this armature in the "Armature" modifier
-            # KNOWN ISSUE: If the mesh uses this armature in 2 armature modifiers, something not good will happen
-            using_armature = False
-            which_modifier = None
-            for mod in mesh.modifiers:
-                if mod.type == "ARMATURE":
-                    if mod.object == armature:
-                        using_armature = True
-                        which_modifier = mod
-                        break
-            if not using_armature:
-                continue
-
-            # Add to affected_meshes pair: [ mesh, modifier ]
-            ret.append([mesh, which_modifier])
-
-        return ret
-
-    # Align a bone onto an axis
-    def align_bone_to_axis(bone, axis, direction):
-        def debug_print(*msgs):
-            # print("   ", *msgs)
-            return
-
-        def needs_align(bone, axis, direction):
-            debug_print("Checking if bone ", bone.name, " needs alignment")
-            head = bone.head
-            tail = bone.tail
-            target = None
-            if axis == "x":
-                target = Vector((head[0] + direction, head[1], head[2]))
-            elif axis == "y":
-                target = Vector((head[0], head[1] + direction, head[2]))
-            elif axis == "z":
-                target = Vector((head[0], head[1], head[2] + direction))
-            else:
-                raise ValueError(
-                    "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
-
-            # Vector from head to tail
-            v = target - head
-            bv = tail - head
-            debug_print("v: ", v)
-            debug_print("bv: ", bv)
-
-            # If the bone is already aligned, return False
-            if v == bv:
-                debug_print("Bone ", bone.name, " is already aligned")
-                return False
-
-            # If the bone is not aligned, return True
-            debug_print("Bone ", bone.name, " is not aligned")
-            return True
-
-        def _helper_align(bone, axis, direction):
-            # Set target to be 1 meter in an axis direction away from head
-            head = bone.head
-            tail = bone.tail
-            target = None
-            if axis == "x":
-                target = Vector((head[0] + direction, head[1], head[2]))
-            elif axis == "y":
-                target = Vector((head[0], head[1] + direction, head[2]))
-            elif axis == "z":
-                target = Vector((head[0], head[1], head[2] + direction))
-            else:
-                raise ValueError(
-                    "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
-
-            debug_print("Aligning bone ", bone.name, " to axis ", axis,
-                        " in direction ", direction, " to target ", target)
-
-            # Vector from head to tail
-            tv = target - head
-            bv = tail - head
-            debug_print("v: ", tv)
-            debug_print("bv: ", bv)
-
-            # Quaternion that rotates bv to v
-            rd = bv.rotation_difference(tv)
-            debug_print("rd: ", rd)
-
-            # Matrix that rotates bone to v
-            M = (
-                Matrix.Translation(head) @
-                rd.to_matrix().to_4x4() @
-                Matrix.Translation(-head)
-            )
-
-            bone.matrix = M @ bone.matrix
-
-        if axis != "x" and axis != "y" and axis != "z":
-            raise ValueError("axis must be 'x', 'y', or 'z'")
-        if direction != 1 and direction != -1:
-            raise ValueError("direction must be 1 or -1")
-
-        bone_name = bone.name
-
-        if needs_align(bone, axis, direction):
-            # If bone ends in .L or .R, apply it on the mirrored bone as well
-            if bone_name.endswith(".L") or bone_name.endswith(".R"):
-                # Run on bone
-                _helper_align(bone, axis, direction)
-
-                # And then the mirrored bone
-                mirrored_bone_name = BONE_DESC_MAP[bone_name]["mirror"]
-                mirrored_bone = find_pose_bone(armature, mirrored_bone_name)
-                if mirrored_bone != None:
-                    debug_print("Mirrored bone found: ", mirrored_bone_name)
-
-                    # Flip direction only if x-axis
-                    if axis == "x":
-                        direction *= -1
-
-                    # Run on mirrored bone
-                    _helper_align(mirrored_bone, axis, direction)
-            else:
-                # Run it as requested
-                _helper_align(bone, axis, direction)
-
-            return True
-        else:
-            return False
-
-    # Clear all pose bones that may be in a pose
-    def clear_pose(armature):
-        for bone in armature.pose.bones:
-            bone.matrix_basis.identity()
-
-    # Apply pose onto all meshes (retains the Armature modifier)
-    def apply_pose(armature, mesh_modifier_pairs):
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-        bpy.ops.object.select_all(action="DESELECT")
-
-        for mesh, modifier in mesh_modifier_pairs:
-            # Select the mesh
-            mesh.select_set(True)
-            bpy.context.view_layer.objects.active = mesh
-
-            debug_print("Applying pose to mesh ", mesh.name, modifier.name)
-            # Duplicate modifier & apply it
-            modifier_copy = mesh.modifiers.new(modifier.name, modifier.type)
-            debug_print("Copied modifier", modifier_copy.name)
-            modifier_copy.object = modifier.object
-
-            # If shape keys exist (note that shape_keys may be None)
-            if mesh.data.shape_keys != None:
-                applyModifierForObjectWithShapeKeys(
-                    bpy.context, [modifier_copy.name], True)
-            else:
-                bpy.ops.object.modifier_apply(modifier=modifier_copy.name)
-
-            # Unselect
-            mesh.select_set(False)
-            bpy.context.view_layer.objects.active = None
-
-        # Select the armature
-        armature.select_set(True)
-        bpy.context.view_layer.objects.active = armature
-
-        # Set pose as rest pose
-        bpy.ops.object.mode_set(mode="POSE")
-        bpy.ops.pose.armature_apply()
-
     debug_print("Starting normalize_armature_t_pose()")
 
     # Find all meshes that have an armature modifier with this armature
-    affected_meshes = find_affected_meshes(armature)
+    affected_meshes = find_meshes_affected_by_armature_modifier(armature)
 
     clear_pose(armature)
 
     should_apply = False
 
     ################
-    # Foot Initialization
+    # Foot Initialization - Point foot bone forward
 
-    def rotate_foot(armature, which):
-        find_bone(armature, "Toe." + which).use_connect = False
-
-        # Snapshot "Foot.L" rotation
-
-        foot = find_bone(armature, "Foot." + which)
-        target_forward = Vector((foot.head[0], foot.head[1] - 1, foot.head[2]))
-        foot_tv = target_forward - foot.head
-        foot_dv = foot.tail - foot.head
-        foot_rd = foot_dv.rotation_difference(foot_tv)
-
-        # Rotate it to be aligned with the y-axis
-        foot_M = (
-            Matrix.Translation(foot.head) @
-            foot_rd.to_matrix().to_4x4() @
-            Matrix.Translation(-foot.head)
-        )
-
-        foot.matrix = foot_M @ foot.matrix
-
-        # Return the rotation difference
-        return foot_rd
-
-    def undo_rotate_foot(armature, which):
-        foot = find_bone(armature, "Foot." + which)
-
-        # Move foot tail to toe head
-        foot.tail = find_bone(armature, "Toe." + which).head
-
-        # Reconnect toe
-        find_bone(armature, "Toe." + which).use_connect = True
-
-    rotate_foot(armature, "L")
-    rotate_foot(armature, "R")
+    align_bone_to_axis(armature, find_bone(armature, "Foot.L"), "y", -1)
+    align_bone_to_axis(armature, find_bone(armature, "Foot.R"), "y", -1)
+    align_bone_to_axis(armature, find_bone(armature, "Toe.L"), "y", -1)
+    align_bone_to_axis(armature, find_bone(armature, "Toe.R"), "y", -1)
 
     ################
     # Round 1
@@ -1159,16 +1145,17 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # FIXME: align_bone_to_axis is not correctly determining if apply is needed
 
     # Align "Shoulder" to x-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Shoulder.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Shoulder.L"), "x", 1):
         should_apply = True
 
     # Align "Thigh" to z-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Thigh.L"), "z", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Thigh.L"), "z", -1):
         apply_pose(armature, affected_meshes)
         should_apply = False
 
         # Align foot forward
-        align_bone_to_axis(find_pose_bone(armature, "Foot.L"), "y", -1)
+        align_bone_to_axis(armature, find_pose_bone(
+            armature, "Foot.L"), "y", -1)
 
     if should_apply:
         apply_pose(armature, affected_meshes)
@@ -1178,16 +1165,17 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Round 2
 
     # Align "Arm" to x-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Arm.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Arm.L"), "x", 1):
         should_apply = True
 
     # Align "Knee" to z-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Knee.L"), "z", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Knee.L"), "z", -1):
         apply_pose(armature, affected_meshes)
         should_apply = False
 
         # Align foot forward
-        align_bone_to_axis(find_pose_bone(armature, "Foot.L"), "y", -1)
+        align_bone_to_axis(armature, find_pose_bone(
+            armature, "Foot.L"), "y", -1)
 
     if should_apply:
         apply_pose(armature, affected_meshes)
@@ -1197,21 +1185,15 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Round 3
 
     # Align "Elbow" to x-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Elbow.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Elbow.L"), "x", 1):
         apply_pose(armature, affected_meshes)
 
     ################
     # Round 4
 
     # Align "Wrist" to x-axis
-    if align_bone_to_axis(find_pose_bone(armature, "Wrist.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Wrist.L"), "x", 1):
         apply_pose(armature, affected_meshes)
-
-    ################
-    # Restore "Foot" rotation
-
-    undo_rotate_foot(armature, "L")
-    undo_rotate_foot(armature, "R")
 
     # Switch to pose mode
     bpy.ops.object.mode_set(mode="POSE")
