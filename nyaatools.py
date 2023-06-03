@@ -925,7 +925,7 @@ def find_meshes_affected_by_armature_modifier(armature):
 # Apply pose onto all meshes (retains the Armature modifier)
 def apply_pose(armature, mesh_modifier_pairs):
     def debug_print(*msgs):
-        print("   ", *msgs)
+        # print("   ", *msgs)
         return
 
     bpy.ops.object.mode_set(mode="OBJECT")
@@ -972,7 +972,7 @@ def clear_pose(armature):
 # Align a bone onto an axis
 def align_bone_to_axis(armature, bone, axis, direction):
     def debug_print(*msgs):
-        print("   ", *msgs)
+        # print("   ", *msgs)
         return
 
     def needs_align(bone, axis, direction):
@@ -1086,7 +1086,7 @@ def align_bone_to_axis(armature, bone, axis, direction):
 
 def normalize_armature_rename_bones(armature: bpy.types.Armature):
     def debug_print(*msgs):
-        print("   ", *msgs)
+        # print("   ", *msgs)
         return
 
     # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
@@ -1119,7 +1119,7 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
 
 def normalize_armature_t_pose(armature: bpy.types.Armature):
     def debug_print(*msgs):
-        print("   ", *msgs)
+        # print("   ", *msgs)
         return
 
     debug_print("Starting normalize_armature_t_pose()")
@@ -1141,8 +1141,6 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
 
     ################
     # Round 1
-
-    # FIXME: align_bone_to_axis is not correctly determining if apply is needed
 
     # Align "Shoulder" to x-axis
     if align_bone_to_axis(armature, find_pose_bone(armature, "Shoulder.L"), "x", 1):
