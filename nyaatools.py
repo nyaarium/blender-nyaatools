@@ -1,12 +1,17 @@
-import bpy
+from bpy.utils import register_class
+from bpy.types import Operator, Panel
 from bpy.props import *
-from bpy.types import (Panel, Operator)
-import re
+from mathutils import Matrix, Vector
 import numpy as np
-import webbrowser
-from typing import Optional
 from collections import defaultdict
+from typing import Optional
+import webbrowser
 import traceback
+import time
+import re
+import math
+import bpy
+
 
 # ctx = bpy.context.copy()
 
@@ -27,6 +32,7 @@ PROP_EXPORT_PATH = "exportPath"
 # This bone description map is used to
 BONE_DESC_MAP = {
     # Bone Descriptions
+    # common_names: Use "." instead of "_" for improved search results
 
     "Hips": {
         "common_names": ["Hips", "Hip", "Pelvis"],
@@ -103,7 +109,7 @@ BONE_DESC_MAP = {
         "mirror": "Knee.R"
     },
     "Ankle.L": {
-        "common_names": ["Knee.L", "Left Ankle", "Foot.L", "Left Foot"],
+        "common_names": ["Ankle.L", "Left Ankle", "Foot.L", "Left Foot"],
         "parent": "Knee.L",
         "children": ["Toe.L"],
         "mirror": "Ankle.R"
@@ -128,7 +134,7 @@ BONE_DESC_MAP = {
         "mirror": "Knee.L"
     },
     "Ankle.R": {
-        "common_names": ["Knee.R", "Right Ankle", "Foot.R", "Right Foot"],
+        "common_names": ["Ankle.R", "Right Ankle", "Foot.R", "Right Foot"],
         "parent": "Knee.R",
         "children": ["Toe.R"],
         "mirror": "Ankle.L"
@@ -643,7 +649,7 @@ def deselectAll():
 
 
 # returns bone or None that is most likely to be the bone_desc_name described in bones_map
-def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
+def find_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.EditBone:
     def debug_print(*msgs):
         # print("   ", *msgs)
         return
@@ -786,6 +792,18 @@ def find_bone(armature, bone_desc_name: str) -> bpy.types.EditBone:
     return None
 
 
+def find_pose_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.PoseBone:
+    if not isinstance(bone_desc_name, str):
+        raise TypeError("bone_desc_name must be type str")
+
+    bone = find_bone(armature, bone_desc_name)
+
+    if bone:
+        return armature.pose.bones[bone.name]
+    else:
+        return None
+
+
 def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> float:
     if not isinstance(bone_desc_name, str):
         raise TypeError("bone_desc_name must be type str")
@@ -859,10 +877,141 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
         print("   ", *msgs)
         return
 
+    def find_affected_meshes(armature):
+        ret = []
+        for obj in bpy.data.objects:
+            # Must be a mesh
+            if obj.type != "MESH":
+                continue
+
+            mesh = obj
+
+            # Must be using this armature in the "Armature" modifier
+            # KNOWN ISSUE: If the mesh uses this armature in 2 armature modifiers, something not good will happen
+            using_armature = False
+            which_modifier = None
+            for mod in mesh.modifiers:
+                if mod.type == "ARMATURE":
+                    if mod.object == armature:
+                        using_armature = True
+                        which_modifier = mod
+                        break
+            if not using_armature:
+                continue
+
+            # Add to affected_meshes pair: [ mesh, modifier ]
+            ret.append([mesh, which_modifier])
+
+        return ret
+
+    # Align a bone onto an axis
+    def align_bone_to_axis(bone, axis, direction):
+        def debug_print(*msgs):
+            # print("   ", *msgs)
+            return
+
+        if axis != "x" and axis != "y" and axis != "z":
+            raise ValueError("axis must be 'x', 'y', or 'z'")
+        if direction != 1 and direction != -1:
+            raise ValueError("direction must be 1 or -1")
+
+        # Set target to be 1 meter in an axis direction away from head
+        head = bone.head
+        tail = bone.tail
+        target = None
+        if axis == "x":
+            target = Vector((head[0] + direction, head[1], head[2]))
+        elif axis == "y":
+            target = Vector((head[0], head[1] + direction, head[2]))
+        elif axis == "z":
+            target = Vector((head[0], head[1], head[2] + direction))
+        else:
+            raise ValueError(
+                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+        debug_print("Aligning bone ", bone.name, " to axis ", axis,
+                    " in direction ", direction, " to target ", target)
+
+        find_pose_bone
+
+        # Vector from head to tail
+        v = target - head
+        bv = tail - head
+        debug_print("v: ", v)
+        debug_print("bv: ", bv)
+
+        # Quaternion that rotates bv to v
+        rd = bv.rotation_difference(v)
+        debug_print("rd: ", rd)
+
+        # Matrix that rotates bone to v
+        M = (
+            Matrix.Translation(head) @
+            rd.to_matrix().to_4x4() @
+            Matrix.Translation(-head)
+        )
+
+        bone.matrix = M @ bone.matrix
+
+    # Clear all pose bones that may be in a pose
+    def clear_pose(armature):
+        for bone in armature.pose.bones:
+            bone.matrix_basis.identity()
+
+    # Apply pose onto all meshes (retains the Armature modifier)
+    def apply_pose(armature, mesh_modifier_pairs):
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+        bpy.ops.object.select_all(action="DESELECT")
+
+        for mesh, modifier in mesh_modifier_pairs:
+            # Select the mesh
+            mesh.select_set(True)
+            bpy.context.view_layer.objects.active = mesh
+
+            debug_print("Applying pose to mesh ", mesh.name, modifier.name)
+            # Duplicate modifier & apply it
+            modifier_copy = mesh.modifiers.new(modifier.name, modifier.type)
+            debug_print("Copied modifier", modifier_copy.name)
+            modifier_copy.object = modifier.object
+            bpy.ops.object.modifier_apply(modifier=modifier_copy.name)
+            debug_print("Applied modifier ", modifier_copy.name,
+                        " to mesh ", mesh.name)
+
+            # Unselect
+            mesh.select_set(False)
+            bpy.context.view_layer.objects.active = None
+
+        # Select the armature
+        armature.select_set(True)
+        bpy.context.view_layer.objects.active = armature
+
+        # Set pose as rest pose
+        bpy.ops.object.mode_set(mode="POSE")
+        bpy.ops.pose.armature_apply()
+
+        # Reset to rest pose
+        clear_pose(armature)
+
+    debug_print("Starting normalize_armature_t_pose()")
+
+    # Find all meshes that have an armature modifier with this armature
+    affected_meshes = find_affected_meshes(armature)
+
+    clear_pose(armature)
+
+    # Align "Shoulder._" to x-axis
+    align_bone_to_axis(find_pose_bone(armature, "Shoulder.L"), "x", 1)
+    align_bone_to_axis(find_pose_bone(armature, "Shoulder.R"), "x", -1)
+    apply_pose(armature, affected_meshes)
+
+    # Align "Arm._" to x-axis
+    # align_bone_to_axis(find_pose_bone(armature, "Arm.L"), "x", 1)
+    # align_bone_to_axis(find_pose_bone(armature, "Arm.R"), "x", -1)
+
     # Switch to pose mode
     bpy.ops.object.mode_set(mode="POSE")
 
-    # TODO
 
 #############################################
 # Operators
@@ -880,12 +1029,12 @@ class NyaaToolsNormalizeArmature(Operator):
 
             if obj == None:
                 self.report(
-                    {"ERROR"}, "Expected an armature object, got: None")
+                    {"ERROR"}, "Please select an armature object first! Got: None")
                 return {"CANCELLED"}
 
             if obj.type != "ARMATURE":
                 self.report(
-                    {"ERROR"}, "Expected an armature object, got: " + obj.type)
+                    {"ERROR"}, "Please select an armature object first! Got: " + obj.type)
                 return {"CANCELLED"}
 
             # {bpy.types.Armature}  The armature to normalize
