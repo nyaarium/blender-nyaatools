@@ -967,48 +967,105 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
             # print("   ", *msgs)
             return
 
+        def needs_align(bone, axis, direction):
+            debug_print("Checking if bone ", bone.name, " needs alignment")
+            head = bone.head
+            tail = bone.tail
+            target = None
+            if axis == "x":
+                target = Vector((head[0] + direction, head[1], head[2]))
+            elif axis == "y":
+                target = Vector((head[0], head[1] + direction, head[2]))
+            elif axis == "z":
+                target = Vector((head[0], head[1], head[2] + direction))
+            else:
+                raise ValueError(
+                    "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+            # Vector from head to tail
+            v = target - head
+            bv = tail - head
+            debug_print("v: ", v)
+            debug_print("bv: ", bv)
+
+            # If the bone is already aligned, return False
+            if v == bv:
+                debug_print("Bone ", bone.name, " is already aligned")
+                return False
+
+            # If the bone is not aligned, return True
+            debug_print("Bone ", bone.name, " is not aligned")
+            return True
+
+        def _helper_align(bone, axis, direction):
+            # Set target to be 1 meter in an axis direction away from head
+            head = bone.head
+            tail = bone.tail
+            target = None
+            if axis == "x":
+                target = Vector((head[0] + direction, head[1], head[2]))
+            elif axis == "y":
+                target = Vector((head[0], head[1] + direction, head[2]))
+            elif axis == "z":
+                target = Vector((head[0], head[1], head[2] + direction))
+            else:
+                raise ValueError(
+                    "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+            debug_print("Aligning bone ", bone.name, " to axis ", axis,
+                        " in direction ", direction, " to target ", target)
+
+            # Vector from head to tail
+            tv = target - head
+            bv = tail - head
+            debug_print("v: ", tv)
+            debug_print("bv: ", bv)
+
+            # Quaternion that rotates bv to v
+            rd = bv.rotation_difference(tv)
+            debug_print("rd: ", rd)
+
+            # Matrix that rotates bone to v
+            M = (
+                Matrix.Translation(head) @
+                rd.to_matrix().to_4x4() @
+                Matrix.Translation(-head)
+            )
+
+            bone.matrix = M @ bone.matrix
+
         if axis != "x" and axis != "y" and axis != "z":
             raise ValueError("axis must be 'x', 'y', or 'z'")
         if direction != 1 and direction != -1:
             raise ValueError("direction must be 1 or -1")
 
-        # Set target to be 1 meter in an axis direction away from head
-        head = bone.head
-        tail = bone.tail
-        target = None
-        if axis == "x":
-            target = Vector((head[0] + direction, head[1], head[2]))
-        elif axis == "y":
-            target = Vector((head[0], head[1] + direction, head[2]))
-        elif axis == "z":
-            target = Vector((head[0], head[1], head[2] + direction))
+        bone_name = bone.name
+
+        if needs_align(bone, axis, direction):
+            # If bone ends in .L or .R, apply it on the mirrored bone as well
+            if bone_name.endswith(".L") or bone_name.endswith(".R"):
+                # Run on bone
+                _helper_align(bone, axis, direction)
+
+                # And then the mirrored bone
+                mirrored_bone_name = BONE_DESC_MAP[bone_name]["mirror"]
+                mirrored_bone = find_pose_bone(armature, mirrored_bone_name)
+                if mirrored_bone != None:
+                    debug_print("Mirrored bone found: ", mirrored_bone_name)
+
+                    # Flip direction only if x-axis
+                    if axis == "x":
+                        direction *= -1
+
+                    # Run on mirrored bone
+                    _helper_align(mirrored_bone, axis, direction)
+            else:
+                # Run it as requested
+                _helper_align(bone, axis, direction)
+
+            return True
         else:
-            raise ValueError(
-                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
-
-        debug_print("Aligning bone ", bone.name, " to axis ", axis,
-                    " in direction ", direction, " to target ", target)
-
-        find_pose_bone
-
-        # Vector from head to tail
-        v = target - head
-        bv = tail - head
-        debug_print("v: ", v)
-        debug_print("bv: ", bv)
-
-        # Quaternion that rotates bv to v
-        rd = bv.rotation_difference(v)
-        debug_print("rd: ", rd)
-
-        # Matrix that rotates bone to v
-        M = (
-            Matrix.Translation(head) @
-            rd.to_matrix().to_4x4() @
-            Matrix.Translation(-head)
-        )
-
-        bone.matrix = M @ bone.matrix
+            return False
 
     # Clear all pose bones that may be in a pose
     def clear_pose(armature):
@@ -1058,14 +1115,105 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
 
     clear_pose(armature)
 
-    # Align "Shoulder._" to x-axis
-    align_bone_to_axis(find_pose_bone(armature, "Shoulder.L"), "x", 1)
-    align_bone_to_axis(find_pose_bone(armature, "Shoulder.R"), "x", -1)
-    apply_pose(armature, affected_meshes)
+    should_apply = False
 
-    # Align "Arm._" to x-axis
-    # align_bone_to_axis(find_pose_bone(armature, "Arm.L"), "x", 1)
-    # align_bone_to_axis(find_pose_bone(armature, "Arm.R"), "x", -1)
+    ################
+    # Foot Initialization
+
+    def rotate_foot(armature, which):
+        find_bone(armature, "Toe." + which).use_connect = False
+
+        # Snapshot "Foot.L" rotation
+
+        foot = find_bone(armature, "Foot." + which)
+        target_forward = Vector((foot.head[0], foot.head[1] - 1, foot.head[2]))
+        foot_tv = target_forward - foot.head
+        foot_dv = foot.tail - foot.head
+        foot_rd = foot_dv.rotation_difference(foot_tv)
+
+        # Rotate it to be aligned with the y-axis
+        foot_M = (
+            Matrix.Translation(foot.head) @
+            foot_rd.to_matrix().to_4x4() @
+            Matrix.Translation(-foot.head)
+        )
+
+        foot.matrix = foot_M @ foot.matrix
+
+        # Return the rotation difference
+        return foot_rd
+
+    def undo_rotate_foot(armature, which):
+        foot = find_bone(armature, "Foot." + which)
+
+        # Move foot tail to toe head
+        foot.tail = find_bone(armature, "Toe." + which).head
+
+        # Reconnect toe
+        find_bone(armature, "Toe." + which).use_connect = True
+
+    rotate_foot(armature, "L")
+    rotate_foot(armature, "R")
+
+    ################
+    # Round 1
+
+    # FIXME: align_bone_to_axis is not correctly determining if apply is needed
+
+    # Align "Shoulder" to x-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Shoulder.L"), "x", 1):
+        should_apply = True
+
+    # Align "Thigh" to z-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Thigh.L"), "z", -1):
+        apply_pose(armature, affected_meshes)
+        should_apply = False
+
+        # Align foot forward
+        align_bone_to_axis(find_pose_bone(armature, "Foot.L"), "y", -1)
+
+    if should_apply:
+        apply_pose(armature, affected_meshes)
+        should_apply = False
+
+    ################
+    # Round 2
+
+    # Align "Arm" to x-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Arm.L"), "x", 1):
+        should_apply = True
+
+    # Align "Knee" to z-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Knee.L"), "z", -1):
+        apply_pose(armature, affected_meshes)
+        should_apply = False
+
+        # Align foot forward
+        align_bone_to_axis(find_pose_bone(armature, "Foot.L"), "y", -1)
+
+    if should_apply:
+        apply_pose(armature, affected_meshes)
+        should_apply = False
+
+    ################
+    # Round 3
+
+    # Align "Elbow" to x-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Elbow.L"), "x", 1):
+        apply_pose(armature, affected_meshes)
+
+    ################
+    # Round 4
+
+    # Align "Wrist" to x-axis
+    if align_bone_to_axis(find_pose_bone(armature, "Wrist.L"), "x", 1):
+        apply_pose(armature, affected_meshes)
+
+    ################
+    # Restore "Foot" rotation
+
+    undo_rotate_foot(armature, "L")
+    undo_rotate_foot(armature, "R")
 
     # Switch to pose mode
     bpy.ops.object.mode_set(mode="POSE")
@@ -1100,6 +1248,9 @@ class NyaaToolsNormalizeArmature(Operator):
 
             # Rename bones
             normalize_armature_rename_bones(armature)
+
+            self.report(
+                {"INFO"}, "Aligning to T-pose. This process can take a really long time.")
 
             # Set T-Pose
             normalize_armature_t_pose(armature)
