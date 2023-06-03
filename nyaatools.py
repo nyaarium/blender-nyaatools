@@ -903,6 +903,8 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
 
     # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
     for bone_desc_name in BONE_DESC_MAP:
+        bone_desc = BONE_DESC_MAP[bone_desc_name]
+
         bone = find_bone(armature, bone_desc_name)
         if bone == None:
             debug_print("Couldn't find bone: ", bone_desc_name)
@@ -911,9 +913,20 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
         if bone.name == bone_desc_name:
             debug_print("Name is good: ", bone.name)
 
+        # Do rename
         if bone.name != bone_desc_name:
             debug_print("Renaming: ", bone.name, " to ", bone_desc_name)
             bone.name = bone_desc_name
+
+        # Check if bone is connected
+        if "connected" in bone_desc and bone_desc["connected"]:
+            if not bone.use_connect:
+                debug_print("Connecting: ", bone.name)
+
+                # Move parent's tail to this head
+                bone.parent.tail = bone.head
+
+                bone.use_connect = True
 
 
 def normalize_armature_t_pose(armature: bpy.types.Armature):
