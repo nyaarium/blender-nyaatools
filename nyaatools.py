@@ -1182,6 +1182,13 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     ################
     # Body Round 3
 
+    # Move chest tail to shoulder's yz plane
+    shoulder_l = find_bone(armature, "Shoulder.L")
+    chest = find_bone(armature, "Chest")
+    chest.tail = Vector(
+        (chest.tail[0], shoulder_l.head[1], shoulder_l.head[2])
+    )
+
     # Align "Chest" to z-axis
     if align_bone_to_axis(armature, find_pose_bone(armature, "Chest"), 0, 0, 1):
         should_apply = True
