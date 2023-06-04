@@ -1357,7 +1357,8 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature):
 
         desc_roll = 0
         if "roll" in bone_desc and bone_desc["roll"] != None:
-            desc_roll = bone_desc["roll"]
+            # Get roll as radians
+            desc_roll = bone_desc["roll"] * (math.pi / 180)
 
         if bone.roll != desc_roll:
             debug_print("Setting roll of", bone.name, "to", desc_roll)
