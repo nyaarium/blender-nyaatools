@@ -1011,25 +1011,19 @@ def clear_pose(armature):
 
 
 # Align a bone onto an axis
-def align_bone_to_axis(armature, bone, axis, direction):
+# def align_bone_to_axis(armature, bone, axis, direction):
+def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
 
-    def needs_align(bone, axis, direction):
+    def needs_align(bone, axis_x, axis_y, axis_z):
         debug_print("Checking if bone ", bone.name, " needs alignment")
         head = bone.head
         tail = bone.tail
-        target = None
-        if axis == "x":
-            target = Vector((head[0] + direction, head[1], head[2]))
-        elif axis == "y":
-            target = Vector((head[0], head[1] + direction, head[2]))
-        elif axis == "z":
-            target = Vector((head[0], head[1], head[2] + direction))
-        else:
-            raise ValueError(
-                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
+
+        # Offset axis_x, axis_y, axis_z by head
+        target = Vector((head[0] + axis_x, head[1] + axis_y, head[2] + axis_z))
 
         # Vector from head to tail
         tv = target - head
@@ -1045,23 +1039,13 @@ def align_bone_to_axis(armature, bone, axis, direction):
         debug_print("Bone ", bone.name, " is not aligned")
         return True
 
-    def _helper_align(bone, axis, direction):
+    def _helper_align(bone, axis_x, axis_y, axis_z):
         # Set target to be 1 meter in an axis direction away from head
         head = bone.head
         tail = bone.tail
-        target = None
-        if axis == "x":
-            target = Vector((head[0] + direction, head[1], head[2]))
-        elif axis == "y":
-            target = Vector((head[0], head[1] + direction, head[2]))
-        elif axis == "z":
-            target = Vector((head[0], head[1], head[2] + direction))
-        else:
-            raise ValueError(
-                "Not sure how I got here! Axis must be 'x', 'y', or 'z'")
 
-        debug_print("Aligning bone ", bone.name, " to axis ", axis,
-                    " in direction ", direction, " to target ", target)
+        # Offset axis_x, axis_y, axis_z by head
+        target = Vector((head[0] + axis_x, head[1] + axis_y, head[2] + axis_z))
 
         # Vector from head to tail
         tv = target - head
@@ -1080,18 +1064,13 @@ def align_bone_to_axis(armature, bone, axis, direction):
 
         bone.matrix = M @ bone.matrix
 
-    if axis != "x" and axis != "y" and axis != "z":
-        raise ValueError("axis must be 'x', 'y', or 'z'")
-    if direction != 1 and direction != -1:
-        raise ValueError("direction must be 1 or -1")
-
     bone_name = bone.name
 
-    if needs_align(bone, axis, direction):
+    if needs_align(bone, axis_x, axis_y, axis_z):
         # If bone ends in .L or .R, apply it on the mirrored bone as well
         if bone_name.endswith(".L") or bone_name.endswith(".R"):
             # Run on bone
-            _helper_align(bone, axis, direction)
+            _helper_align(bone, axis_x, axis_y, axis_z)
 
             # And then the mirrored bone
             mirrored_bone_name = BONE_DESC_MAP[bone_name]["mirror"]
@@ -1105,15 +1084,11 @@ def align_bone_to_axis(armature, bone, axis, direction):
             if mirrored_bone != None:
                 debug_print("Mirrored bone found: ", mirrored_bone_name)
 
-                # Flip direction only if x-axis
-                if axis == "x":
-                    direction *= -1
-
                 # Run on mirrored bone
-                _helper_align(mirrored_bone, axis, direction)
+                _helper_align(mirrored_bone, -axis_x, axis_y, axis_z)
         else:
             # Run it as requested
-            _helper_align(bone, axis, direction)
+            _helper_align(bone, axis_x, axis_y, axis_z)
 
         return True
     else:
@@ -1177,27 +1152,27 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     ################
     # Foot Initialization - Point foot bone forward without affecting pose
 
-    align_bone_to_axis(armature, find_bone(armature, "Foot.L"), "y", -1)
-    align_bone_to_axis(armature, find_bone(armature, "Foot.R"), "y", -1)
-    align_bone_to_axis(armature, find_bone(armature, "Toe.L"), "y", -1)
-    align_bone_to_axis(armature, find_bone(armature, "Toe.R"), "y", -1)
+    align_bone_to_axis(armature, find_bone(armature, "Foot.L"), 0, -1, 0)
+    align_bone_to_axis(armature, find_bone(armature, "Foot.R"), 0, -1, 0)
+    align_bone_to_axis(armature, find_bone(armature, "Toe.L"), 0, -1, 0)
+    align_bone_to_axis(armature, find_bone(armature, "Toe.R"), 0, -1, 0)
 
     ################
     # Body Round 1
 
     # Align "Hips" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Hips"), "z", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Hips"), 0, 0, 1):
         apply_pose(armature, affected_meshes)
 
     ################
     # Body Round 2
 
     # Align "Spine" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Spine"), "z", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Spine"), 0, 0, 1):
         should_apply = True
 
     # Align "Thigh" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Thigh.L"), "z", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Thigh.L"), 0, 0, -1):
         should_apply = True
 
     if should_apply:
@@ -1208,11 +1183,11 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Body Round 3
 
     # Align "Chest" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Chest"), "z", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Chest"), 0, 0, 1):
         should_apply = True
 
     # Align "Knee" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Knee.L"), "z", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Knee.L"), 0, 0, -1):
         should_apply = True
 
     if should_apply:
@@ -1223,11 +1198,11 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Body Round 4
 
     # Align "Neck" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Neck"), "z", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Neck"), 0, 0, 1):
         should_apply = True
 
     # Align "Foot" to y-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Foot.L"), "y", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Foot.L"), 0, -1, 0):
         should_apply = True
 
     if should_apply:
@@ -1238,11 +1213,11 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Body Round 5
 
     # Align "Head" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Head"), "z", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Head"), 0, 0, 1):
         should_apply = True
 
     # Align "Toe" to y-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Toe.L"), "y", -1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Toe.L"), 0, -1, 0):
         should_apply = True
 
     if should_apply:
@@ -1253,42 +1228,42 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # The rest of the arm
 
     # Align "Shoulder" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Shoulder.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Shoulder.L"), 1, 0, 0):
         apply_pose(armature, affected_meshes)
 
     # Align "Arm" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Arm.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Arm.L"), 1, 0, 0):
         apply_pose(armature, affected_meshes)
 
     # Align "Elbow" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Elbow.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Elbow.L"), 1, 0, 0):
         apply_pose(armature, affected_meshes)
 
     # Align "Wrist" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Wrist.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Wrist.L"), 1, 0, 0):
         apply_pose(armature, affected_meshes)
 
     ################
     # Fingers Round 1
 
     # Align "Thumb 1" to x-axis
-    # if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 1.L"), "x", 1):
-    #     should_apply = True
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 1.L"), 1, -1, 0):
+        should_apply = True
 
     # Align "Index Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 1.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 1.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Middle Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 1.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 1.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Ring Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 1.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 1.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Little Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 1.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 1.L"), 1, 0, 0):
         should_apply = True
 
     if should_apply:
@@ -1299,23 +1274,23 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Fingers Round 2
 
     # Align "Thumb 2" to x-axis
-    # if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 2.L"), "x", 1):
-    #     should_apply = True
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 2.L"), 1, -1, 0):
+        should_apply = True
 
     # Align "Index Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 2.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 2.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Middle Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 2.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 2.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Ring Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 2.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 2.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Little Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 2.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 2.L"), 1, 0, 0):
         should_apply = True
 
     if should_apply:
@@ -1326,23 +1301,23 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Fingers Round 3
 
     # Align "Thumb 3" to x-axis
-    # if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 3.L"), "x", 1):
-    #     should_apply = True
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 3.L"), 1, -1, 0):
+        should_apply = True
 
     # Align "Index Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 3.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 3.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Middle Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 3.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 3.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Ring Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 3.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 3.L"), 1, 0, 0):
         should_apply = True
 
     # Align "Little Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 3.L"), "x", 1):
+    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 3.L"), 1, 0, 0):
         should_apply = True
 
     if should_apply:
