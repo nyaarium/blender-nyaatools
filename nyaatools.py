@@ -942,7 +942,7 @@ def apply_pose(armature, mesh_modifier_pairs):
         modifier_copy = mesh.modifiers.new(modifier.name, modifier.type)
         debug_print("Copied modifier", modifier_copy.name)
         modifier_copy.object = modifier.object
-        modifier_copy.use_volume_preserve = True
+        modifier_copy.use_deform_preserve_volume = True
 
         # If shape keys exist (note that shape_keys may be None)
         if mesh.data.shape_keys != None:
