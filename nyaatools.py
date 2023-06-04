@@ -965,7 +965,7 @@ def find_meshes_affected_by_armature_modifier(armature):
 # Apply pose onto all meshes (retains the Armature modifier)
 def apply_pose(armature, mesh_modifier_pairs):
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
 
     bpy.ops.object.mode_set(mode="OBJECT")
@@ -1013,7 +1013,7 @@ def clear_pose(armature):
 # Align a bone onto an axis
 def align_bone_to_axis(armature, bone, axis, direction):
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
 
     def needs_align(bone, axis, direction):
@@ -1035,9 +1035,6 @@ def align_bone_to_axis(armature, bone, axis, direction):
         tv = target - head
         bv = tail - head
         rot = tv.rotation_difference(bv)
-        debug_print("v: ", tv)
-        debug_print("bv: ", bv)
-        debug_print("rot: ", rot)
 
         # If bone rotation is already aligned, return False
         if rot.angle == 0:
@@ -1069,8 +1066,6 @@ def align_bone_to_axis(armature, bone, axis, direction):
         # Vector from head to tail
         tv = target - head
         bv = tail - head
-        debug_print("v: ", tv)
-        debug_print("bv: ", bv)
 
         # Quaternion that rotates bv to v
         rd = bv.rotation_difference(tv)
@@ -1127,8 +1122,10 @@ def align_bone_to_axis(armature, bone, axis, direction):
 
 def normalize_armature_rename_bones(armature: bpy.types.Armature):
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
+
+    debug_print("Starting normalize_armature_rename_bones()")
 
     # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
     for bone_desc_name in BONE_DESC_MAP:
@@ -1150,17 +1147,22 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
         # Check if bone is connected
         if "connected" in bone_desc and bone_desc["connected"]:
             if not bone.use_connect:
-                debug_print("Connecting: ", bone.name)
+                debug_print("Connecting bone: ", bone.name)
 
                 # Move parent's tail to this head
                 bone.parent.tail = bone.head
 
                 bone.use_connect = True
+        else:
+            if bone.use_connect:
+                debug_print("Detaching bone: ", bone.name)
+
+                bone.use_connect = False
 
 
 def normalize_armature_t_pose(armature: bpy.types.Armature):
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
 
     debug_print("Starting normalize_armature_t_pose()")
@@ -1351,6 +1353,34 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     # Switch to pose mode
     bpy.ops.object.mode_set(mode="POSE")
 
+    clear_pose(armature)
+
+
+def normalize_armature_roll_bones(armature: bpy.types.Armature):
+    def debug_print(*msgs):
+        # print("   ", *msgs)
+        return
+
+    debug_print("Starting normalize_armature_roll_bones()")
+
+    # Switch to edit mode
+    bpy.ops.object.mode_set(mode="EDIT")
+
+    # Iterate over descriptors in BONE_DESC_MAP & reset their roll
+    for bone_desc_name in BONE_DESC_MAP:
+        bone_desc = BONE_DESC_MAP[bone_desc_name]
+
+        # Get bone
+        bone = armature.data.edit_bones[bone_desc_name]
+
+        desc_roll = 0
+        if "roll" in bone_desc and bone_desc["roll"] != None:
+            desc_roll = bone_desc["roll"]
+
+        if bone.roll != desc_roll:
+            debug_print("Setting roll of", bone.name, "to", desc_roll)
+            bone.roll = desc_roll
+
 
 #############################################
 # Operators
@@ -1382,18 +1412,21 @@ class NyaaToolsNormalizeArmature(Operator):
             # Rename bones
             normalize_armature_rename_bones(armature)
 
-            self.report(
-                {"INFO"}, "Aligning to T-pose. This process can take a really long time.")
-
             # Set T-Pose
             normalize_armature_t_pose(armature)
+
+            # Set T-Pose
+            normalize_armature_roll_bones(armature)
+
+            print("Done!")
+            print("")
+
+            return {"FINISHED"}
 
         except Exception as error:
             print(traceback.format_exc())
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-
-        return {"FINISHED"}
 
 
 class NyaaToolsInitMods(Operator):
