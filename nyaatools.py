@@ -963,7 +963,7 @@ def find_meshes_affected_by_armature_modifier(armature):
 
 
 # Apply pose onto all meshes (retains the Armature modifier)
-def apply_pose(armature, mesh_modifier_pairs):
+def apply_pose(armature, mesh_modifier_pairs, callback_progress_tick=None):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -973,6 +973,10 @@ def apply_pose(armature, mesh_modifier_pairs):
     bpy.ops.object.select_all(action="DESELECT")
 
     for mesh, modifier in mesh_modifier_pairs:
+        if callback_progress_tick != None:
+            if callback_progress_tick != None:
+                callback_progress_tick()
+
         # Select the mesh
         mesh.select_set(True)
         bpy.context.view_layer.objects.active = mesh
@@ -987,7 +991,12 @@ def apply_pose(armature, mesh_modifier_pairs):
         # If shape keys exist (note that shape_keys may be None)
         if mesh.data.shape_keys != None:
             applyModifierForObjectWithShapeKeys(
-                bpy.context, [modifier_copy.name], True)
+                bpy.context,
+                [modifier_copy.name],
+                True,
+                callback_progress_tick
+            )
+
         else:
             bpy.ops.object.modifier_apply(modifier=modifier_copy.name)
 
@@ -1117,7 +1126,7 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
     return alignment_changed
 
 
-def normalize_armature_rename_bones(armature: bpy.types.Armature):
+def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progress_tick=None):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -1126,6 +1135,9 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
 
     # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
     for bone_desc_name in BONE_DESC_MAP:
+        if callback_progress_tick != None:
+            callback_progress_tick()
+
         bone_desc = BONE_DESC_MAP[bone_desc_name]
 
         bone = find_bone("edit", armature, bone_desc_name)
@@ -1157,7 +1169,7 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
                 bone.use_connect = False
 
 
-def normalize_armature_t_pose(armature: bpy.types.Armature):
+def normalize_armature_t_pose(armature: bpy.types.Armature, callback_progress_tick=None):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -1378,7 +1390,7 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     bpy.ops.object.mode_set(mode="POSE")
 
 
-def normalize_armature_roll_bones(armature: bpy.types.Armature):
+def normalize_armature_roll_bones(armature: bpy.types.Armature, callback_progress_tick=None):
     def debug_print(*msgs):
         # print("   ", *msgs)
         return
@@ -1390,6 +1402,9 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature):
 
     # Iterate over descriptors in BONE_DESC_MAP & reset their roll
     for bone_desc_name in BONE_DESC_MAP:
+        if callback_progress_tick != None:
+            callback_progress_tick()
+
         bone_desc = BONE_DESC_MAP[bone_desc_name]
 
         # Get bone
@@ -1432,14 +1447,46 @@ class NyaaToolsNormalizeArmature(Operator):
             # {bpy.types.Armature}  The armature to normalize
             armature = obj
 
+            wm = bpy.context.window_manager
+
+            # Progress count, total
+            progress = [0]
+            progress_total = 0
+
+            def callback_progress_tick():
+                progress[0] = progress[0] + 1
+                wm.progress_update(progress[0] / progress_total * 100)
+
+            # Progress Total: Rename bones is the length of the bone descriptors
+            progress_total += len(BONE_DESC_MAP)
+
+            # Progress Total: T-Pose is:
+            # - Fixed count of callback_progress_tick() in the function
+            # - Total number of affected meshes
+            # - Total number of shape keys in affected meshes
+            progress_total += 36
+            affected_meshes = find_meshes_affected_by_armature_modifier(
+                armature)
+            progress_total += len(affected_meshes)
+            for mesh, modifier in affected_meshes:
+                if mesh.data.shape_keys != None:
+                    progress_total += len(mesh.data.shape_keys.key_blocks)
+
+            ######################
+            ##  Begin progress  ##
+
+            wm.progress_begin(0, 100)
+
             # Rename bones
-            normalize_armature_rename_bones(armature)
+            normalize_armature_rename_bones(armature, callback_progress_tick)
 
             # Set T-Pose
-            normalize_armature_t_pose(armature)
+            normalize_armature_t_pose(armature, callback_progress_tick)
 
-            # Set T-Pose
+            # Set roll (not worth progress tracking)
             normalize_armature_roll_bones(armature)
+
+            wm.progress_end()
 
             print("Done!")
             print("")
@@ -1785,7 +1832,7 @@ if __name__ == "__main__":
 #     "category":     "Object Tools > Multi Shape Keys"
 # }
 
-def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_armatures):
+def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_armatures, callback_progress_tick=None):
 
     list_properties = []
     properties = ["interpolation", "mute", "name", "relative_key",
@@ -1851,6 +1898,12 @@ def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_arma
     # Handle other shape-keys: copy object, get right shape-key, apply modifiers and merge with originalObject.
     # We handle one object at time here.
     for i in range(1, shapesCount):
+        ###############################
+        # Progress bar callback - Nyaarium
+        if callback_progress_tick != None:
+            callback_progress_tick()
+        ###############################
+
         currTime = time.time()
         elapsedTime = currTime - startTime
 
