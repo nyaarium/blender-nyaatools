@@ -1453,7 +1453,7 @@ class NyaaToolsNormalizeArmature(Operator):
 
 
 class NyaaToolsInitMods(Operator):
-    """Creates my prefered modifier stacks"""
+    """Creates my preferred modifier stacks"""
     bl_idname = "nyaa.init_mods"
     bl_label = "Initialize Modifier Stack"
     bl_options = {"REGISTER", "UNDO"}
@@ -1522,6 +1522,13 @@ class NyaaToolsInitMods(Operator):
                     target = getAvatarArmature(targetAvatarName)
                     print(target)
                     if (target != None):
+                        # Search existing modifiers & skip if the armature already assigned
+                        skip = False
+                        for m in obj.modifiers:
+                            if (m.type == "ARMATURE" and m.object == target):
+                                skip = True
+                                break
+
                         name = "--( " + targetAvatarName + " )"
                         mod = obj.modifiers.new(name, "ARMATURE")
                         mod.show_expanded = False
@@ -1530,6 +1537,7 @@ class NyaaToolsInitMods(Operator):
                         mod.show_viewport = True
                         mod.show_render = True
                         mod.object = target
+                        mod.use_deform_preserve_volume = True
 
         except Exception as error:
             print(traceback.format_exc())
