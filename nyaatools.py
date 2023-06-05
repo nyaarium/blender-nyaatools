@@ -136,7 +136,7 @@ BONE_DESC_MAP = {
     },
     "Toe.L": {
         "common_names": ["Toe.L", "Left Toe"],
-        "parent": "Foot.L",
+        "parent": "Ankle.L",
         "children": None,
         "mirror": "Toe.R",
     },
@@ -165,7 +165,7 @@ BONE_DESC_MAP = {
     },
     "Toe.R": {
         "common_names": ["Toe.R", "Right Toe"],
-        "parent": "Foot.R",
+        "parent": "Ankle.R",
         "children": None,
         "mirror": "Toe.L",
     },
@@ -1156,7 +1156,7 @@ def normalize_armature_t_pose(armature: bpy.types.Armature):
     should_apply = False
 
     ################
-    # Ankle Initialization - Point Ankle bone forward without affecting pose
+    # Ankle Initialization - Edit and point Ankle bone forward
 
     align_bone_to_axis(armature, find_bone(armature, "Ankle.L"), 0, -1, 0)
     align_bone_to_axis(armature, find_bone(armature, "Ankle.R"), 0, -1, 0)
