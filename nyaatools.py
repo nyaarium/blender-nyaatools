@@ -122,21 +122,21 @@ BONE_DESC_MAP = {
     "Knee.L": {
         "common_names": ["Knee.L", "Lower Leg.L", "Left Knee"],
         "parent": "Thigh.L",
-        "children": ["Ankle.L"],
+        "children": ["Foot.L"],
         "mirror": "Knee.R",
         "connected": True,
         "roll": 180,
     },
-    "Ankle.L": {
-        "common_names": ["Ankle.L", "Foot.L", "Left Ankle", "Left Foot"],
+    "Foot.L": {
+        "common_names": ["Foot.L", "Ankle.L", "Left Ankle", "Left Foot"],
         "parent": "Knee.L",
         "children": ["Toe.L"],
-        "mirror": "Ankle.R",
+        "mirror": "Foot.R",
         "connected": True,
     },
     "Toe.L": {
         "common_names": ["Toe.L", "Left Toe"],
-        "parent": "Ankle.L",
+        "parent": "Foot.L",
         "children": None,
         "mirror": "Toe.R",
     },
@@ -151,21 +151,21 @@ BONE_DESC_MAP = {
     "Knee.R": {
         "common_names": ["Knee.R", "Lower Leg.R", "Right Knee"],
         "parent": "Thigh.R",
-        "children": ["Ankle.R"],
+        "children": ["Foot.R"],
         "mirror": "Knee.L",
         "connected": True,
         "roll": 180,
     },
-    "Ankle.R": {
-        "common_names": ["Ankle.R", "Foot.R", "Right Ankle", "Right Foot"],
+    "Foot.R": {
+        "common_names": ["Foot.R", "Ankle.R", "Right Ankle", "Right Foot"],
         "parent": "Knee.R",
         "children": ["Toe.R"],
-        "mirror": "Ankle.L",
+        "mirror": "Foot.L",
         "connected": True,
     },
     "Toe.R": {
         "common_names": ["Toe.R", "Right Toe"],
-        "parent": "Ankle.R",
+        "parent": "Foot.R",
         "children": None,
         "mirror": "Toe.L",
     },
