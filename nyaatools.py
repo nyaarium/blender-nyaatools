@@ -737,10 +737,13 @@ def deselectAll():
 
 
 # returns bone or None that is most likely to be the bone_desc_name described in bones_map
-def find_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.EditBone:
+def find_bone(which, armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.EditBone:
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
+
+    if which not in ["edit", "pose"]:
+        raise TypeError("which must be either 'edit' or 'pose'")
 
     if not isinstance(bone_desc_name, str):
         raise TypeError("bone_desc_name must be type str")
@@ -824,15 +827,18 @@ def find_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.Ed
 
         return False
 
-    debug_print("find_bone(", bone_desc_name, ")")
-
-    # Switch to Edit mode
-    bpy.ops.object.mode_set(mode="EDIT")
+    bones = []
+    if which == "edit":
+        bpy.ops.object.mode_set(mode="EDIT")
+        bones = armature.data.edit_bones
+    elif which == "pose":
+        bones = armature.pose.bones
+        bpy.ops.object.mode_set(mode="POSE")
 
     bone_matches = []
 
     # All bones in armature that are similar to the common_names
-    for bone in armature.data.edit_bones:
+    for bone in bones:
         # If exact match, return bone
         if bone.name == bone_desc_name:
             return bone
@@ -878,18 +884,6 @@ def find_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.Ed
             return max(likely_bone, key=lambda b: b[0])[1]
 
     return None
-
-
-def find_pose_bone(armature: bpy.types.Armature, bone_desc_name: str) -> bpy.types.PoseBone:
-    if not isinstance(bone_desc_name, str):
-        raise TypeError("bone_desc_name must be type str")
-
-    bone = find_bone(armature, bone_desc_name)
-
-    if bone:
-        return armature.pose.bones[bone.name]
-    else:
-        return None
 
 
 def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> float:
@@ -1059,7 +1053,7 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
 
         # Quaternion that rotates bv to v
         rd = bv.rotation_difference(tv)
-        debug_print("rd: ", rd)
+        debug_print("Rotating bone ", bone.name, " by ", rd.angle)
 
         # Matrix that rotates bone to v
         M = (
@@ -1070,35 +1064,57 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
 
         bone.matrix = M @ bone.matrix
 
-    bone_name = bone.name
-
-    if needs_align(bone, axis_x, axis_y, axis_z):
-        # If bone ends in .L or .R, apply it on the mirrored bone as well
-        if bone_name.endswith(".L") or bone_name.endswith(".R"):
-            # Run on bone
-            _helper_align(bone, axis_x, axis_y, axis_z)
-
-            # And then the mirrored bone
-            mirrored_bone_name = BONE_DESC_MAP[bone_name]["mirror"]
-
-            # If bone a type of bpy.types.PoseBone, use find_pose_bone
-            if isinstance(bone, bpy.types.PoseBone):
-                mirrored_bone = find_pose_bone(armature, mirrored_bone_name)
-            else:
-                mirrored_bone = find_bone(armature, mirrored_bone_name)
-
-            if mirrored_bone != None:
-                debug_print("Mirrored bone found: ", mirrored_bone_name)
-
-                # Run on mirrored bone
-                _helper_align(mirrored_bone, -axis_x, axis_y, axis_z)
+    def set_mode():
+        if isinstance(bone, bpy.types.EditBone):
+            bpy.ops.object.mode_set(mode="EDIT")
         else:
-            # Run it as requested
-            _helper_align(bone, axis_x, axis_y, axis_z)
+            bpy.ops.object.mode_set(mode="POSE")
 
-        return True
+    # type check
+    if not isinstance(bone, bpy.types.EditBone) and not isinstance(bone, bpy.types.PoseBone):
+        raise TypeError("Bone must be a EditBone or PoseBone")
+
+    if isinstance(bone, bpy.types.EditBone):
+        debug_print("Aligning bone ", bone.name, " (EditBone)")
     else:
-        return False
+        debug_print("Aligning bone ", bone.name, " (PoseBone)")
+
+    set_mode()
+
+    alignment_changed = False
+
+    # If bone ends in .L or .R, apply it on the mirrored bone as well
+    if bone.name.endswith(".L") or bone.name.endswith(".R"):
+        # Run on bone
+        if needs_align(bone, axis_x, axis_y, axis_z):
+            _helper_align(bone, axis_x, axis_y, axis_z)
+            alignment_changed = True
+
+        # And then the mirrored bone
+        mirrored_bone_name = BONE_DESC_MAP[bone.name]["mirror"]
+        debug_print("Mirrored bone name: ", mirrored_bone_name)
+
+        if isinstance(bone, bpy.types.EditBone):
+            mirrored_bone = find_bone("edit", armature, mirrored_bone_name)
+        else:
+            mirrored_bone = find_bone("pose", armature, mirrored_bone_name)
+
+        set_mode()
+
+        if mirrored_bone != None:
+            debug_print("Mirrored bone found: ", mirrored_bone_name)
+
+            # Run on mirrored bone
+            if needs_align(mirrored_bone, -axis_x, axis_y, axis_z):
+                _helper_align(mirrored_bone, -axis_x, axis_y, axis_z)
+                alignment_changed = True
+    else:
+        # Run it as requested
+        if needs_align(bone, axis_x, axis_y, axis_z):
+            _helper_align(bone, axis_x, axis_y, axis_z)
+            alignment_changed = True
+
+    return alignment_changed
 
 
 def normalize_armature_rename_bones(armature: bpy.types.Armature):
@@ -1112,7 +1128,7 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
     for bone_desc_name in BONE_DESC_MAP:
         bone_desc = BONE_DESC_MAP[bone_desc_name]
 
-        bone = find_bone(armature, bone_desc_name)
+        bone = find_bone("edit", armature, bone_desc_name)
         if bone == None:
             debug_print("Couldn't find bone: ", bone_desc_name)
             continue
