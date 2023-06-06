@@ -20,7 +20,7 @@ bl_info = {
     "blender":      (3, 5, 1),
     "version":      (1, 0, 0),
     "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
-    "location":     "TBD",
+    "location":     "Tool > NyaaTools",
     "category":     "TBD"
 }
 
