@@ -114,62 +114,62 @@ BONE_DESC_MAP = {
         "mirror": "Breast.L",
     },
 
-    "Thigh.L": {
-        "common_names": ["Thigh.L", "Leg.L", "Upper Leg.L", "Left Leg"],
+    "Upper Leg.L": {
+        "common_names": ["Upper Leg.L", "Thigh.L", "Leg.L", "Left Leg"],
         "parent": "Hips",
-        "children": ["Knee.L"],
-        "mirror": "Thigh.R",
+        "children": ["Lower Leg.L"],
+        "mirror": "Upper Leg.R",
         "roll": 180,
     },
-    "Knee.L": {
-        "common_names": ["Knee.L", "Lower Leg.L", "Left Knee"],
-        "parent": "Thigh.L",
+    "Lower Leg.L": {
+        "common_names": ["Lower Leg.L", "Knee.L", "Left Knee"],
+        "parent": "Upper Leg.L",
         "children": ["Foot.L"],
-        "mirror": "Knee.R",
+        "mirror": "Lower Leg.R",
         "connected": True,
         "roll": 180,
     },
     "Foot.L": {
         "common_names": ["Foot.L", "Ankle.L", "Left Ankle", "Left Foot"],
-        "parent": "Knee.L",
-        "children": ["Toe.L"],
+        "parent": "Lower Leg.L",
+        "children": ["Toes.L"],
         "mirror": "Foot.R",
         "connected": True,
     },
-    "Toe.L": {
-        "common_names": ["Toe.L", "Left Toe"],
+    "Toes.L": {
+        "common_names": ["Toes.L", "Toe.L", "Left Toe"],
         "parent": "Foot.L",
         "children": None,
-        "mirror": "Toe.R",
+        "mirror": "Toes.R",
     },
 
-    "Thigh.R": {
-        "common_names": ["Thigh.R", "Leg.R", "Upper Leg.R", "Right Leg"],
+    "Upper Leg.R": {
+        "common_names": ["Upper Leg.R", "Thigh.R", "Leg.R", "Right Leg"],
         "parent": "Hips",
-        "children": ["Knee.R"],
-        "mirror": "Thigh.L",
+        "children": ["Lower Leg.R"],
+        "mirror": "Upper Leg.L",
         "roll": 180,
     },
-    "Knee.R": {
-        "common_names": ["Knee.R", "Lower Leg.R", "Right Knee"],
-        "parent": "Thigh.R",
+    "Lower Leg.R": {
+        "common_names": ["Lower Leg.R", "Knee.R", "Right Knee"],
+        "parent": "Upper Leg.R",
         "children": ["Foot.R"],
-        "mirror": "Knee.L",
+        "mirror": "Lower Leg.L",
         "connected": True,
         "roll": 180,
     },
     "Foot.R": {
         "common_names": ["Foot.R", "Ankle.R", "Right Ankle", "Right Foot"],
-        "parent": "Knee.R",
-        "children": ["Toe.R"],
+        "parent": "Lower Leg.R",
+        "children": ["Toes.R"],
         "mirror": "Foot.L",
         "connected": True,
     },
-    "Toe.R": {
-        "common_names": ["Toe.R", "Right Toe"],
+    "Toes.R": {
+        "common_names": ["Toes.R", "Toe.R", "Right Toe"],
         "parent": "Foot.R",
         "children": None,
-        "mirror": "Toe.L",
+        "mirror": "Toes.L",
     },
 
     "Shoulder.L": {
@@ -178,25 +178,25 @@ BONE_DESC_MAP = {
         "children": ["Arm.L"],
         "mirror": "Shoulder.R",
     },
-    "Arm.L": {
-        "common_names": ["Arm.L", "Upper Arm.L", "Left Arm"],
+    "Upper Arm.L": {
+        "common_names": ["Upper Arm.L", "Arm.L", "Left Arm"],
         "parent": "Shoulder.L",
-        "children": ["Elbow.L"],
-        "mirror": "Arm.R",
+        "children": ["Lower Arm.L"],
+        "mirror": "Upper Arm.R",
         "connected": True,
     },
-    "Elbow.L": {
-        "common_names": ["Elbow.L", "Left Elbow", "Lower Arm.L"],
-        "parent": "Arm.L",
-        "children": ["Wrist.L"],
-        "mirror": "Elbow.R",
+    "Lower Arm.L": {
+        "common_names": ["Lower Arm.L", "Elbow.L", "Left Elbow"],
+        "parent": "Upper Arm.L",
+        "children": ["Hand.L"],
+        "mirror": "Lower Arm.R",
         "connected": True,
     },
-    "Wrist.L": {
-        "common_names": ["Wrist.L", "Left Wrist", "Hand.L"],
-        "parent": "Elbow.L",
+    "Hand.L": {
+        "common_names": ["Hand.L", "Wrist.L", "Left Wrist"],
+        "parent": "Lower Arm.L",
         "children": ["Thumb 1.L", "Little Finger 1.L", "Ring Finger 1.L", "Middle Finger 1.L", "Index Finger 1.L"],
-        "mirror": "Wrist.R",
+        "mirror": "Hand.R",
         "connected": True,
     },
 
@@ -206,31 +206,31 @@ BONE_DESC_MAP = {
         "children": ["Arm.R"],
         "mirror": "Shoulder.L",
     },
-    "Arm.R": {
-        "common_names": ["Arm.R", "Upper Arm.R", "Right Arm"],
+    "Upper Arm.R": {
+        "common_names": ["Upper Arm.R", "Arm.R", "Right Arm"],
         "parent": "Shoulder.R",
-        "children": ["Elbow.R"],
-        "mirror": "Arm.L",
+        "children": ["Lower Arm.R"],
+        "mirror": "Upper Arm.L",
         "connected": True,
     },
-    "Elbow.R": {
-        "common_names": ["Elbow.R", "Right Elbow", "Lower Arm.R"],
-        "parent": "Arm.R",
-        "children": ["Wrist.R"],
-        "mirror": "Elbow.L",
+    "Lower Arm.R": {
+        "common_names": ["Lower Arm.R", "Elbow.R", "Right Elbow"],
+        "parent": "Upper Arm.R",
+        "children": ["Hand.R"],
+        "mirror": "Lower Arm.L",
         "connected": True,
     },
-    "Wrist.R": {
-        "common_names": ["Wrist.R", "Right Wrist", "Hand.R"],
-        "parent": "Elbow.R",
+    "Hand.R": {
+        "common_names": ["Hand.R", "Wrist.R", "Right Wrist"],
+        "parent": "Lower Arm.R",
         "children": ["Thumb 1.R", "Little Finger 1.R", "Ring Finger 1.R", "Middle Finger 1.R", "Index Finger 1.R"],
-        "mirror": "Wrist.L",
+        "mirror": "Hand.L",
         "connected": True,
     },
 
     "Thumb 1.L": {
         "common_names": ["Thumb0.L"],
-        "parent": "Wrist.L",
+        "parent": "Hand.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R",
     },
@@ -250,7 +250,7 @@ BONE_DESC_MAP = {
     },
     "Index Finger 1.L": {
         "common_names": ["IndexFinger1.L"],
-        "parent": "Wrist.L",
+        "parent": "Hand.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R",
     },
@@ -270,7 +270,7 @@ BONE_DESC_MAP = {
     },
     "Middle Finger 1.L": {
         "common_names": ["MiddleFinger1.L"],
-        "parent": "Wrist.L",
+        "parent": "Hand.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R",
     },
@@ -290,7 +290,7 @@ BONE_DESC_MAP = {
     },
     "Ring Finger 1.L": {
         "common_names": ["RingFinger1.L"],
-        "parent": "Wrist.L",
+        "parent": "Hand.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R",
     },
@@ -310,7 +310,7 @@ BONE_DESC_MAP = {
     },
     "Little Finger 1.L": {
         "common_names": ["LittleFinger1.L"],
-        "parent": "Wrist.L",
+        "parent": "Hand.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R",
     },
@@ -331,7 +331,7 @@ BONE_DESC_MAP = {
 
     "Thumb 1.R": {
         "common_names": ["Thumb0.R"],
-        "parent": "Wrist.R",
+        "parent": "Hand.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L",
     },
@@ -351,7 +351,7 @@ BONE_DESC_MAP = {
     },
     "Index Finger 1.R": {
         "common_names": ["IndexFinger1.R"],
-        "parent": "Wrist.R",
+        "parent": "Hand.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L",
     },
@@ -371,7 +371,7 @@ BONE_DESC_MAP = {
     },
     "Middle Finger 1.R": {
         "common_names": ["MiddleFinger1.R"],
-        "parent": "Wrist.R",
+        "parent": "Hand.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L",
     },
@@ -391,7 +391,7 @@ BONE_DESC_MAP = {
     },
     "Ring Finger 1.R": {
         "common_names": ["RingFinger1.R"],
-        "parent": "Wrist.R",
+        "parent": "Hand.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L",
     },
@@ -411,7 +411,7 @@ BONE_DESC_MAP = {
     },
     "Little Finger 1.R": {
         "common_names": ["LittleFinger1.R"],
-        "parent": "Wrist.R",
+        "parent": "Hand.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L",
     },
@@ -984,7 +984,6 @@ def clear_pose(armature):
 
 
 # Align a bone onto an axis
-# def align_bone_to_axis(armature, bone, axis, direction):
 def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
     def debug_print(*msgs):
         print("   ", *msgs)
@@ -1044,6 +1043,9 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
             bpy.ops.object.mode_set(mode="POSE")
 
     # type check
+    if bone == None:
+        raise TypeError("Bone was not found")
+
     if not isinstance(bone, bpy.types.EditBone) and not isinstance(bone, bpy.types.PoseBone):
         raise TypeError("Bone must be a EditBone or PoseBone")
 
@@ -1106,8 +1108,7 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progr
 
         bone = find_bone("edit", armature, bone_desc_name)
         if bone == None:
-            debug_print("Couldn't find bone: ", bone_desc_name)
-            continue
+            raise TypeError("Couldn't find bone: " + bone_desc_name)
 
         if bone.name == bone_desc_name:
             debug_print("Name is good: ", bone.name)
@@ -1155,7 +1156,7 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    if align_bone_to_axis(armature, find_bone("edit", armature, "Toe.L"), 0, -1, 0):
+    if align_bone_to_axis(armature, find_bone("edit", armature, "Toes.L"), 0, -1, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
@@ -1171,7 +1172,7 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
 
     # Edit move hips to thigh's yz-plane
     hips = find_bone("edit", armature, "Hips")
-    thigh = find_bone("edit", armature, "Thigh.L")
+    thigh = find_bone("edit", armature, "Upper Leg.L")
     if thigh.matrix.translation.z != 0:
         thigh.matrix.translation.z = 0
         hips.head.y = thigh.matrix.translation.y
@@ -1203,14 +1204,14 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
         callback_progress_tick()
 
     # # Align thigh to z-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Thigh.L"), 0, 0, -1):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Upper Leg.L"), 0, 0, -1):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
     # Move thigh to y=0
-    thigh_l = find_bone("pose", armature, "Thigh.L")
-    thigh_r = find_bone("pose", armature, "Thigh.R")
+    thigh_l = find_bone("pose", armature, "Upper Leg.L")
+    thigh_r = find_bone("pose", armature, "Upper Leg.R")
     if thigh_l.matrix.translation.y != 0:
         thigh_l.matrix.translation.y = 0
         thigh_r.matrix.translation.y = 0
@@ -1228,7 +1229,7 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
         callback_progress_tick()
 
     # Align knee to z-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Knee.L"), 0, 0, -1):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Lower Leg.L"), 0, 0, -1):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
@@ -1269,14 +1270,14 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
     ################
     # Body Round 5
 
-    # Align "Head" to z-axis
+    # Align head to z-axis
     if align_bone_to_axis(armature, find_bone("pose", armature, "Head"), 0, 0, 1):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    # Align "Toe" to y-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Toe.L"), 0, -1, 0):
+    # Align toes to y-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Toes.L"), 0, -1, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
@@ -1284,26 +1285,26 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
     ################
     # The rest of the arm
 
-    # Align "Shoulder" to x-axis
+    # Align shoulder to x-axis
     if align_bone_to_axis(armature, find_bone("pose", armature, "Shoulder.L"), 1, 0, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    # Align "Arm" to x-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Arm.L"), 1, 0, 0):
+    # Align upper arm to x-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Upper Arm.L"), 1, 0, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    # Align "Elbow" to x-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Elbow.L"), 1, 0, 0):
+    # Align elbow to x-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Lower Arm.L"), 1, 0, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    # Align "Wrist" to x-axis
-    if align_bone_to_axis(armature, find_bone("pose", armature, "Wrist.L"), 1, 0, 0):
+    # Align wrist to x-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Hand.L"), 1, 0, 0):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
@@ -1415,7 +1416,7 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
         align_bone_to_axis(armature, find_bone(
             "pose", armature, "Shoulder.L"), 1, 0, -z)
         align_bone_to_axis(armature, find_bone(
-            "pose", armature, "Arm.L"), 1, 0, -1)
+            "pose", armature, "Upper Arm.L"), 1, 0, -1)
         # dont callback tick since this is a dynamic choice
 
     ################
