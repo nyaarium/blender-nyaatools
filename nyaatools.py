@@ -100,18 +100,21 @@ BONE_DESC_MAP = {
         "parent": "Chest",
         "children": ["Breast.R", "Breast.L"],
         "mirror": None,
+        "optional": True,
     },
     "Breast.L": {
         "common_names": ["Breast", "BreastUpper2_L", "Left Breast"],
         "parent": "Breast Root",
         "children": None,
         "mirror": "Breast.R",
+        "optional": True,
     },
     "Breast.R": {
         "common_names": ["Breast", "BreastUpper2_R", "Right Breast"],
         "parent": "Breast Root",
         "children": None,
         "mirror": "Breast.L",
+        "optional": True,
     },
 
     "Upper Leg.L": {
@@ -254,80 +257,80 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Index Finger 1.L": {
-        "common_names": ["IndexFinger1.L"],
+        "common_names": ["IndexFinger1.L", "Index Finger Left"],
         "parent": "Hand.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R",
     },
     "Index Finger 2.L": {
-        "common_names": ["IndexFinger2.L"],
+        "common_names": ["IndexFinger2.L", "Index Finger Left"],
         "parent": "Index Finger 1.L",
         "children": ["Index Finger 3.L"],
         "mirror": "Index Finger 2.R",
         "connected": True,
     },
     "Index Finger 3.L": {
-        "common_names": ["IndexFinger3.L"],
+        "common_names": ["IndexFinger3.L", "Index Finger Left"],
         "parent": "Index Finger 2.L",
         "children": None,
         "mirror": "Index Finger 3.R",
         "connected": True,
     },
     "Middle Finger 1.L": {
-        "common_names": ["MiddleFinger1.L"],
+        "common_names": ["MiddleFinger1.L", "Middle Finger Left"],
         "parent": "Hand.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R",
     },
     "Middle Finger 2.L": {
-        "common_names": ["MiddleFinger2.L"],
+        "common_names": ["MiddleFinger2.L", "Middle Finger Left"],
         "parent": "Middle Finger 1.L",
         "children": ["Middle Finger 3.L"],
         "mirror": "Middle Finger 2.R",
         "connected": True,
     },
     "Middle Finger 3.L": {
-        "common_names": ["MiddleFinger3.L"],
+        "common_names": ["MiddleFinger3.L", "Middle Finger Left"],
         "parent": "Middle Finger 2.L",
         "children": None,
         "mirror": "Middle Finger 3.R",
         "connected": True,
     },
     "Ring Finger 1.L": {
-        "common_names": ["RingFinger1.L"],
+        "common_names": ["RingFinger1.L", "Ring Finger Left"],
         "parent": "Hand.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R",
     },
     "Ring Finger 2.L": {
-        "common_names": ["RingFinger2.L"],
+        "common_names": ["RingFinger2.L", "Ring Finger Left"],
         "parent": "Ring Finger 1.L",
         "children": ["Ring Finger 3.L"],
         "mirror": "Ring Finger 2.R",
         "connected": True,
     },
     "Ring Finger 3.L": {
-        "common_names": ["RingFinger3.L"],
+        "common_names": ["RingFinger3.L", "Ring Finger Left"],
         "parent": "Ring Finger 2.L",
         "children": None,
         "mirror": "Ring Finger 3.R",
         "connected": True,
     },
     "Little Finger 1.L": {
-        "common_names": ["LittleFinger1.L"],
+        "common_names": ["LittleFinger1.L", "Little Finger Left"],
         "parent": "Hand.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R",
     },
     "Little Finger 2.L": {
-        "common_names": ["LittleFinger2.L"],
+        "common_names": ["LittleFinger2.L", "Little Finger Left"],
         "parent": "Little Finger 1.L",
         "children": ["Little Finger 3.L"],
         "mirror": "Little Finger 2.R",
         "connected": True,
     },
     "Little Finger 3.L": {
-        "common_names": ["LittleFinger3.L"],
+        "common_names": ["LittleFinger3.L", "Little Finger Left"],
         "parent": "Little Finger 2.L",
         "children": None,
         "mirror": "Little Finger 3.R",
@@ -358,80 +361,80 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Index Finger 1.R": {
-        "common_names": ["IndexFinger1.R"],
+        "common_names": ["IndexFinger1.R", "Index Finger Right"],
         "parent": "Hand.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L",
     },
     "Index Finger 2.R": {
-        "common_names": ["IndexFinger2.R"],
+        "common_names": ["IndexFinger2.R", "Index Finger Right"],
         "parent": "Index Finger 1.R",
         "children": ["Index Finger 3.R"],
         "mirror": "Index Finger 2.L",
         "connected": True,
     },
     "Index Finger 3.R": {
-        "common_names": ["IndexFinger3.R"],
+        "common_names": ["IndexFinger3.R", "Index Finger Right"],
         "parent": "Index Finger 2.R",
         "children": None,
         "mirror": "Index Finger 3.L",
         "connected": True,
     },
     "Middle Finger 1.R": {
-        "common_names": ["MiddleFinger1.R"],
+        "common_names": ["MiddleFinger1.R", "Middle Finger Right"],
         "parent": "Hand.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L",
     },
     "Middle Finger 2.R": {
-        "common_names": ["MiddleFinger2.R"],
+        "common_names": ["MiddleFinger2.R", "Middle Finger Right"],
         "parent": "Middle Finger 1.R",
         "children": ["Middle Finger 3.R"],
         "mirror": "Middle Finger 2.L",
         "connected": True,
     },
     "Middle Finger 3.R": {
-        "common_names": ["MiddleFinger3.R"],
+        "common_names": ["MiddleFinger3.R", "Middle Finger Right"],
         "parent": "Middle Finger 2.R",
         "children": None,
         "mirror": "Middle Finger 3.L",
         "connected": True,
     },
     "Ring Finger 1.R": {
-        "common_names": ["RingFinger1.R"],
+        "common_names": ["RingFinger1.R", "Ring Finger Right"],
         "parent": "Hand.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L",
     },
     "Ring Finger 2.R": {
-        "common_names": ["RingFinger2.R"],
+        "common_names": ["RingFinger2.R", "Ring Finger Right"],
         "parent": "Ring Finger 1.R",
         "children": ["Ring Finger 3.R"],
         "mirror": "Ring Finger 2.L",
         "connected": True,
     },
     "Ring Finger 3.R": {
-        "common_names": ["RingFinger3.R"],
+        "common_names": ["RingFinger3.R", "Ring Finger Right"],
         "parent": "Ring Finger 2.R",
         "children": None,
         "mirror": "Ring Finger 3.L",
         "connected": True,
     },
     "Little Finger 1.R": {
-        "common_names": ["LittleFinger1.R"],
+        "common_names": ["LittleFinger1.R", "Little Finger Right"],
         "parent": "Hand.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L",
     },
     "Little Finger 2.R": {
-        "common_names": ["LittleFinger2.R"],
+        "common_names": ["LittleFinger2.R", "Little Finger Right"],
         "parent": "Little Finger 1.R",
         "children": ["Little Finger 3.R"],
         "mirror": "Little Finger 2.L",
         "connected": True,
     },
     "Little Finger 3.R": {
-        "common_names": ["LittleFinger3.R"],
+        "common_names": ["LittleFinger3.R", "Little Finger Right"],
         "parent": "Little Finger 2.R",
         "children": None,
         "mirror": "Little Finger 3.L",
@@ -781,21 +784,24 @@ def find_bone(which, armature: bpy.types.Armature, bone_desc_name: str) -> bpy.t
 
             debug_print("Checking child:", child_name)
 
+            bone_desc = BONE_DESC_MAP[bone_desc_name]
+
             # Child descriptor
-            for child_desc_name in BONE_DESC_MAP[bone_desc_name]["children"]:
-                debug_print("Comparing it to:", child_desc_name)
+            if bone_desc["children"]:
+                for child_desc_name in bone_desc["children"]:
+                    debug_print("Comparing it to:", child_desc_name)
 
-                # If exact match, return bone
-                if child_name == child_desc_name:
-                    debug_print("* Exact match ",  child_name,
-                                " == ", child_desc_name)
-                    return True
+                    # If exact match, return bone
+                    if child_name == child_desc_name:
+                        debug_print("* Exact match ",  child_name,
+                                    " == ", child_desc_name)
+                        return True
 
-                # If the child is a match, return the bone
-                if 0.8 <= similarity_to_common_names(child_name, child_desc_name):
-                    debug_print("* Child is a good match",
-                                bone.name, " is ", bone_desc_name)
-                    return True
+                    # If the child is a match, return the bone
+                    if 0.8 <= similarity_to_common_names(child_name, child_desc_name):
+                        debug_print("* Child is a good match",
+                                    bone.name, " is ", bone_desc_name)
+                        return True
 
         return False
 
@@ -862,10 +868,6 @@ def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> float:
     if not isinstance(bone_desc_name, str):
         raise TypeError("bone_desc_name must be type str")
 
-    # Regex removes substr .001, .002, etc. from name
-    bone_name = re.sub(r"\.\d{3}", "", bone_name)
-    bone_name = re.sub(r"_", ".", bone_name)
-
     common_names = BONE_DESC_MAP[bone_desc_name]["common_names"]
     if common_names:
         # Return largest string_similarity value
@@ -882,6 +884,14 @@ def string_similarity(str1: str, str2: str) -> float:
         raise TypeError("str1 must be str type")
     if not isinstance(str2, str):
         raise TypeError("str2 must be str type")
+
+    # Regex removes substr .001, .002, etc. from name
+    str1 = re.sub(r"\.\d{3}", "", str1)
+    str1 = re.sub(r"_", " ", str1)
+    str1 = re.sub(r"\.", " ", str1)
+    str2 = re.sub(r"\.\d{3}", "", str2)
+    str2 = re.sub(r"_", " ", str2)
+    str2 = re.sub(r"\.", " ", str2)
 
     # , substring_length: Optional[int] = 2, case_sensitive: Optional[bool] = False
     substring_length = 2
@@ -1116,7 +1126,10 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progr
 
         bone = find_bone("edit", armature, bone_desc_name)
         if bone == None:
-            raise TypeError("Couldn't find bone: " + bone_desc_name)
+            if "optional" in bone_desc and bone_desc["optional"]:
+                continue
+            else:
+                raise TypeError("Couldn't find bone: " + bone_desc_name)
 
         if bone.name == bone_desc_name:
             debug_print("Name is good: ", bone.name)
@@ -1450,6 +1463,9 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
     # Iterate over descriptors in BONE_DESC_MAP & reset their roll
     for bone_desc_name in BONE_DESC_MAP:
         bone_desc = BONE_DESC_MAP[bone_desc_name]
+
+        if not bone_desc_name in armature.data.edit_bones:
+            continue
 
         # Get bone
         bone = armature.data.edit_bones[bone_desc_name]
