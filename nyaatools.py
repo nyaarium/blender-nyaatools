@@ -1,6 +1,7 @@
 from bpy.utils import register_class
 from bpy.types import Operator, Panel
 from bpy.props import *
+from math import radians
 from mathutils import Matrix, Vector
 import numpy as np
 from collections import defaultdict
@@ -35,6 +36,7 @@ EXPORT_COLLECTION = "Export"
 PROP_AVATAR = "avatar"
 PROP_TARGET_AVATARS = "targetAvatars"
 PROP_EXPORT_PATH = "exportPath"
+A_POSE_SHOULDER_ANGLE = 15
 
 # Prop Key Constants
 #############################################
@@ -175,7 +177,6 @@ BONE_DESC_MAP = {
         "parent": "Chest",
         "children": ["Arm.L"],
         "mirror": "Shoulder.R",
-        "roll": 0,
     },
     "Arm.L": {
         "common_names": ["Arm.L", "Upper Arm.L", "Left Arm"],
@@ -183,7 +184,6 @@ BONE_DESC_MAP = {
         "children": ["Elbow.L"],
         "mirror": "Arm.R",
         "connected": True,
-        "roll": 60,
     },
     "Elbow.L": {
         "common_names": ["Elbow.L", "Left Elbow", "Lower Arm.L"],
@@ -191,7 +191,6 @@ BONE_DESC_MAP = {
         "children": ["Wrist.L"],
         "mirror": "Elbow.R",
         "connected": True,
-        "roll": 0,
     },
     "Wrist.L": {
         "common_names": ["Wrist.L", "Left Wrist", "Hand.L"],
@@ -199,7 +198,6 @@ BONE_DESC_MAP = {
         "children": ["Thumb 1.L", "Little Finger 1.L", "Ring Finger 1.L", "Middle Finger 1.L", "Index Finger 1.L"],
         "mirror": "Wrist.R",
         "connected": True,
-        "roll": 0,
     },
 
     "Shoulder.R": {
@@ -207,7 +205,6 @@ BONE_DESC_MAP = {
         "parent": "Chest",
         "children": ["Arm.R"],
         "mirror": "Shoulder.L",
-        "roll": -0,
     },
     "Arm.R": {
         "common_names": ["Arm.R", "Upper Arm.R", "Right Arm"],
@@ -215,7 +212,6 @@ BONE_DESC_MAP = {
         "children": ["Elbow.R"],
         "mirror": "Arm.L",
         "connected": True,
-        "roll": -90,
     },
     "Elbow.R": {
         "common_names": ["Elbow.R", "Right Elbow", "Lower Arm.R"],
@@ -223,7 +219,6 @@ BONE_DESC_MAP = {
         "children": ["Wrist.R"],
         "mirror": "Elbow.L",
         "connected": True,
-        "roll": -0,
     },
     "Wrist.R": {
         "common_names": ["Wrist.R", "Right Wrist", "Hand.R"],
@@ -231,7 +226,6 @@ BONE_DESC_MAP = {
         "children": ["Thumb 1.R", "Little Finger 1.R", "Ring Finger 1.R", "Middle Finger 1.R", "Index Finger 1.R"],
         "mirror": "Wrist.L",
         "connected": True,
-        "roll": -0,
     },
 
     "Thumb 1.L": {
@@ -239,7 +233,6 @@ BONE_DESC_MAP = {
         "parent": "Wrist.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R",
-        "roll": 0,
     },
     "Thumb 2.L": {
         "common_names": ["Thumb1.L"],
@@ -247,7 +240,6 @@ BONE_DESC_MAP = {
         "children": ["Thumb 3.L"],
         "mirror": "Thumb 2.R",
         "connected": True,
-        "roll": 0,
     },
     "Thumb 3.L": {
         "common_names": ["Thumb2.L"],
@@ -255,14 +247,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Thumb 3.R",
         "connected": True,
-        "roll": 0,
     },
     "Index Finger 1.L": {
         "common_names": ["IndexFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R",
-        "roll": 0,
     },
     "Index Finger 2.L": {
         "common_names": ["IndexFinger2.L"],
@@ -270,7 +260,6 @@ BONE_DESC_MAP = {
         "children": ["Index Finger 3.L"],
         "mirror": "Index Finger 2.R",
         "connected": True,
-        "roll": 0,
     },
     "Index Finger 3.L": {
         "common_names": ["IndexFinger3.L"],
@@ -278,14 +267,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Index Finger 3.R",
         "connected": True,
-        "roll": 0,
     },
     "Middle Finger 1.L": {
         "common_names": ["MiddleFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R",
-        "roll": 0,
     },
     "Middle Finger 2.L": {
         "common_names": ["MiddleFinger2.L"],
@@ -293,7 +280,6 @@ BONE_DESC_MAP = {
         "children": ["Middle Finger 3.L"],
         "mirror": "Middle Finger 2.R",
         "connected": True,
-        "roll": 0,
     },
     "Middle Finger 3.L": {
         "common_names": ["MiddleFinger3.L"],
@@ -301,14 +287,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Middle Finger 3.R",
         "connected": True,
-        "roll": 0,
     },
     "Ring Finger 1.L": {
         "common_names": ["RingFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R",
-        "roll": 0,
     },
     "Ring Finger 2.L": {
         "common_names": ["RingFinger2.L"],
@@ -316,7 +300,6 @@ BONE_DESC_MAP = {
         "children": ["Ring Finger 3.L"],
         "mirror": "Ring Finger 2.R",
         "connected": True,
-        "roll": 0,
     },
     "Ring Finger 3.L": {
         "common_names": ["RingFinger3.L"],
@@ -324,14 +307,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Ring Finger 3.R",
         "connected": True,
-        "roll": 0,
     },
     "Little Finger 1.L": {
         "common_names": ["LittleFinger1.L"],
         "parent": "Wrist.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R",
-        "roll": 0,
     },
     "Little Finger 2.L": {
         "common_names": ["LittleFinger2.L"],
@@ -339,7 +320,6 @@ BONE_DESC_MAP = {
         "children": ["Little Finger 3.L"],
         "mirror": "Little Finger 2.R",
         "connected": True,
-        "roll": 0,
     },
     "Little Finger 3.L": {
         "common_names": ["LittleFinger3.L"],
@@ -347,7 +327,6 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Little Finger 3.R",
         "connected": True,
-        "roll": 0,
     },
 
     "Thumb 1.R": {
@@ -355,7 +334,6 @@ BONE_DESC_MAP = {
         "parent": "Wrist.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L",
-        "roll": -0,
     },
     "Thumb 2.R": {
         "common_names": ["Thumb1.R"],
@@ -363,7 +341,6 @@ BONE_DESC_MAP = {
         "children": ["Thumb 3.R"],
         "mirror": "Thumb 2.L",
         "connected": True,
-        "roll": -0,
     },
     "Thumb 3.R": {
         "common_names": ["Thumb2.R"],
@@ -371,14 +348,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Thumb 3.L",
         "connected": True,
-        "roll": -0,
     },
     "Index Finger 1.R": {
         "common_names": ["IndexFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L",
-        "roll": -0,
     },
     "Index Finger 2.R": {
         "common_names": ["IndexFinger2.R"],
@@ -386,7 +361,6 @@ BONE_DESC_MAP = {
         "children": ["Index Finger 3.R"],
         "mirror": "Index Finger 2.L",
         "connected": True,
-        "roll": -0,
     },
     "Index Finger 3.R": {
         "common_names": ["IndexFinger3.R"],
@@ -394,14 +368,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Index Finger 3.L",
         "connected": True,
-        "roll": -0,
     },
     "Middle Finger 1.R": {
         "common_names": ["MiddleFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L",
-        "roll": -0,
     },
     "Middle Finger 2.R": {
         "common_names": ["MiddleFinger2.R"],
@@ -409,7 +381,6 @@ BONE_DESC_MAP = {
         "children": ["Middle Finger 3.R"],
         "mirror": "Middle Finger 2.L",
         "connected": True,
-        "roll": -0,
     },
     "Middle Finger 3.R": {
         "common_names": ["MiddleFinger3.R"],
@@ -417,14 +388,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Middle Finger 3.L",
         "connected": True,
-        "roll": -0,
     },
     "Ring Finger 1.R": {
         "common_names": ["RingFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L",
-        "roll": -0,
     },
     "Ring Finger 2.R": {
         "common_names": ["RingFinger2.R"],
@@ -432,7 +401,6 @@ BONE_DESC_MAP = {
         "children": ["Ring Finger 3.R"],
         "mirror": "Ring Finger 2.L",
         "connected": True,
-        "roll": -0,
     },
     "Ring Finger 3.R": {
         "common_names": ["RingFinger3.R"],
@@ -440,14 +408,12 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Ring Finger 3.L",
         "connected": True,
-        "roll": -0,
     },
     "Little Finger 1.R": {
         "common_names": ["LittleFinger1.R"],
         "parent": "Wrist.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L",
-        "roll": -0,
     },
     "Little Finger 2.R": {
         "common_names": ["LittleFinger2.R"],
@@ -455,7 +421,6 @@ BONE_DESC_MAP = {
         "children": ["Little Finger 3.R"],
         "mirror": "Little Finger 2.L",
         "connected": True,
-        "roll": -0,
     },
     "Little Finger 3.R": {
         "common_names": ["LittleFinger3.R"],
@@ -463,7 +428,6 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Little Finger 3.L",
         "connected": True,
-        "roll": -0,
     },
 }
 
@@ -1484,11 +1448,11 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
         desc_roll = 0
         if "roll" in bone_desc and bone_desc["roll"] != None:
             # Get roll as radians
-            desc_roll = bone_desc["roll"] * (math.pi / 180)
+            desc_roll = bone_desc["roll"]
 
         if bone.roll != desc_roll:
             debug_print("Setting roll of", bone.name, "to", desc_roll)
-            bone.roll = desc_roll
+            bone.roll = radians(desc_roll)
 
 
 def perform_normalize_armature(which_pose, apply_rest_pose=True):
