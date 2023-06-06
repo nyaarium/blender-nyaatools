@@ -456,8 +456,14 @@ def cleanupMesh(obj):
 
 
 def removeUnusedVertexGroups(obj):
-    if (obj.type != "MESH"):
+    def debug_print(*msgs):
+        print("   ", *msgs)
         return
+
+    if obj.type == None:
+        raise BaseException("Expected a mesh object, got: None")
+    if obj.type != "MESH":
+        raise BaseException("Expected a mesh object, got: " + obj.type)
 
     obj.update_from_editmode()
 
@@ -484,8 +490,11 @@ def removeUnusedVertexGroups(obj):
                         if mirror_vgname == name:
                             vgroup_used[i] = True
                             break
+
     for i, used in sorted(vgroup_used.items(), reverse=True):
         if not used:
+            debug_print("Removing vertex group: ",
+                        obj.name, " -> ", vgroup_names[i])
             obj.vertex_groups.remove(obj.vertex_groups[i])
 
 
@@ -538,7 +547,7 @@ def removeUnusedShapeKeys(obj):
         largestDistance = numpy.amax(distances)
 
         # Print the largest distance
-        debug_print("Largest distance for", kb.name, "is", largestDistance)
+        # debug_print("Largest distance for", kb.name, "is", largestDistance)
 
         # Check if all the vertex locations are within the tolerance
         if (distances < SHAPE_KEY_TOLERANCE).all():
@@ -547,15 +556,25 @@ def removeUnusedShapeKeys(obj):
 
     # Loop through all the shape keys to delete and remove them from the mesh
     for kb_name in to_delete:
+        debug_print("Removing shape key: ", obj.name, " -> ", kb_name)
         obj.shape_key_remove(obj.data.shape_keys.key_blocks[kb_name])
 
     if len(obj.data.shape_keys.key_blocks) == 1:
         kb = obj.data.shape_keys.key_blocks[0]
+        debug_print("Removing shape key: ", obj.name, " -> ", kb.name)
         obj.shape_key_remove(kb)
 
 
 def removeUnusedMaterials(obj):
-    # FIXME: obj wasn't defined
+    def debug_print(*msgs):
+        print("   ", *msgs)
+        return
+
+    if obj.type == None:
+        raise BaseException("Expected a mesh object, got: None")
+    if obj.type != "MESH":
+        raise BaseException("Expected a mesh object, got: " + obj.type)
+
     mat_slots = {}
     for p in obj.data.polygons:
         mat_slots[p.material_index] = 1
@@ -564,6 +583,12 @@ def removeUnusedMaterials(obj):
 
     for i in reversed(range(len(obj.material_slots))):
         if i not in mat_slots:
+            mat_name = obj.material_slots[i].name
+            if mat_name != "":
+                mat_name = " (" + mat_name + ")"
+            debug_print("Removing material slot: ", obj.name,
+                        " -> ", i, mat_name)
+
             selectAdd(obj)
             obj.active_material_index = i
             bpy.ops.object.material_slot_remove()
