@@ -31,7 +31,7 @@ import bpy
 
 bl_info = {
     "name":         "NyaaTools",
-    "author":       "Nyaarium, (and lots of StackOverflow). Uses Przemysław Bągard's Apply modifier",
+    "author":       "Nyaarium",
     "blender":      (3, 5, 1),
     "version":      (1, 0, 0),
     "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
