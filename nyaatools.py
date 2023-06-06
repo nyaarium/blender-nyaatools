@@ -1,3 +1,18 @@
+#############################################
+#
+#    Installing:
+#
+#    1. Download this script
+#
+#    2. In Blender, click:
+#       Edit > Preferences > Add-ons > Install...
+#
+#    3. Select the downloaded script
+#
+#    4. Check the box to enable this add-on
+#
+#############################################
+
 from bpy.utils import register_class
 from bpy.types import Operator, Panel
 from bpy.props import *
@@ -2115,6 +2130,9 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Atelier Nyaarium", icon="INFO")
 
             row = box.row(align=True)
+
+            row.operator("ops.open_link", text="Update",
+                         icon="WORLD").url = "https://raw.githubusercontent.com/nyaarium/blender-nyaatools/main/nyaatools.py"
 
             row.operator("ops.open_link", text="GitHub",
                          icon="WORLD").url = "github.com/nyaarium/blender-nyaatools"
