@@ -191,6 +191,7 @@ BONE_DESC_MAP = {
         "children": ["Hand.L"],
         "mirror": "Lower Arm.R",
         "connected": True,
+        "roll": -90,
     },
     "Hand.L": {
         "common_names": ["Hand.L", "Wrist.L", "Left Wrist"],
@@ -219,6 +220,7 @@ BONE_DESC_MAP = {
         "children": ["Hand.R"],
         "mirror": "Lower Arm.L",
         "connected": True,
+        "roll": 90,
     },
     "Hand.R": {
         "common_names": ["Hand.R", "Wrist.R", "Right Wrist"],
@@ -233,6 +235,7 @@ BONE_DESC_MAP = {
         "parent": "Hand.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R",
+        "roll": 90,
     },
     "Thumb 2.L": {
         "common_names": ["Thumb1.L"],
@@ -240,6 +243,7 @@ BONE_DESC_MAP = {
         "children": ["Thumb 3.L"],
         "mirror": "Thumb 2.R",
         "connected": True,
+        "roll": 90,
     },
     "Thumb 3.L": {
         "common_names": ["Thumb2.L"],
@@ -247,6 +251,7 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Thumb 3.R",
         "connected": True,
+        "roll": 90,
     },
     "Index Finger 1.L": {
         "common_names": ["IndexFinger1.L"],
@@ -334,6 +339,7 @@ BONE_DESC_MAP = {
         "parent": "Hand.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L",
+        "roll": -90,
     },
     "Thumb 2.R": {
         "common_names": ["Thumb1.R"],
@@ -341,6 +347,7 @@ BONE_DESC_MAP = {
         "children": ["Thumb 3.R"],
         "mirror": "Thumb 2.L",
         "connected": True,
+        "roll": -90,
     },
     "Thumb 3.R": {
         "common_names": ["Thumb2.R"],
@@ -348,6 +355,7 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Thumb 3.L",
         "connected": True,
+        "roll": -90,
     },
     "Index Finger 1.R": {
         "common_names": ["IndexFinger1.R"],
@@ -1431,7 +1439,7 @@ def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest
 
 def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
     def debug_print(*msgs):
-        # print("   ", *msgs)
+        print("   ", *msgs)
         return
 
     debug_print("Starting normalize_armature_roll_bones()")
@@ -1447,13 +1455,80 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
         bone = armature.data.edit_bones[bone_desc_name]
 
         desc_roll = 0
+
         if "roll" in bone_desc and bone_desc["roll"] != None:
-            # Get roll as radians
             desc_roll = bone_desc["roll"]
+
+        if which_pose == "a-pose":
+            sw = bone_desc_name.startswith
+
+            # Shoulder
+            if sw("Shoulder"):
+                r = A_POSE_SHOULDER_ANGLE
+                if bone_desc_name.endswith(".R"):
+                    r *= -1
+                desc_roll += r
+                debug_print("For A-Pose, shoulder", desc_roll)
+
+            # Arm and below:
+            if sw("Upper Arm") or sw("Lower Arm") or sw("Hand") or sw("Thumb") or sw("Index") or sw("Middle") or sw("Ring") or sw("Little"):
+                r = 45
+                if bone_desc_name.endswith(".R"):
+                    r *= -1
+                desc_roll += r
+                debug_print("For A-Pose, arm and below", desc_roll)
 
         if bone.roll != desc_roll:
             debug_print("Setting roll of", bone.name, "to", desc_roll)
             bone.roll = radians(desc_roll)
+
+
+def estimate_is_normalized(armature: bpy.types.Armature):
+    # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
+    for bone_desc_name in BONE_DESC_MAP:
+        bone_desc = BONE_DESC_MAP[bone_desc_name]
+
+        if bone_desc_name.startswith("Hand"):
+            # This is good enough of an estimate.
+            return True
+
+        bone = find_bone("edit", armature, bone_desc_name)
+        if bone == None:
+            return False
+
+        if bone.name != bone_desc_name:
+            return False
+
+        if bone.name == bone_desc_name:
+            # Check if bone is connected
+            if "connected" in bone_desc and bone_desc["connected"]:
+                if not bone.use_connect:
+                    return False
+            else:
+                if bone.use_connect:
+                    return False
+
+    # All are good
+    return True
+
+
+def perform_fast_pose(which_pose):
+    if not which_pose in ["a-pose", "t-pose"]:
+        raise Exception("which_pose must be a-pose or t-pose")
+
+    armature = bpy.context.active_object
+
+    if armature == None:
+        raise Exception("Please select an armature object first! Got: None")
+
+    if armature.type != "ARMATURE":
+        raise Exception(
+            "Please select an armature object first! Got: " + armature.type)
+
+    if estimate_is_normalized(armature):
+        normalize_armature_pose(armature, which_pose, False)
+    else:
+        raise Exception("Armature is not normalized! Please normalize first.")
 
 
 def perform_normalize_armature(which_pose, apply_rest_pose=True):
