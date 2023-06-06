@@ -1169,12 +1169,12 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progr
                 bone.use_connect = False
 
 
-def normalize_armature_t_pose(armature: bpy.types.Armature, callback_progress_tick=None):
+def normalize_armature_pose(armature: bpy.types.Armature, which_pose, apply_rest_pose, callback_progress_tick=None):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
 
-    debug_print("Starting normalize_armature_t_pose()")
+    debug_print("Starting normalize_armature_pose()")
 
     # Find all meshes that have an armature modifier with this armature
     affected_meshes = find_meshes_affected_by_armature_modifier(armature)
@@ -1184,213 +1184,287 @@ def normalize_armature_t_pose(armature: bpy.types.Armature, callback_progress_ti
     should_apply = False
 
     ################
-    # Ankle Initialization - Edit and point Ankle bone forward
+    # Ankle Initialization - Point Ankle bone forward without affecting pose
 
-    align_bone_to_axis(armature, find_bone(armature, "Ankle.L"), 0, -1, 0)
-    align_bone_to_axis(armature, find_bone(armature, "Ankle.R"), 0, -1, 0)
-    align_bone_to_axis(armature, find_bone(armature, "Toe.L"), 0, -1, 0)
-    align_bone_to_axis(armature, find_bone(armature, "Toe.R"), 0, -1, 0)
+    if align_bone_to_axis(armature, find_bone("edit", armature, "Foot.L"), 0, -1, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
+
+    if align_bone_to_axis(armature, find_bone("edit", armature, "Toe.L"), 0, -1, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
+
+    # Align ankle to y-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Foot.L"), 0, -1, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Body Round 1
 
-    # Align "Hips" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Hips"), 0, 0, 1):
-        should_apply = True
+    # Edit move hips to thigh's yz-plane
+    hips = find_bone("edit", armature, "Hips")
+    thigh = find_bone("edit", armature, "Thigh.L")
+    if thigh.matrix.translation.z != 0:
+        thigh.matrix.translation.z = 0
+        hips.head.y = thigh.matrix.translation.y
+        hips.head.z = thigh.matrix.translation.z
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Move "Hips" to y=0
-    hips = find_pose_bone(armature, "Hips")
+    # Align hips to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Hips"), 0, 0, 1):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
+
+    # Move hips to y=0
+    hips = find_bone("pose", armature, "Hips")
     if hips.matrix.translation.y != 0:
         hips.matrix.translation.y = 0
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Body Round 2
 
-    # Align "Spine" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Spine"), 0, 0, 1):
+    # Align spine to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Spine"), 0, 0, 1):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Align "Thigh" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Thigh.L"), 0, 0, -1):
+    # # Align thigh to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Thigh.L"), 0, 0, -1):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    # Move thigh to y=0
+    thigh_l = find_bone("pose", armature, "Thigh.L")
+    thigh_r = find_bone("pose", armature, "Thigh.R")
+    if thigh_l.matrix.translation.y != 0:
+        thigh_l.matrix.translation.y = 0
+        thigh_r.matrix.translation.y = 0
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Body Round 3
 
-    # Align "Chest" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Chest"), 0, 0, 1):
+    # Align chest to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Chest"), 0, 0, 1):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Align "Knee" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Knee.L"), 0, 0, -1):
+    # Align knee to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Knee.L"), 0, 0, -1):
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Body Round 4
 
-    # Align "Neck" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Neck"), 0, 0, 1):
+    # Align neck to z-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Neck"), 0, 0, 1):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Move "Neck" to z=0
-    neck = find_pose_bone(armature, "Neck")
+    # Move neck to z=0
+    neck = find_bone("pose", armature, "Neck")
     if neck.matrix.translation.y != 0:
         neck.matrix.translation.y = 0
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Move "Shoulder" to z=0
-    shoulder_l = find_pose_bone(armature, "Shoulder.L")
-    shoulder_r = find_pose_bone(armature, "Shoulder.R")
+    # Move shoulder to z=0
+    shoulder_l = find_bone("pose", armature, "Shoulder.L")
+    shoulder_r = find_bone("pose", armature, "Shoulder.R")
     if shoulder_l.matrix.translation.y != 0 or shoulder_r.matrix.translation.y != 0:
         shoulder_l.matrix.translation.y = 0
         shoulder_r.matrix.translation.y = 0
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    # Align "Ankle" to y-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ankle.L"), 0, -1, 0):
+    # Align ankle to y-axis
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Foot.L"), 0, -1, 0):
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Body Round 5
 
     # Align "Head" to z-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Head"), 0, 0, 1):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Head"), 0, 0, 1):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Toe" to y-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Toe.L"), 0, -1, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Toe.L"), 0, -1, 0):
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # The rest of the arm
 
     # Align "Shoulder" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Shoulder.L"), 1, 0, 0):
-        apply_pose(armature, affected_meshes)
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Shoulder.L"), 1, 0, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Arm" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Arm.L"), 1, 0, 0):
-        apply_pose(armature, affected_meshes)
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Arm.L"), 1, 0, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Elbow" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Elbow.L"), 1, 0, 0):
-        apply_pose(armature, affected_meshes)
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Elbow.L"), 1, 0, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Wrist" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Wrist.L"), 1, 0, 0):
-        apply_pose(armature, affected_meshes)
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Wrist.L"), 1, 0, 0):
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Fingers Round 1
 
     # Align "Thumb 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 1.L"), 1, -1, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Thumb 1.L"), 1, -1, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Index Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 1.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Index Finger 1.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Middle Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 1.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Middle Finger 1.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Ring Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 1.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Ring Finger 1.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Little Finger 1" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 1.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Little Finger 1.L"), 1, 0, 0):
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Fingers Round 2
 
     # Align "Thumb 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 2.L"), 1, -1, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Thumb 2.L"), 1, -1, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Index Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 2.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Index Finger 2.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Middle Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 2.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Middle Finger 2.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Ring Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 2.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Ring Finger 2.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Little Finger 2" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 2.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Little Finger 2.L"), 1, 0, 0):
         should_apply = True
-
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     ################
     # Fingers Round 3
 
     # Align "Thumb 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Thumb 3.L"), 1, -1, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Thumb 3.L"), 1, -1, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Index Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Index Finger 3.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Index Finger 3.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Middle Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Middle Finger 3.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Middle Finger 3.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Ring Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Ring Finger 3.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Ring Finger 3.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
     # Align "Little Finger 3" to x-axis
-    if align_bone_to_axis(armature, find_pose_bone(armature, "Little Finger 3.L"), 1, 0, 0):
+    if align_bone_to_axis(armature, find_bone("pose", armature, "Little Finger 3.L"), 1, 0, 0):
         should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
 
-    if should_apply:
-        apply_pose(armature, affected_meshes)
-        should_apply = False
+    # A-Pose only
+    if which_pose == "a-pose":
+        a = A_POSE_SHOULDER_ANGLE
+        z = math.sin(radians(a)) / math.sin(radians(90 - a))
+
+        align_bone_to_axis(armature, find_bone(
+            "pose", armature, "Shoulder.L"), 1, 0, -z)
+        align_bone_to_axis(armature, find_bone(
+            "pose", armature, "Arm.L"), 1, 0, -1)
+        # dont callback tick since this is a dynamic choice
 
     ################
-    # Switch to pose mode
-
-    clear_pose(armature)
 
     bpy.ops.object.mode_set(mode="POSE")
 
+    # Apply to all meshes / shape keys
+    if apply_rest_pose and should_apply:
+        apply_pose(armature, affected_meshes, callback_progress_tick)
+        clear_pose(armature)
 
-def normalize_armature_roll_bones(armature: bpy.types.Armature, callback_progress_tick=None):
+
+def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
     def debug_print(*msgs):
         # print("   ", *msgs)
         return
@@ -1402,9 +1476,6 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, callback_progres
 
     # Iterate over descriptors in BONE_DESC_MAP & reset their roll
     for bone_desc_name in BONE_DESC_MAP:
-        if callback_progress_tick != None:
-            callback_progress_tick()
-
         bone_desc = BONE_DESC_MAP[bone_desc_name]
 
         # Get bone
@@ -1420,79 +1491,128 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, callback_progres
             bone.roll = desc_roll
 
 
+def perform_normalize_armature(which_pose, apply_rest_pose=True):
+    if not which_pose in ["a-pose", "t-pose"]:
+        raise Exception("which_pose must be a-pose or t-pose")
+
+    armature = bpy.context.active_object
+
+    if armature == None:
+        raise Exception("Please select an armature object first! Got: None")
+
+    if armature.type != "ARMATURE":
+        raise Exception(
+            "Please select an armature object first! Got: " + armature.type)
+
+    wm = bpy.context.window_manager
+
+    # Progress count, total
+    progress = [0]
+    progress_total = 0
+
+    def callback_progress_tick():
+        progress[0] = progress[0] + 1
+        wm.progress_update(progress[0] / progress_total * 100)
+
+    # Progress Total: Rename bones is the length of the bone descriptors
+    progress_total += len(BONE_DESC_MAP)
+
+    # Progress Total: T-Pose is:
+    # - Fixed count of callback_progress_tick() in the function
+    # - Total number of affected meshes
+    # - Total number of shape keys in affected meshes
+    progress_total += 36
+    if apply_rest_pose:
+        # Only during apply mode
+        affected_meshes = find_meshes_affected_by_armature_modifier(
+            armature)
+        progress_total += len(affected_meshes)
+        for mesh, modifier in affected_meshes:
+            if mesh.data.shape_keys != None:
+                progress_total += len(mesh.data.shape_keys.key_blocks)
+
+    ######################
+    ##  Begin progress  ##
+
+    wm.progress_begin(0, 100)
+
+    # Rename bones
+    normalize_armature_rename_bones(armature, callback_progress_tick)
+
+    # Set T-Pose
+    normalize_armature_pose(armature, which_pose,
+                            apply_rest_pose, callback_progress_tick)
+
+    # Set roll (not worth progress tracking)
+    normalize_armature_roll_bones(armature, which_pose)
+
+    wm.progress_end()
+
+    print("Done!")
+
+
 #############################################
 # Operators
 
 
-class NyaaToolsNormalizeArmature(Operator):
-    """Normalizes armatures to my preferred layout"""
-    bl_idname = "nyaa.normalize_armature"
-    bl_label = "Normalize Armature"
+class NyaaToolsNormalizeArmatureAPose(Operator):
+    """Normalizes armatures to my preferred A-Pose layout"""
+    bl_idname = "nyaa.normalize_armature_a_pose"
+    bl_label = "A-Pose"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         try:
-            obj = bpy.context.active_object
-
-            if obj == None:
-                self.report(
-                    {"ERROR"}, "Please select an armature object first! Got: None")
-                return {"CANCELLED"}
-
-            if obj.type != "ARMATURE":
-                self.report(
-                    {"ERROR"}, "Please select an armature object first! Got: " + obj.type)
-                return {"CANCELLED"}
-
-            # {bpy.types.Armature}  The armature to normalize
-            armature = obj
-
-            wm = bpy.context.window_manager
-
-            # Progress count, total
-            progress = [0]
-            progress_total = 0
-
-            def callback_progress_tick():
-                progress[0] = progress[0] + 1
-                wm.progress_update(progress[0] / progress_total * 100)
-
-            # Progress Total: Rename bones is the length of the bone descriptors
-            progress_total += len(BONE_DESC_MAP)
-
-            # Progress Total: T-Pose is:
-            # - Fixed count of callback_progress_tick() in the function
-            # - Total number of affected meshes
-            # - Total number of shape keys in affected meshes
-            progress_total += 36
-            affected_meshes = find_meshes_affected_by_armature_modifier(
-                armature)
-            progress_total += len(affected_meshes)
-            for mesh, modifier in affected_meshes:
-                if mesh.data.shape_keys != None:
-                    progress_total += len(mesh.data.shape_keys.key_blocks)
-
-            ######################
-            ##  Begin progress  ##
-
-            wm.progress_begin(0, 100)
-
-            # Rename bones
-            normalize_armature_rename_bones(armature, callback_progress_tick)
-
-            # Set T-Pose
-            normalize_armature_t_pose(armature, callback_progress_tick)
-
-            # Set roll (not worth progress tracking)
-            normalize_armature_roll_bones(armature)
-
-            wm.progress_end()
-
-            print("Done!")
-            print("")
-
+            perform_normalize_armature("a-pose")
             return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
 
+
+class NyaaToolsNormalizeArmatureTPose(Operator):
+    """Normalizes armatures to my preferred T-Pose layout"""
+    bl_idname = "nyaa.normalize_armature_t_pose"
+    bl_label = "T-Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            perform_normalize_armature("t-pose")
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsSetArmatureAPose(Operator):
+    """Sets armatures to my preferred A-Pose layout"""
+    bl_idname = "nyaa.set_armature_a_pose"
+    bl_label = "A-Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            perform_fast_pose("a-pose")
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsSetArmatureTPose(Operator):
+    """Sets armatures to my preferred T-Pose layout"""
+    bl_idname = "nyaa.set_armature_t_pose"
+    bl_label = "T-Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            perform_fast_pose("t-pose")
+            return {"FINISHED"}
         except Exception as error:
             print(traceback.format_exc())
             self.report({"ERROR"}, str(error))
@@ -1736,10 +1856,38 @@ class NyaaPanel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
 
+        obj = bpy.context.active_object
+        is_mesh = obj and obj.type == "MESH"
+        is_armature = obj and obj.type == "ARMATURE"
+
+        #############################################
+
+        if is_armature:
+            box = layout.box()
+            box.label(text="Normalize Armature",
+                      icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Apply permanently:")
+            row = box.row(align=True)
+            row.operator("nyaa.normalize_armature_a_pose",
+                         text=NyaaToolsNormalizeArmatureAPose.bl_label)
+            row.operator("nyaa.normalize_armature_t_pose",
+                         text=NyaaToolsNormalizeArmatureTPose.bl_label)
+            box.label(text="Set pose only:")
+            row = box.row(align=True)
+            row.operator("nyaa.set_armature_a_pose",
+                         text=NyaaToolsSetArmatureAPose.bl_label)
+            row.operator("nyaa.set_armature_t_pose",
+                         text=NyaaToolsSetArmatureTPose.bl_label)
+        else:
+            box = layout.box()
+            box.label(text="Normalize Armature",
+                      icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Select an armature to edit.")
+
+        #############################################
+
         box = layout.box()
         box.label(text="Helpers", icon="TOOL_SETTINGS")
-        box.operator("nyaa.normalize_armature",
-                     text=NyaaToolsNormalizeArmature.bl_label, icon="OUTLINER_OB_ARMATURE")
         box.operator("nyaa.init_mods",
                      text=NyaaToolsInitMods.bl_label, icon="MODIFIER")
 
@@ -1747,9 +1895,9 @@ class NyaaPanel(bpy.types.Panel):
         box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
         armatures = listAvatarArmatures()
         for armatureName in armatures:
-            armature = bpy.context.scene.objects.get(armatureName)
-            if (armature):
-                text = getProp(armature, PROP_AVATAR)
+            obj = bpy.context.scene.objects.get(armatureName)
+            if obj:
+                text = getProp(obj, PROP_AVATAR)
                 if (0 < len(text)):
                     text = text
                     box.operator("nyaa.merge_tool",
@@ -1767,7 +1915,10 @@ class NyaaPanel(bpy.types.Panel):
 
 CLASSES = [
     NyaaPanel,
-    NyaaToolsNormalizeArmature,
+    NyaaToolsNormalizeArmatureAPose,
+    NyaaToolsNormalizeArmatureTPose,
+    NyaaToolsSetArmatureAPose,
+    NyaaToolsSetArmatureTPose,
     NyaaToolsInitMods,
     NyaaToolsMergeExport,
     Link_Button,
