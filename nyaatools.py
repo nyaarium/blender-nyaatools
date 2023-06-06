@@ -1676,6 +1676,101 @@ def perform_cleanup(vg, sk, mat):
             removeUnusedMaterials(mesh)
 
 
+def perform_add_modifier(which_modifier):
+    def move_modifier_to_top(modifier):
+        for i in range(len(modifier.id_data.modifiers)):
+            if modifier == modifier.id_data.modifiers[0]:
+                break
+            bpy.ops.object.modifier_move_up(modifier=modifier.name)
+
+    def search_for_avatar_armature(mesh):
+        key = getProp(mesh, PROP_TARGET_AVATARS)
+        if (key != None):
+            keySplit = key.split(",")
+            for path in keySplit:
+                pathParts = path.split("/")
+                targetAvatarName = pathParts[0].strip()
+                return getAvatarArmature(targetAvatarName)
+        return None
+
+    # Only returns an armature if there is only 1 armature in the scene
+    def search_for_only_armature():
+        ret = None
+        for obj in bpy.data.objects:
+            if obj.type == "ARMATURE":
+                if ret != None:
+                    return None
+                ret = obj
+        return ret
+
+    meshes = bpy.context.selected_objects
+
+    if len(meshes) == 0:
+        raise Exception("Please select at least 1 mesh object!")
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    if which_modifier == "Armature":
+        for mesh in meshes:
+            name = "Armature"
+            mod = mesh.modifiers.get(name)
+            if (mod):
+                mesh.modifiers.remove(mod)
+            mod = mesh.modifiers.new(name, "ARMATURE")
+            move_modifier_to_top(mod)
+            mod.show_expanded = False
+            mod.show_on_cage = True
+            mod.show_in_editmode = True
+            mod.show_viewport = True
+            mod.show_render = True
+            mod.use_deform_preserve_volume = True
+            mod.object = search_for_avatar_armature(mesh)
+            if mod.object == None:
+                mod.object = search_for_only_armature()
+
+    elif which_modifier == "DataTransfer":
+        for mesh in meshes:
+            name = "DataTransfer"
+            mod = mesh.modifiers.get(name)
+            if (mod):
+                mesh.modifiers.remove(mod)
+            mod = mesh.modifiers.new(name, "DATA_TRANSFER")
+            move_modifier_to_top(mod)
+            mod.show_expanded = False
+            mod.show_on_cage = True
+            mod.show_in_editmode = True
+            mod.use_vert_data = True
+            mod.data_types_verts = {"VGROUP_WEIGHTS"}
+            mod.vert_mapping = "POLYINTERP_NEAREST"
+
+    elif which_modifier == "Decimate":
+        for mesh in meshes:
+            name = "Final - Decimate"
+            mod = mesh.modifiers.get(name)
+            if (mod):
+                mesh.modifiers.remove(mod)
+            mod = mesh.modifiers.new(name, "DECIMATE")
+            mod.show_expanded = False
+            mod.show_render = False
+            mod.decimate_type = "COLLAPSE"
+            mod.ratio = 0.75
+            mod.delimit = {"NORMAL", "MATERIAL", "SEAM", "SHARP", "UV"}
+            mod.use_dissolve_boundaries = True
+
+            name = "Final - Triangulate"
+            mod = mesh.modifiers.get(name)
+            if (mod):
+                mesh.modifiers.remove(mod)
+            mod = mesh.modifiers.new(name, "TRIANGULATE")
+            mod.show_expanded = False
+            mod.show_in_editmode = False
+            mod.show_render = False
+            mod.min_vertices = 5
+
+    else:
+        raise Exception("Unknown modifier: " + which_modifier)
+
+
 #############################################
 # Operators
 
@@ -1764,99 +1859,25 @@ class NyaaToolsSetArmatureTPose(Operator):
             return {"CANCELLED"}
 
 
-class NyaaToolsInitMods(Operator):
-    """Creates my preferred modifier stacks"""
-    bl_idname = "nyaa.init_mods"
-    bl_label = "Initialize Modifier Stack"
+class NyaaToolsAddModifier(Operator):
+    """Adds a modifier to the selected objects"""
+    bl_idname = "nyaa.add_modifier"
+    bl_label = "Add Modifier"
     bl_options = {"REGISTER", "UNDO"}
+
+    # Armature
+    # DataTransfer
+    # Decimate
+    which: StringProperty(name="Which Modifier", default="")
 
     def execute(self, context):
         try:
-            obj = bpy.context.active_object
-
-            if obj is None:
-                self.report({"ERROR"}, "Expected a mesh object, got: None")
-                return {"CANCELLED"}
-
-            if obj.type != "MESH":
-                self.report(
-                    {"ERROR"}, "Expected a mesh object, got: " + obj.type)
-                return {"CANCELLED"}
-
-            # Delete all armatures
-            for mod in obj.modifiers:
-                if (mod.type == "ARMATURE"):
-                    obj.modifiers.remove(mod)
-
-            name = "Final - DataTransfer"
-            mod = obj.modifiers.get(name)
-            if (mod):
-                obj.modifiers.remove(mod)
-            mod = obj.modifiers.new(name, "DATA_TRANSFER")
-            mod.show_expanded = False
-            mod.show_on_cage = True
-            mod.show_in_editmode = True
-            mod.use_vert_data = True
-            mod.data_types_verts = {"VGROUP_WEIGHTS"}
-            mod.vert_mapping = "POLYINTERP_NEAREST"
-
-            name = "Final - Decimate"
-            mod = obj.modifiers.get(name)
-            if (mod):
-                obj.modifiers.remove(mod)
-            mod = obj.modifiers.new(name, "DECIMATE")
-            mod.show_expanded = False
-            mod.show_render = False
-            mod.decimate_type = "COLLAPSE"
-            mod.ratio = 0.75
-            mod.delimit = {"NORMAL", "MATERIAL", "SEAM", "SHARP", "UV"}
-            mod.use_dissolve_boundaries = True
-
-            name = "Final - Triangulate"
-            mod = obj.modifiers.get(name)
-            if (mod):
-                obj.modifiers.remove(mod)
-            mod = obj.modifiers.new(name, "TRIANGULATE")
-            mod.show_expanded = False
-            mod.show_in_editmode = False
-            mod.show_render = False
-            mod.min_vertices = 5
-
-            # Make an armature for every PROP_TARGET_AVATARS defined
-            key = getProp(obj, PROP_TARGET_AVATARS)
-            if (key != None):
-                keySplit = key.split(",")
-                for path in keySplit:
-                    pathParts = path.split("/")
-                    targetAvatarName = pathParts[0].strip()
-                    meshLayerName = pathParts[1].strip()
-
-                    target = getAvatarArmature(targetAvatarName)
-                    print(target)
-                    if (target != None):
-                        # Search existing modifiers & skip if the armature already assigned
-                        skip = False
-                        for m in obj.modifiers:
-                            if (m.type == "ARMATURE" and m.object == target):
-                                skip = True
-                                break
-
-                        name = "--( " + targetAvatarName + " )"
-                        mod = obj.modifiers.new(name, "ARMATURE")
-                        mod.show_expanded = False
-                        mod.show_on_cage = True
-                        mod.show_in_editmode = True
-                        mod.show_viewport = True
-                        mod.show_render = True
-                        mod.object = target
-                        mod.use_deform_preserve_volume = True
-
+            perform_add_modifier(self.which)
+            return {"FINISHED"}
         except Exception as error:
             print(traceback.format_exc())
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-
-        return {"FINISHED"}
 
 
 class NyaaToolsMergeExport(Operator):
@@ -2074,7 +2095,17 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            row.operator("nyaa.init_mods", text="Init Nyaa Mods")
+            row.operator("nyaa.add_modifier",
+                         text="Armature").which = "Armature"
+
+            row.operator("nyaa.add_modifier",
+                         text="Data Transfer").which = "DataTransfer"
+
+            row = box.row(align=True)
+
+            row = row.split(factor=0.5)
+            row.operator("nyaa.add_modifier",
+                         text="Decimate").which = "Decimate"
 
         else:
             box = layout.box()
@@ -2100,7 +2131,7 @@ CLASSES = [
     NyaaToolsSetArmatureAPose,
     NyaaToolsSetArmatureTPose,
     NyaaToolsMeshCleanup,
-    NyaaToolsInitMods,
+    NyaaToolsAddModifier,
     NyaaToolsMergeExport,
     Link_Button,
 ]
