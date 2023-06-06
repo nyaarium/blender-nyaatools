@@ -549,6 +549,10 @@ def removeUnusedShapeKeys(obj):
     for kb_name in to_delete:
         obj.shape_key_remove(obj.data.shape_keys.key_blocks[kb_name])
 
+    if len(obj.data.shape_keys.key_blocks) == 1:
+        kb = obj.data.shape_keys.key_blocks[0]
+        obj.shape_key_remove(kb)
+
 
 def removeUnusedMaterials(obj):
     # FIXME: obj wasn't defined
