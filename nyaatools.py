@@ -1659,6 +1659,23 @@ def perform_normalize_armature(which_pose, apply_rest_pose=True):
     print("Done!")
 
 
+def perform_cleanup(vg, sk, mat):
+    meshes = bpy.context.selected_objects
+
+    if len(meshes) == 0:
+        raise Exception("Please select at least 1 mesh object!")
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    for mesh in meshes:
+        if vg:
+            removeUnusedVertexGroups(mesh)
+        if sk:
+            removeUnusedShapeKeys(mesh)
+        if mat:
+            removeUnusedMaterials(mesh)
+
+
 #############################################
 # Operators
 
@@ -1704,6 +1721,26 @@ class NyaaToolsSetArmatureAPose(Operator):
     def execute(self, context):
         try:
             perform_fast_pose("a-pose")
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsMeshCleanup(Operator):
+    """Removes unused vertex groups, shape keys, and materials from a mesh object"""
+    bl_idname = "nyaa.mesh_cleanup"
+    bl_label = "Mesh Cleanup"
+    bl_options = {"REGISTER", "UNDO"}
+
+    vg: BoolProperty(name="Vertex Groups", default=False)
+    sk: BoolProperty(name="Shape Keys", default=False)
+    mat: BoolProperty(name="Materials", default=False)
+
+    def execute(self, context):
+        try:
+            perform_cleanup(self.vg, self.sk, self.mat)
             return {"FINISHED"}
         except Exception as error:
             print(traceback.format_exc())
@@ -1950,7 +1987,7 @@ class Link_Button(bpy.types.Operator):
 # Panel
 
 class NyaaPanel(bpy.types.Panel):
-    bl_label = "NyaaTools v" + VERSION
+    bl_label = "NyaaTools v" + ".".join(str(i) for i in bl_info["version"])
     bl_idname = "OBJECT_PT_NYAAPANEL"
     bl_category = "Tool"
     bl_space_type = "VIEW_3D"
@@ -1965,8 +2002,9 @@ class NyaaPanel(bpy.types.Panel):
         layout = self.layout
 
         obj = bpy.context.active_object
-        is_mesh = obj and obj.type == "MESH"
-        is_armature = obj and obj.type == "ARMATURE"
+        has_selection = 0 < len(bpy.context.selected_objects)
+        is_mesh = has_selection and obj and obj.type == "MESH"
+        is_armature = has_selection and obj and obj.type == "ARMATURE"
 
         #############################################
 
@@ -1974,51 +2012,85 @@ class NyaaPanel(bpy.types.Panel):
             box = layout.box()
             box.label(text="Normalize Armature",
                       icon="OUTLINER_OB_ARMATURE")
+
             box.label(text="Apply permanently:")
+
             row = box.row(align=True)
+
             row.operator("nyaa.normalize_armature_a_pose",
                          text=NyaaToolsNormalizeArmatureAPose.bl_label)
             row.operator("nyaa.normalize_armature_t_pose",
                          text=NyaaToolsNormalizeArmatureTPose.bl_label)
+
             box.label(text="Set pose only:")
+
             row = box.row(align=True)
+
             row.operator("nyaa.set_armature_a_pose",
                          text=NyaaToolsSetArmatureAPose.bl_label)
             row.operator("nyaa.set_armature_t_pose",
                          text=NyaaToolsSetArmatureTPose.bl_label)
+
+            armatures = listAvatarArmatures()
+            if (0 < len(armatures)):
+                box = layout.box()
+                box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
+                for armatureName in armatures:
+                    obj = bpy.context.scene.objects.get(armatureName)
+                    if obj:
+                        text = getProp(obj, PROP_AVATAR)
+                        if (0 < len(text)):
+                            text = text
+                            box.operator("nyaa.merge_tool",
+                                         text=text).armatureName = armatureName
+
         else:
             box = layout.box()
-            box.label(text="Normalize Armature",
+            box.label(text="Armature",
                       icon="OUTLINER_OB_ARMATURE")
             box.label(text="Select an armature to edit.")
 
         #############################################
 
-        box = layout.box()
-        box.label(text="Helpers", icon="TOOL_SETTINGS")
-        box.operator("nyaa.init_mods",
-                     text=NyaaToolsInitMods.bl_label, icon="MODIFIER")
+        if is_mesh:
+            box = layout.box()
+            box.label(text="Mesh Cleanup", icon="OUTLINER_OB_MESH")
 
-        box = layout.box()
-        box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
-        armatures = listAvatarArmatures()
-        for armatureName in armatures:
-            obj = bpy.context.scene.objects.get(armatureName)
-            if obj:
-                text = getProp(obj, PROP_AVATAR)
-                if (0 < len(text)):
-                    text = text
-                    box.operator("nyaa.merge_tool",
-                                 text=text).armatureName = armatureName
+            row = box.row(align=True)
 
-        layout.separator()
+            op = row.operator("nyaa.mesh_cleanup", text="All")
+            op.vg = True
+            op.sk = True
+            op.mat = True
+            row.operator("nyaa.mesh_cleanup", text="Vertex Groups").vg = True
 
-        box = layout.box()
-        box.label(text="Atelier Nyaarium", icon="INFO")
-        box.operator("ops.open_link", text="Discord",
-                     icon="WORLD").url = "discord.nyaarium.com"
-        box.operator("ops.open_link", text="Other Links",
-                     icon="WORLD").url = "nyaarium.com"
+            row = box.row(align=True)
+
+            row.operator("nyaa.mesh_cleanup", text="Shape Keys").sk = True
+            row.operator("nyaa.mesh_cleanup", text="Materials").mat = True
+
+            box = layout.box()
+            box.label(text="Modifiers", icon="TOOL_SETTINGS")
+
+            row = box.row(align=True)
+
+            row.operator("nyaa.init_mods", text="Init Nyaa Mods")
+
+        else:
+            box = layout.box()
+            box.label(text="Mesh", icon="OUTLINER_OB_MESH")
+            box.label(text="Select a mesh to edit.")
+
+        #############################################
+
+        if not has_selection:
+            box = layout.box()
+            box.label(text="Atelier Nyaarium", icon="INFO")
+
+            row = box.row(align=True)
+
+            row.operator("ops.open_link", text="GitHub",
+                         icon="WORLD").url = "github.com/nyaarium/blender-nyaatools"
 
 
 CLASSES = [
@@ -2027,6 +2099,7 @@ CLASSES = [
     NyaaToolsNormalizeArmatureTPose,
     NyaaToolsSetArmatureAPose,
     NyaaToolsSetArmatureTPose,
+    NyaaToolsMeshCleanup,
     NyaaToolsInitMods,
     NyaaToolsMergeExport,
     Link_Button,
