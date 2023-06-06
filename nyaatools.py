@@ -25,13 +25,9 @@ bl_info = {
 }
 
 
-# ctx = bpy.context.copy()
-
-
 #############################################
 # Prop Key Constants
 
-VERSION = "1.0.0"
 EXPORT_COLLECTION = "Export"
 PROP_AVATAR = "avatar"
 PROP_TARGET_AVATARS = "targetAvatars"
