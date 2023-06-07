@@ -33,7 +33,7 @@ bl_info = {
     "name":         "NyaaTools",
     "author":       "Nyaarium",
     "blender":      (3, 5, 1),
-    "version":      (1, 1, 0),
+    "version":      (1, 1, 1),
     "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
     "location":     "Tool > NyaaTools",
     "category":     "Object",
@@ -44,9 +44,9 @@ bl_info = {
 # Prop Key Constants
 
 EXPORT_COLLECTION = "Export"
-PROP_AVATAR = "avatar"
-PROP_TARGET_AVATARS = "targetAvatars"
-PROP_EXPORT_PATH = "exportPath"
+PROP_AVATAR_NAME = "avatar_name"
+PROP_AVATAR_EXPORT_PATH = "avatar_export_path"
+PROP_AVATAR_LAYERS = "avatar_layers"
 A_POSE_SHOULDER_ANGLE = 15
 SHAPE_KEY_TOLERANCE = 0.001
 
@@ -455,18 +455,19 @@ BONE_DESC_MAP = {
 }
 
 
-def cleanupMesh(obj):
+def cleanup_mesh(obj):
     if (obj == None):
         raise BaseException(
             "cleanupMesh() :: Expected a mesh object, got: None")
     if (obj.type != "MESH"):
         raise BaseException("cleanupMesh() :: Expected a mesh object")
-    removeUnusedVertexGroups(obj)
-    removeUnusedShapeKeys(obj)
-    removeUnusedCollections()
+
+    remove_unused_vertex_groups(obj)
+    remove_unused_shape_keys(obj)
+    remove_unused_materials(obj)
 
 
-def removeUnusedVertexGroups(obj):
+def remove_unused_vertex_groups(obj):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -509,7 +510,7 @@ def removeUnusedVertexGroups(obj):
             obj.vertex_groups.remove(obj.vertex_groups[i])
 
 
-def removeUnusedShapeKeys(obj):
+def remove_unused_shape_keys(obj):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -576,7 +577,7 @@ def removeUnusedShapeKeys(obj):
         obj.shape_key_remove(kb)
 
 
-def removeUnusedMaterials(obj):
+def remove_unused_materials(obj):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -603,12 +604,6 @@ def removeUnusedMaterials(obj):
             selectAdd(obj)
             obj.active_material_index = i
             bpy.ops.object.material_slot_remove()
-
-
-def removeUnusedCollections():
-    for col in bpy.data.collections:
-        if (len(col.all_objects) == 0):
-            bpy.data.collections.remove(col)
 
 
 def cloneToExport(obj):
@@ -645,7 +640,7 @@ def applyModifiers(obj):
     deselectAll()
 
 
-def mergeOntoTarget(targetName, sourceName, armature=None):
+def merge_onto_avatar_layer(targetName, sourceName, armature=None):
     source = bpy.context.scene.objects.get(sourceName)
 
     # Create target if it doesn't exist
@@ -684,12 +679,56 @@ def mergeOntoTarget(targetName, sourceName, armature=None):
             source.parent = None
 
 
-def getAvatarArmature(targetAvatar):
+def get_avatar_layers(mesh):
+    ret = []
+    layers = get_prop(mesh, PROP_AVATAR_LAYERS)
+    if (layers != None):
+        split = layers.split(",")
+        for path in split:
+            path_parts = path.split("/")
+            path_avatar_name = path_parts[0]
+            path_layer_name = path_parts[1]
+            ret.push([path_avatar_name, path_layer_name])
+    return ret
+
+
+def add_avatar_layer(mesh, avatar_name, layer_name):
+    if (avatar_name.find("/") != -1 or avatar_name.find(",") != -1):
+        raise BaseException("Avatar name cannot contain '/' or ','")
+    if (layer_name.find("/") != -1 or layer_name.find(",") != -1):
+        raise BaseException("Layer name cannot contain '/' or ','")
+
+    layers = get_avatar_layers(mesh)
+    layers.push([avatar_name, layer_name])
+
+    # Map and join pairs with /
+    layers = ["/".join(pair) for pair in layers]
+
+    # Join strings with ,
+    layers = ",".join(layers)
+
+    set_prop(mesh, PROP_AVATAR_LAYERS, layers)
+
+
+def remove_avatar_layer(mesh, avatar_name):
+    layers = get_avatar_layers(mesh)
+    layers = [layer for layer in layers if layer[0] != avatar_name]
+
+    # Map and join pairs with /
+    layers = ["/".join(pair) for pair in layers]
+
+    # Join strings with ,
+    layers = ",".join(layers)
+
+    set_prop(mesh, PROP_AVATAR_LAYERS, layers)
+
+
+def get_avatar_armature(avatar_name):
     for obj in bpy.data.objects:
         if (obj.type == "ARMATURE"):
-            key = getProp(obj, PROP_AVATAR)
+            key = get_prop(obj, PROP_AVATAR_NAME)
             if (key != None):
-                if (key == targetAvatar):
+                if (key == avatar_name):
                     return obj
     return None
 
@@ -698,7 +737,7 @@ def getAvatarMeshes(avatar):
     meshes = []
     for obj in bpy.data.objects:
         if (obj.type == "MESH"):
-            key = getProp(obj, PROP_TARGET_AVATARS)
+            key = get_prop(obj, PROP_AVATAR_LAYERS)
             if (key != None):
                 keySplit = key.split(",")
                 for path in keySplit:
@@ -712,7 +751,7 @@ def listAvatarArmatures():
     armatures = []
     for obj in bpy.data.objects:
         if (obj.type == "ARMATURE"):
-            key = getProp(obj, PROP_AVATAR)
+            key = get_prop(obj, PROP_AVATAR_NAME)
             if (key != None and key not in armatures):
                 armatures.append(obj.name)
     return armatures
@@ -721,11 +760,20 @@ def listAvatarArmatures():
 #############################################
 
 
-def getProp(obj, key):
-    for k in obj.keys():
-        if (k == key):
-            return obj[key].strip()
+def get_prop(obj, key):
+    if obj == None:
+        return None
+
+    if (key in obj.keys()):
+        return obj[key]
     return None
+
+
+def set_prop(obj, key, value):
+    if obj == None:
+        return None
+
+    obj[key] = value
 
 
 def showMessageBox(message="", title="Message Box", icon="INFO"):
@@ -735,7 +783,7 @@ def showMessageBox(message="", title="Message Box", icon="INFO"):
     bpy.context.window_manager.popup_menu(draw, title=title, icon=icon)
 
 
-def selectCollection(name):
+def select_collection(name):
     collections = bpy.context.view_layer.layer_collection.children
     for collection in collections:
         if collection.name == name:
@@ -1680,11 +1728,11 @@ def perform_cleanup(vg, sk, mat):
 
     for mesh in meshes:
         if vg:
-            removeUnusedVertexGroups(mesh)
+            remove_unused_vertex_groups(mesh)
         if sk:
-            removeUnusedShapeKeys(mesh)
+            remove_unused_shape_keys(mesh)
         if mat:
-            removeUnusedMaterials(mesh)
+            remove_unused_materials(mesh)
 
 
 def perform_add_modifier(which_modifier):
@@ -1695,13 +1743,13 @@ def perform_add_modifier(which_modifier):
             bpy.ops.object.modifier_move_up(modifier=modifier.name)
 
     def search_for_avatar_armature(mesh):
-        key = getProp(mesh, PROP_TARGET_AVATARS)
+        key = get_prop(mesh, PROP_AVATAR_LAYERS)
         if (key != None):
             keySplit = key.split(",")
             for path in keySplit:
                 pathParts = path.split("/")
                 targetAvatarName = pathParts[0].strip()
-                return getAvatarArmature(targetAvatarName)
+                return get_avatar_armature(targetAvatarName)
         return None
 
     # Only returns an armature if there is only 1 armature in the scene
@@ -1811,6 +1859,111 @@ def perform_apply_top_modifier():
                 True
                 # callback_progress_tick
             )
+
+
+def perform_configure_avatar_armature(avatar, export_path):
+    armature = bpy.context.active_object
+
+    if armature == None:
+        raise Exception("Please select an armature object first! Got: None")
+
+    if armature.type != "ARMATURE":
+        raise Exception(
+            "Please select an armature object first! Got: " + armature.type)
+
+    set_prop(armature, PROP_AVATAR_NAME, avatar)
+    set_prop(armature, PROP_AVATAR_EXPORT_PATH, export_path)
+
+
+def perform_configure_avatar_mesh(target_avatars, mute):
+    return
+
+
+def perform_merge_export(avatar_name):
+    armature = get_avatar_armature(avatar_name)
+
+    # Create "Export" collection
+    export_collection = bpy.data.collections.new("Export")
+
+    bpy.context.scene.collection.children.link(export_collection)
+    export_collection.color_tag = "COLOR_01"
+
+    # Rename all objects to avoid collisions
+    for obj in bpy.data.objects:
+        obj.name = "____" + obj.name
+
+    # Rename & move Armature to exports
+    armature.name = "Armature"
+    armature.data.name = "Armature"
+    armature.parent = None
+
+    try:
+        selectAdd(armature)
+        bpy.ops.object.transform_apply(
+            location=True, rotation=True, scale=True)
+        bpy.data.collections[EXPORT_COLLECTION].objects.link(armature)
+    except:
+        None
+
+    # Perform layer merges on meshes
+    for meshName in getAvatarMeshes(avatar_name):
+        mesh = bpy.context.scene.objects.get(meshName)
+        if mesh != None:
+            # Get pairs [path_avatar_name, path_layer_name]
+            # If avatar_name == path_avatar_name, merge
+            layers = get_avatar_layers(mesh)
+            for path_avatar_name, path_layer_name in layers:
+                if avatar_name == path_avatar_name:
+                    merge_onto_avatar_layer(
+                        path_layer_name, meshName, armature)
+
+        else:
+            print("    BUG: Mesh doesn't exist, skipping for now:  " + meshName)
+
+    # Cleanup temp objects
+    for obj in bpy.data.objects:
+        if (obj.name.startswith("____")):
+            bpy.data.objects.remove(obj)
+
+    # Optimize meshes
+    for obj in bpy.data.objects:
+        if (obj.type == "MESH"):
+            cleanup_mesh(obj)
+
+    for col in bpy.context.scene.collection.children:
+        if (col.name != "Export"):
+            bpy.data.collections.remove(col)
+
+    # Export
+    select_collection(EXPORT_COLLECTION)
+
+    if get_prop(armature, PROP_AVATAR_EXPORT_PATH):
+        path = get_prop(armature, PROP_AVATAR_EXPORT_PATH)
+        if (path):
+            if (path[-1] == "/" or path[-1] == "\\"):
+                path = bpy.path.abspath(
+                    "//" + path + path_avatar_name + ".fbx")
+            else:
+                path = bpy.path.abspath("//" + path)
+
+        bpy.ops.export_scene.fbx(
+            filepath=path,
+            check_existing=False,
+            filter_glob="*.fbx",
+            use_active_collection=True,
+
+            apply_scale_options="FBX_SCALE_UNITS",
+            axis_forward="-Y",
+            axis_up="Z",
+            use_mesh_modifiers=False,
+            mesh_smooth_type="FACE",
+            # primary_bone_axis="X",
+            # secondary_bone_axis="-Y",
+            add_leaf_bones=False,
+
+            bake_anim=False
+            # bake_anim_use_all_actions=False,
+        )
 
 
 #############################################
@@ -1938,106 +2091,62 @@ class NyaaToolsApplyTopModifier(Operator):
             return {"CANCELLED"}
 
 
-class NyaaToolsMergeExport(Operator):
-    """Merge tools for avatars"""
-    bl_idname = "nyaa.merge_tool"
-    bl_label = "Nyaa Merge Tool"
+class NyaaToolsConfigureAvatarArmature(Operator):
+    """Configure this armature as an Avatar"""
+    bl_idname = "nyaa.configure_avatar_armature"
+    bl_label = "Configure Avatar"
     bl_options = {"REGISTER", "UNDO"}
 
-    armatureName: StringProperty(
-        name="Armature",
+    avatar_name: StringProperty(name="Avatar Name", default="")
+    export_path: StringProperty(name="Export Path", default="Export.fbx")
+
+    def execute(self, context):
+        try:
+            perform_configure_avatar_armature(
+                avatar=self.avatar_name,
+                export_path=self.export_path,
+            )
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsConfigureAvatarMesh(Operator):
+    """Configure the mesh of an avatar"""
+    bl_idname = "nyaa.configure_avatar_mesh"
+    bl_label = "Configure Mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    avatar_layers: StringProperty(name="Avatar Layers", default="")
+
+    def execute(self, context):
+        try:
+            perform_configure_avatar_mesh(
+                avatar_layers=self.avatar_layers,
+            )
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsAvatarMergeTool(Operator):
+    """Merge and export the avatar. If you have an export path defined, it will export there"""
+    bl_idname = "nyaa.avatar_merge_tool"
+    bl_label = "Merge & Export"
+    bl_options = {"REGISTER", "UNDO"}
+
+    avatar_name: StringProperty(
+        name="Avatar Name",
         default=""
     )
 
     def execute(self, context):
         try:
-            # Create "Export" collection
-            collectionExport = bpy.data.collections.new("Export")
-
-            bpy.context.scene.collection.children.link(collectionExport)
-            collectionExport.color_tag = "COLOR_01"
-
-            armature = bpy.context.scene.objects.get(self.armatureName)
-            avatarName = getProp(armature, PROP_AVATAR)
-
-            # Rename all objects to avoid collisions
-            for obj in bpy.data.objects:
-                obj.name = "____" + obj.name
-
-            # Rename & move Armature to exports
-            armature.name = "Armature"
-            armature.data.name = "Armature"
-            armature.parent = None
-
-            try:
-                selectAdd(armature)
-                bpy.ops.object.transform_apply(
-                    location=True, rotation=True, scale=True)
-                bpy.data.collections[EXPORT_COLLECTION].objects.link(armature)
-            except:
-                None
-
-            # Perform layer merges on meshes
-            for meshName in getAvatarMeshes(avatarName):
-                mesh = bpy.context.scene.objects.get(meshName)
-                if (mesh != None):
-                    key = getProp(mesh, PROP_TARGET_AVATARS)
-                    if (key != None):
-                        keySplit = key.split(",")
-                        for path in keySplit:
-                            pathParts = path.split("/")
-                            targetAvatarName = pathParts[0].strip()
-                            meshLayerName = pathParts[1].strip()
-                            if (avatarName == targetAvatarName):
-                                mergeOntoTarget(
-                                    meshLayerName, meshName, armature)
-                else:
-                    print("    BUG: Mesh doesn't exist, skipping for now:  " + meshName)
-
-            # Cleanup
-            for obj in bpy.data.objects:
-                if (obj.name.startswith("____")):
-                    bpy.data.objects.remove(obj)
-
-            for obj in bpy.data.objects:
-                if (obj.type == "MESH"):
-                    cleanupMesh(obj)
-
-            for col in bpy.context.scene.collection.children:
-                if (col.name != "Export"):
-                    bpy.data.collections.remove(col)
-
-            # Export
-            selectCollection(EXPORT_COLLECTION)
-
-            if getProp(armature, PROP_EXPORT_PATH):
-                path = getProp(armature, PROP_EXPORT_PATH)
-                if (path):
-                    if (path[-1] == "/" or path[-1] == "\\"):
-                        path = bpy.path.abspath(
-                            "//" + path + targetAvatarName + ".fbx")
-                    else:
-                        path = bpy.path.abspath("//" + path)
-
-                bpy.ops.export_scene.fbx(
-                    filepath=path,
-                    check_existing=False,
-                    filter_glob="*.fbx",
-                    use_active_collection=True,
-
-                    apply_scale_options="FBX_SCALE_UNITS",
-                    axis_forward="-Y",
-                    axis_up="Z",
-                    use_mesh_modifiers=False,
-                    mesh_smooth_type="FACE",
-                    # primary_bone_axis="X",
-                    # secondary_bone_axis="-Y",
-                    add_leaf_bones=False,
-
-                    bake_anim=False
-                    # bake_anim_use_all_actions=False,
-                )
-
+            perform_merge_export(self.avatar_name)
         except Exception as error:
             print(traceback.format_exc())
             self.report({"ERROR"}, str(error))
@@ -2081,19 +2190,117 @@ class NyaaPanel(bpy.types.Panel):
         layout = self.layout
 
         obj = bpy.context.active_object
-        is_armature = obj and obj.type == "ARMATURE"
-
         objs = bpy.context.selected_objects
-        is_mesh = any(obj.type == "MESH" for obj in objs)
-
         has_selection = 0 < len(objs)
 
+        # Deselecting all should count as no selection / no active
+        if not has_selection:
+            obj = None
+            objs = []
+
+        selected_armatures = []
+        selected_meshes = []
+        for obj in objs:
+            if obj.type == "ARMATURE":
+                selected_armatures.append(obj)
+            elif obj.type == "MESH":
+                selected_meshes.append(obj)
+
+        is_armature = len(selected_armatures) == 1
+        is_mesh = 0 < len(selected_meshes)
+
+        armature = selected_armatures[0] if is_armature else None
+
+        avatar_name = None
+        export_path = None
+        avatar_mesh_count = 0
+        if is_armature:
+            avatar_name = get_prop(armature, PROP_AVATAR_NAME)
+            if avatar_name != None and avatar_name.strip() == "":
+                avatar_name = None
+
+            export_path = get_prop(armature, PROP_AVATAR_EXPORT_PATH)
+            if export_path != None and export_path.strip() == "":
+                export_path = None
+
+            if avatar_name != None:
+                # Count all meshes that have a get_prop(mesh, PROP_AVATAR_LAYER) == avatar
+                for mesh in bpy.data.objects:
+                    if mesh.type != "MESH":
+                        continue
+
+                    # Get pairs [path_avatar_name, path_layer_name]
+                    # If avatar_name == path_avatar_name, merge
+                    layers = get_avatar_layers(mesh)
+                    for path_avatar_name, path_layer_name in layers:
+                        if avatar_name == path_avatar_name:
+                            if 0 < len(path_layer_name):
+                                avatar_mesh_count += 1
+
+        avatar_layers = None
+        avatar_layers_multi_warning = False
+        if is_mesh:
+            for mesh in selected_meshes:
+                if avatar_layers == None:
+                    avatar_layers = get_prop(mesh, PROP_AVATAR_LAYERS)
+                elif avatar_layers != get_prop(mesh, PROP_AVATAR_LAYERS):
+                    avatar_layers_multi_warning = True
+                    break
+
         #############################################
+        # Avatar Armature
+
+        if is_armature:
+            count = ""
+            if avatar_name != None:
+                count = " (" + str(avatar_mesh_count) + " meshes)"
+
+            box = layout.box()
+            box.label(text="Avatar" + count, icon="OUTLINER_OB_ARMATURE")
+            row = box.row(align=True)
+
+            if avatar_name != None:
+                op = row.operator(
+                    "nyaa.configure_avatar_armature", text="Configure Avatar")
+                op.avatar_name = avatar_name
+                op.export_path = export_path
+
+                # Right under configure:
+                # [Show avatar]
+                #   -> *hides non avatar meshes*
+
+                box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
+                row = box.row(align=True)
+
+                row.operator("nyaa.avatar_merge_tool",
+                             text="Export: " + avatar_name).avatar_name = avatar_name
+
+            else:
+                op = row.operator(
+                    "nyaa.configure_avatar_armature", text="Make New Avatar")
+
+        #############################################
+        # Avatar Mesh
+
+        if is_mesh:
+            box = layout.box()
+            box.label(text="Avatar Layer", icon="OUTLINER_OB_ARMATURE")
+            row = box.row(align=True)
+
+            # Loop and list all known avatars here:
+            # Ex If single object selected:
+            # "Avatar Name"
+            # [➕ add 1 mesh]  OR  [🗑️ remove 1 mesh]
+            #   ->  "Layer Name: ________"    (blanks treated as remove)
+            #    A  -> add_avatar_layer(mesh, avatar_name, layer_name)
+            #    R  -> remove_avatar_layer(mesh, avatar_name)
+
+        #############################################
+        # Mesh
 
         if is_mesh:
             box = layout.box()
             box.label(text="Mesh Cleanup", icon="OUTLINER_OB_MESH")
-
             row = box.row(align=True)
 
             op = row.operator("nyaa.mesh_cleanup", text="All")
@@ -2125,19 +2332,19 @@ class NyaaPanel(bpy.types.Panel):
                       icon="SHAPEKEY_DATA")
             row = box.row(align=True)
 
-            row.operator("nyaa.apply_top_modifier",
-                         text="Apply Top Modifier", icon="ERROR")
+            row.operator("nyaa.apply_top_modifier", text="Apply Top Modifier")
 
-        else:
+        elif not has_selection:
             box = layout.box()
             box.label(text="Mesh", icon="OUTLINER_OB_MESH")
             box.label(text="Select a mesh to edit.")
 
         #############################################
+        # Armature
 
         if is_armature:
             box = layout.box()
-            box.label(text="Nyaa Normalization", icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
             row.operator("nyaa.normalize_armature_a_pose",
@@ -2147,29 +2354,13 @@ class NyaaPanel(bpy.types.Panel):
                          text="T-Pose",
                          icon="ERROR")
 
-            box.label(text="Quick Pose",
-                      icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            row.operator("nyaa.set_armature_a_pose",
-                         text="Set A-Pose")
-            row.operator("nyaa.set_armature_t_pose",
-                         text="Set T-Pose")
+            row.operator("nyaa.set_armature_a_pose", text="Set A-Pose")
+            row.operator("nyaa.set_armature_t_pose", text="Set T-Pose")
 
-            armatures = listAvatarArmatures()
-            if (0 < len(armatures)):
-                box = layout.box()
-                box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
-                for armatureName in armatures:
-                    obj = bpy.context.scene.objects.get(armatureName)
-                    if obj:
-                        text = getProp(obj, PROP_AVATAR)
-                        if (0 < len(text)):
-                            text = text
-                            box.operator("nyaa.merge_tool",
-                                         text=text).armatureName = armatureName
-
-        else:
+        elif not has_selection:
             box = layout.box()
             box.label(text="Armature",
                       icon="OUTLINER_OB_ARMATURE")
@@ -2199,7 +2390,9 @@ CLASSES = [
     NyaaToolsMeshCleanup,
     NyaaToolsAddModifier,
     NyaaToolsApplyTopModifier,
-    NyaaToolsMergeExport,
+    NyaaToolsConfigureAvatarArmature,
+    NyaaToolsConfigureAvatarMesh,
+    NyaaToolsAvatarMergeTool,
     Link_Button,
 ]
 
