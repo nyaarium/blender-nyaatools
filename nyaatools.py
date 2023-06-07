@@ -32,7 +32,7 @@ import bpy
 bl_info = {
     "name":         "NyaaTools",
     "author":       "Nyaarium",
-    "blender":      (3, 5, 1),
+    "blender":      (3, 0, 0),
     "version":      (1, 1, 1),
     "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
     "location":     "Tool > NyaaTools",
