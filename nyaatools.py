@@ -33,7 +33,7 @@ bl_info = {
     "name":         "NyaaTools",
     "author":       "Nyaarium",
     "blender":      (3, 5, 1),
-    "version":      (1, 0, 0),
+    "version":      (1, 1, 0),
     "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
     "location":     "Tool > NyaaTools",
     "category":     "Object",
@@ -1723,6 +1723,8 @@ def perform_add_modifier(which_modifier):
 
     if which_modifier == "Armature":
         for mesh in meshes:
+            if mesh.type != "MESH":
+                continue
             name = "Armature"
             mod = mesh.modifiers.get(name)
             if (mod):
@@ -1741,6 +1743,8 @@ def perform_add_modifier(which_modifier):
 
     elif which_modifier == "DataTransfer":
         for mesh in meshes:
+            if mesh.type != "MESH":
+                continue
             name = "DataTransfer"
             mod = mesh.modifiers.get(name)
             if (mod):
@@ -1756,6 +1760,8 @@ def perform_add_modifier(which_modifier):
 
     elif which_modifier == "Decimate":
         for mesh in meshes:
+            if mesh.type != "MESH":
+                continue
             name = "Final - Decimate"
             mod = mesh.modifiers.get(name)
             if (mod):
@@ -1780,6 +1786,31 @@ def perform_add_modifier(which_modifier):
 
     else:
         raise Exception("Unknown modifier: " + which_modifier)
+
+
+def perform_apply_top_modifier():
+    meshes = bpy.context.selected_objects
+
+    if len(meshes) == 0:
+        raise Exception("Please select at least 1 mesh object!")
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    for mesh in meshes:
+        if mesh.type != "MESH":
+            continue
+
+        if 0 < len(mesh.modifiers):
+            mesh.select_set(True)
+
+            modifier = mesh.modifiers[0]
+
+            applyModifierForObjectWithShapeKeys(
+                bpy.context,
+                [modifier.name],
+                True
+                # callback_progress_tick
+            )
 
 
 #############################################
@@ -1884,6 +1915,22 @@ class NyaaToolsAddModifier(Operator):
     def execute(self, context):
         try:
             perform_add_modifier(self.which)
+            return {"FINISHED"}
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+
+class NyaaToolsApplyTopModifier(Operator):
+    """Apply the topmost modifier for object with shape keys (by github.com/przemir)"""
+    bl_idname = "nyaa.apply_top_modifier"
+    bl_label = "Add Modifier"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            perform_apply_top_modifier()
             return {"FINISHED"}
         except Exception as error:
             print(traceback.format_exc())
@@ -2034,34 +2081,80 @@ class NyaaPanel(bpy.types.Panel):
         layout = self.layout
 
         obj = bpy.context.active_object
-        has_selection = 0 < len(bpy.context.selected_objects)
-        is_mesh = has_selection and obj and obj.type == "MESH"
-        is_armature = has_selection and obj and obj.type == "ARMATURE"
+        is_armature = obj and obj.type == "ARMATURE"
+
+        objs = bpy.context.selected_objects
+        is_mesh = any(obj.type == "MESH" for obj in objs)
+
+        has_selection = 0 < len(objs)
+
+        #############################################
+
+        if is_mesh:
+            box = layout.box()
+            box.label(text="Mesh Cleanup", icon="OUTLINER_OB_MESH")
+
+            row = box.row(align=True)
+
+            op = row.operator("nyaa.mesh_cleanup", text="All")
+            op.vg = True
+            op.sk = True
+            op.mat = True
+            row.operator("nyaa.mesh_cleanup", text="Vertex Groups").vg = True
+            row = box.row(align=True)
+
+            row.operator("nyaa.mesh_cleanup", text="Shape Keys").sk = True
+            row.operator("nyaa.mesh_cleanup", text="Materials").mat = True
+
+            box.label(text="Add Modifiers", icon="TOOL_SETTINGS")
+            row = box.row(align=True)
+
+            row.operator("nyaa.add_modifier",
+                         text="Armature").which = "Armature"
+
+            row.operator("nyaa.add_modifier",
+                         text="Data Transfer").which = "DataTransfer"
+
+            row = box.row(align=True)
+
+            row = row.split(factor=0.5)
+            row.operator("nyaa.add_modifier",
+                         text="Decimate").which = "Decimate"
+
+            box.label(text="Modifier with Shape Keys",
+                      icon="SHAPEKEY_DATA")
+            row = box.row(align=True)
+
+            row.operator("nyaa.apply_top_modifier",
+                         text="Apply Top Modifier", icon="ERROR")
+
+        else:
+            box = layout.box()
+            box.label(text="Mesh", icon="OUTLINER_OB_MESH")
+            box.label(text="Select a mesh to edit.")
 
         #############################################
 
         if is_armature:
             box = layout.box()
-            box.label(text="Normalize Armature",
-                      icon="OUTLINER_OB_ARMATURE")
-
-            box.label(text="Apply permanently:")
-
+            box.label(text="Nyaa Normalization", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
             row.operator("nyaa.normalize_armature_a_pose",
-                         text=NyaaToolsNormalizeArmatureAPose.bl_label)
+                         text="A-Pose",
+                         icon="ERROR")
             row.operator("nyaa.normalize_armature_t_pose",
-                         text=NyaaToolsNormalizeArmatureTPose.bl_label)
+                         text="T-Pose",
+                         icon="ERROR")
 
-            box.label(text="Set pose only:")
-
+            box.label(text="Quick Pose",
+                      icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
             row.operator("nyaa.set_armature_a_pose",
-                         text=NyaaToolsSetArmatureAPose.bl_label)
+                         text="Set A-Pose")
             row.operator("nyaa.set_armature_t_pose",
-                         text=NyaaToolsSetArmatureTPose.bl_label)
+                         text="Set T-Pose")
 
             armatures = listAvatarArmatures()
             if (0 < len(armatures)):
@@ -2081,47 +2174,6 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Armature",
                       icon="OUTLINER_OB_ARMATURE")
             box.label(text="Select an armature to edit.")
-
-        #############################################
-
-        if is_mesh:
-            box = layout.box()
-            box.label(text="Mesh Cleanup", icon="OUTLINER_OB_MESH")
-
-            row = box.row(align=True)
-
-            op = row.operator("nyaa.mesh_cleanup", text="All")
-            op.vg = True
-            op.sk = True
-            op.mat = True
-            row.operator("nyaa.mesh_cleanup", text="Vertex Groups").vg = True
-
-            row = box.row(align=True)
-
-            row.operator("nyaa.mesh_cleanup", text="Shape Keys").sk = True
-            row.operator("nyaa.mesh_cleanup", text="Materials").mat = True
-
-            box = layout.box()
-            box.label(text="Modifiers", icon="TOOL_SETTINGS")
-
-            row = box.row(align=True)
-
-            row.operator("nyaa.add_modifier",
-                         text="Armature").which = "Armature"
-
-            row.operator("nyaa.add_modifier",
-                         text="Data Transfer").which = "DataTransfer"
-
-            row = box.row(align=True)
-
-            row = row.split(factor=0.5)
-            row.operator("nyaa.add_modifier",
-                         text="Decimate").which = "Decimate"
-
-        else:
-            box = layout.box()
-            box.label(text="Mesh", icon="OUTLINER_OB_MESH")
-            box.label(text="Select a mesh to edit.")
 
         #############################################
 
@@ -2146,6 +2198,7 @@ CLASSES = [
     NyaaToolsSetArmatureTPose,
     NyaaToolsMeshCleanup,
     NyaaToolsAddModifier,
+    NyaaToolsApplyTopModifier,
     NyaaToolsMergeExport,
     Link_Button,
 ]
