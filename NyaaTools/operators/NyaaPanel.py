@@ -3,7 +3,7 @@ from bpy.props import StringProperty
 
 from ..avatar.get_avatar_layers import get_avatar_layers
 from ..common.get_prop import get_prop
-from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_LAYERS, PROP_AVATAR_NAME, VERSION
+from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_LAYERS, PROP_AVATAR_NAME, ISSUES_URL, UPDATE_URL, VERSION
 
 
 class NyaaPanel(bpy.types.Panel):
@@ -206,8 +206,8 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            row.operator("ops.open_link", text="Update",
-                         icon="WORLD").url = "https://raw.githubusercontent.com/nyaarium/blender-nyaatools/main/nyaatools.py"
+            row.operator("ops.open_link", text="Updates",
+                         icon="WORLD").url = UPDATE_URL
 
-            row.operator("ops.open_link", text="GitHub",
-                         icon="WORLD").url = "github.com/nyaarium/blender-nyaatools"
+            row.operator("ops.open_link", text="Issues?",
+                         icon="WORLD").url = ISSUES_URL
