@@ -46,9 +46,10 @@ jobs:
 
       - name: Create a release zip
         run: |
-          zip -r release/release.zip NyaaTools/
-          zip -ur release/release.zip LICENSE README
-          sha256sum release/release.zip
+          FILENAME="NyaaTools v${{ steps.set_version.outputs.version }}.zip"
+          zip -r "release/$FILENAME" NyaaTools/
+          zip -ur "release/$FILENAME" LICENSE README
+          sha256sum "release/$FILENAME"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
