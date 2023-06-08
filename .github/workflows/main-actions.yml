@@ -25,16 +25,16 @@ jobs:
       - name: Set version
         id: set_version
         run: |
-          grep -oP '"version":\s*\(\K[0-9, ]+' NyaaTools/consts.py | tr -d ' ' | tr ',' '.' > release/version.txt
+          RAW_VERSION = `grep -oP '"version":\s*\(\K[0-9, ]+' NyaaTools/__init__.py`
+          echo $RAW_VERSION | tr -d ' ' | tr ',' '.' > release/version.txt
           printf "%s" "$(< release/version.txt)" > release/version.txt
           VERSION="$(< release/version.txt)"
-          echo $VERSION
-
-          cat NyaaTools/consts.py
+          echo "$RAW_VERSION"
+          echo "$VERSION"
 
           [[ -z $VERSION ]] && exit 1
 
-          echo $VERSION >> NyaaTools/consts.py
+          echo "$RAW_VERSION" >> NyaaTools/consts.py
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
