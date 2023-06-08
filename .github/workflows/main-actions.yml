@@ -27,11 +27,16 @@ jobs:
         run: |
           grep -oP '"version":\s*\(\K[0-9, ]+' NyaaTools/consts.py | tr -d ' ' | tr ',' '.' > release/version.txt
           printf "%s" "$(< release/version.txt)" > release/version.txt
-          cat release/version.txt
+          VERSION="$(< release/version.txt)"
+          echo $VERSION
 
-          cat release/version.txt >> NyaaTools/consts.py
+          cat NyaaTools/consts.py
 
-          echo "version=$(< release/version.txt)" >> $GITHUB_OUTPUT
+          [[ -z $VERSION ]] && exit 1
+
+          echo $VERSION >> NyaaTools/consts.py
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Set message
         run: |
