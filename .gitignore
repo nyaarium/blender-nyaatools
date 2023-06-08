@@ -1,0 +1,12 @@
+# Development
+_test/
+.vscode-server/
+.vscode/
+debug.log
+node_modules/
+volumes/
+
+#### OS
+Thumbs.db
+.DS_Store
+._.DS_Store
