@@ -1,0 +1,103 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    # files:
+    #   - "src/**"
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Init
+        run: |
+          mkdir release
+
+      - name: Set version
+        id: set_version
+        run: |
+          grep -oP '"version":\s*\(\K[0-9, ]+' NyaaTools/consts.py | tr -d ' ' | tr ',' '.' > release/version.txt
+          printf "%s" "$(< release/version.txt)" > release/version.txt
+          cat release/version.txt
+
+          cat release/version.txt >> NyaaTools/consts.py
+
+          echo "version=$(< release/version.txt)" >> $GITHUB_OUTPUT
+
+      - name: Set message
+        run: |
+          git log -1 --pretty=%B > release/body.md
+          printf "%s" "$(< release/body.md)" > release/body.md
+          cat release/body.md
+
+      - name: Create a release zip
+        run: |
+          zip -r release/release.zip NyaaTools/
+          zip -ur release/release.zip LICENSE README
+          sha256sum release/release.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: image
+          path: release/*
+          retention-days: 7
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          name: Release ${{ steps.set_version.outputs.version }}
+          tag: ${{ steps.set_version.outputs.version }}
+          commit: ${{ github.ref }}
+          artifacts: release/*.zip
+          bodyFile: release/body.md
+          makeLatest: true
+
+  # required-tests:
+  #   name: Required Tests
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     actions: read
+  #   steps:
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: image
+  #         path: /tmp
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Load image
+  #       run: docker load --input /tmp/release.zip
+
+  #       # TODO: run tests
+
+  # optional-tests:
+  #   name: Optional Tests
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     actions: read
+  #   steps:
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: image
+  #         path: /tmp
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Load image
+  #       run: docker load --input /tmp/release.zip
+
+  #       # TODO: run tests
