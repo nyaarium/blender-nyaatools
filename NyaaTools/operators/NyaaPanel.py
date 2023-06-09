@@ -3,6 +3,7 @@ from bpy.props import StringProperty
 
 from ..avatar.get_avatar_layers import get_avatar_layers
 from ..common.get_prop import get_prop
+from ..common.has_value import has_value
 from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_LAYERS, PROP_AVATAR_NAME, ISSUES_URL, UPDATE_URL, VERSION
 
 
@@ -19,93 +20,114 @@ class NyaaPanel(bpy.types.Panel):
     )
 
     def draw(self, context):
-        layout = self.layout
+        error = None
 
-        obj = bpy.context.active_object
-        objs = bpy.context.selected_objects
-        has_selection = 0 < len(objs)
+        # Don't consider it a selection if active object with no selection
+        has_selection = False
 
-        # Deselecting all should count as no selection / no active
-        if not has_selection:
-            obj = None
-            objs = []
+        is_armature = False
+        is_avatar = False
+        is_mesh = False
+        armature = None
+        avatar_name = None
+        export_path = None
 
         selected_armatures = []
         selected_meshes = []
-        for obj in objs:
-            if obj.type == "ARMATURE":
-                selected_armatures.append(obj)
-            elif obj.type == "MESH":
-                selected_meshes.append(obj)
 
-        is_armature = len(selected_armatures) == 1
-        is_mesh = 0 < len(selected_meshes)
+        mesh_layers = []
 
-        armature = selected_armatures[0] if is_armature else None
+        try:
+            # Determine mesh & armature selection
+            for obj in bpy.context.selected_objects:
+                if obj.type == "ARMATURE":
+                    selected_armatures.append(obj)
 
-        avatar_name = None
-        export_path = None
-        avatar_mesh_count = 0
-        if is_armature:
-            avatar_name = get_prop(armature, PROP_AVATAR_NAME)
-            if avatar_name != None and avatar_name.strip() == "":
-                avatar_name = None
+                    if len(selected_armatures) == 1:
+                        # Select this armature
+                        armature = obj
+                        is_armature = True
+                        avatar_name = get_prop(armature, PROP_AVATAR_NAME)
+                        export_path = get_prop(
+                            armature, PROP_AVATAR_EXPORT_PATH)
+                        is_avatar = has_value(avatar_name)
+                    if 1 < len(selected_armatures):
+                        # Deselect armature
+                        armature = None
+                        is_armature = False
+                        avatar_name = None
+                        export_path = None
+                        is_avatar = False
 
-            export_path = get_prop(armature, PROP_AVATAR_EXPORT_PATH)
-            if export_path != None and export_path.strip() == "":
-                export_path = None
+                elif obj.type == "MESH":
+                    selected_meshes.append(obj)
 
-            if avatar_name != None:
-                # Count all meshes that have a get_prop(mesh, PROP_AVATAR_LAYER) == avatar
+                    is_mesh = True
+
+            # If avatar selection, check avatar layers (meshes using this)
+            if is_avatar:
                 for mesh in bpy.data.objects:
-                    if mesh.type != "MESH":
-                        continue
-
-                    # Get pairs [path_avatar_name, path_layer_name]
-                    # If avatar_name == path_avatar_name, merge
+                    # Pairs of [path_avatar_name, path_layer_name]
                     layers = get_avatar_layers(mesh)
-                    for path_avatar_name, path_layer_name in layers:
-                        if avatar_name == path_avatar_name:
-                            if 0 < len(path_layer_name):
-                                avatar_mesh_count += 1
 
-        avatar_layers = None
-        avatar_layers_multi_warning = False
-        if is_mesh:
-            for mesh in selected_meshes:
-                if avatar_layers == None:
-                    avatar_layers = get_prop(mesh, PROP_AVATAR_LAYERS)
-                elif avatar_layers != get_prop(mesh, PROP_AVATAR_LAYERS):
-                    avatar_layers_multi_warning = True
-                    break
+                    # Filter layers to only those using this avatar
+                    for layer in layers:
+                        if layer[0] == avatar_name:
+                            mesh_layers.append([mesh, layer[1]])
+                    print(mesh_layers)
+
+            # If mesh selection, check mesh avatars
+            # if is_mesh:
+            #     for mesh in selected_meshes:
+            #         avatar_layers = get_avatar_layers(mesh)
+            #         print(avatar_layers)
+
+            has_selection = is_armature or is_mesh
+
+        except Exception as e:
+            error = e
+            print("Error in NyaaPanel:")
+            print(e)
+
+        #############################################
+        #############################################
+        # Begin layout
+
+        layout = self.layout
+
+        if error != None:
+            box = layout.box()
+            box.label(text="An error occurred.")
+            box.label(text="Please report the issue.")
+            box.label(text="")
+            box.label(text=str(error))
 
         #############################################
         # Avatar Armature
 
         if is_armature:
-            count = ""
-            if avatar_name != None:
-                count = " (" + str(avatar_mesh_count) + " meshes)"
+            mesh_count = ""
+            if is_avatar:
+                mesh_count = " (" + str(len(mesh_layers)) + " meshes)"
 
             box = layout.box()
-            box.label(text="Avatar" + count, icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Avatar" + mesh_count, icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            if avatar_name != None:
+            if is_avatar:
                 op = row.operator(
                     "nyaa.configure_avatar_armature", text="Configure Avatar")
                 op.avatar_name = avatar_name
                 op.export_path = export_path
 
-                # Right under configure:
-                # [Show avatar]
-                #   -> *hides non avatar meshes*
+                if 0 < len(mesh_layers):
+                    box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
+                    row = box.row(align=True)
 
-                box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
-                row = box.row(align=True)
-
-                row.operator("nyaa.avatar_merge_tool",
-                             text="Export: " + avatar_name).avatar_name = avatar_name
+                    row.operator("nyaa.avatar_merge_tool",
+                                text="Export: " + avatar_name).avatar_name = avatar_name
+                else:
+                    box.label(text="No meshes assigned", icon="OUTLINER_OB_ARMATURE")
 
             else:
                 op = row.operator(
