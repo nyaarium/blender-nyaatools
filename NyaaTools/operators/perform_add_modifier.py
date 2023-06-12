@@ -15,9 +15,9 @@ def perform_add_modifier(which_modifier):
     def search_for_avatar_armature(mesh):
         key = get_prop(mesh, PROP_AVATAR_LAYERS)
         if (key != None):
-            keySplit = key.split(",")
+            keySplit = key.split(",") if key != "" else []
             for path in keySplit:
-                pathParts = path.split("/")
+                pathParts = path.split("/") if path != "" else []
                 targetAvatarName = pathParts[0].strip()
                 return get_avatar_armature(targetAvatarName)
         return None
