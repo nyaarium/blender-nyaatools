@@ -11,5 +11,5 @@ def get_avatar_layers(mesh):
             path_parts = path.split("/") if path != "" else []
             path_avatar_name = path_parts[0]
             path_layer_name = path_parts[1]
-            ret.push([path_avatar_name, path_layer_name])
+            ret.append([path_avatar_name, path_layer_name])
     return ret

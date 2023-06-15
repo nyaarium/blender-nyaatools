@@ -1,14 +1,38 @@
+import traceback
 import bpy
+from bpy.props import StringProperty
 
-from ..avatar.get_avatar_armature import get_avatar_armature
-from ..avatar.get_avatar_layers import get_avatar_layers
-from ..avatar.get_avatar_meshes import get_avatar_meshes
-from ..avatar.merge_onto_avatar_layer import merge_onto_avatar_layer
-from ..common.get_prop import get_prop
-from ..common.select_collection import select_collection
-from ..common.selection_add import selection_add
-from ..consts import EXPORT_COLLECTION, PROP_AVATAR_EXPORT_PATH
 from ..mesh.cleanup_mesh import cleanup_mesh
+from ..consts import EXPORT_COLLECTION, PROP_AVATAR_EXPORT_PATH
+from ..common.selection_add import selection_add
+from ..common.select_collection import select_collection
+from ..common.get_prop import get_prop
+from ..avatar.merge_onto_avatar_layer import merge_onto_avatar_layer
+from ..avatar.get_avatar_meshes import get_avatar_meshes
+from ..avatar.get_avatar_layers import get_avatar_layers
+from ..avatar.get_avatar_armature import get_avatar_armature
+
+
+class NyaaToolsAvatarMergeExport(bpy.types.Operator):
+    """Merge and export the avatar. If you have an export path defined, it will export there"""
+    bl_idname = "nyaa.avatar_merge_export"
+    bl_label = "Merge & Export"
+    bl_options = {"REGISTER", "UNDO"}
+
+    avatar_name: StringProperty(
+        name="Avatar Name",
+        default=""
+    )
+
+    def execute(self, context):
+        try:
+            perform_merge_export(self.avatar_name)
+        except Exception as error:
+            print(traceback.format_exc())
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        return {"FINISHED"}
 
 
 def perform_merge_export(avatar_name):

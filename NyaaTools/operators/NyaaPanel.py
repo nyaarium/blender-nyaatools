@@ -4,7 +4,7 @@ from bpy.props import StringProperty
 from ..avatar.get_avatar_layers import get_avatar_layers
 from ..common.get_prop import get_prop
 from ..common.has_value import has_value
-from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_LAYERS, PROP_AVATAR_NAME, ISSUES_URL, UPDATE_URL, VERSION
+from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_NAME, ISSUES_URL, UPDATE_URL, VERSION
 
 
 class NyaaPanel(bpy.types.Panel):
@@ -14,11 +14,8 @@ class NyaaPanel(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
 
-    selectedAvatar: StringProperty(
-        name="Selected Avatar",
-        default=""
-    )
-
+    # TODO: Reimplement to not operate in draw context
+    # Modal? Something else?
     def draw(self, context):
         error = None
 
@@ -35,7 +32,17 @@ class NyaaPanel(bpy.types.Panel):
         selected_armatures = []
         selected_meshes = []
 
-        mesh_layers = []
+        all_selected_meshes_using_this_avatar = True
+        no_selected_meshes_using_this_avatar = True
+
+        # Dict of [path_layer_name] = [meshes]
+        selected_avatar_layers = {}
+        unassigned_meshes = []
+
+        avatar_layers = {}
+        mesh_layers_count = 0
+
+        #############################################
 
         try:
             # Determine mesh & armature selection
@@ -51,7 +58,7 @@ class NyaaPanel(bpy.types.Panel):
                         export_path = get_prop(
                             armature, PROP_AVATAR_EXPORT_PATH)
                         is_avatar = has_value(avatar_name)
-                    if 1 < len(selected_armatures):
+                    elif 1 < len(selected_armatures):
                         # Deselect armature
                         armature = None
                         is_armature = False
@@ -64,23 +71,49 @@ class NyaaPanel(bpy.types.Panel):
 
                     is_mesh = True
 
-            # If avatar selection, check avatar layers (meshes using this)
             if is_avatar:
+                for mesh in selected_meshes:
+                    # Pairs of [path_avatar_name, path_layer_name]
+                    layers = get_avatar_layers(mesh)
+
+                    is_using_this_avatar = False
+                    for layer in layers:
+                        path_avatar_name = layer[0]
+                        path_layer_name = layer[1]
+                        if path_avatar_name == avatar_name:
+                            is_using_this_avatar = True
+
+                            # Add to selected_avatar_layers
+                            if not path_layer_name in selected_avatar_layers:
+                                selected_avatar_layers[path_layer_name] = []
+                            selected_avatar_layers[path_layer_name].append(
+                                mesh)
+
+                            break
+                    if is_using_this_avatar:
+                        no_selected_meshes_using_this_avatar = False
+                    else:
+                        all_selected_meshes_using_this_avatar = False
+                        unassigned_meshes.append(mesh)
+
+                # ISSUE: This is expensive in larger scenes. Maybe remove this section
+                # If avatar selection, check avatar layers (meshes using this)
                 for mesh in bpy.data.objects:
                     # Pairs of [path_avatar_name, path_layer_name]
                     layers = get_avatar_layers(mesh)
 
                     # Filter layers to only those using this avatar
                     for layer in layers:
-                        if layer[0] == avatar_name:
-                            mesh_layers.append([mesh, layer[1]])
-                    print(mesh_layers)
+                        path_avatar_name = layer[0]
+                        path_layer_name = layer[1]
+                        if path_avatar_name == avatar_name:
+                            # If not defined, init array
+                            if not path_layer_name in avatar_layers:
+                                avatar_layers[path_layer_name] = []
 
-            # If mesh selection, check mesh avatars
-            # if is_mesh:
-            #     for mesh in selected_meshes:
-            #         avatar_layers = get_avatar_layers(mesh)
-            #         print(avatar_layers)
+                            avatar_layers[path_layer_name].append(mesh)
+
+                            mesh_layers_count += 1
 
             has_selection = is_armature or is_mesh
 
@@ -106,51 +139,118 @@ class NyaaPanel(bpy.types.Panel):
         # Avatar Armature
 
         if is_armature:
-            mesh_count = ""
+            title_text = "Avatar (not configured)"
             if is_avatar:
-                mesh_count = " (" + str(len(mesh_layers)) + " meshes)"
+                title_text = "Avatar: " + avatar_name
 
             box = layout.box()
-            box.label(text="Avatar" + mesh_count, icon="OUTLINER_OB_ARMATURE")
+            box.label(text=title_text, icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
             if is_avatar:
                 op = row.operator(
-                    "nyaa.configure_avatar_armature", text="Configure Avatar")
+                    "nyaa.configure_avatar_armature", text="🔧 Reconfigure")
                 op.avatar_name = avatar_name
                 op.export_path = export_path
 
-                if 0 < len(mesh_layers):
-                    box.label(text="Merge & Export", icon="OUTLINER_OB_ARMATURE")
-                    row = box.row(align=True)
+                row = box.row(align=True)
 
-                    row.operator("nyaa.avatar_merge_tool",
-                                text="Export: " + avatar_name).avatar_name = avatar_name
+                if 0 < mesh_layers_count:
+                    op = row.operator("nyaa.avatar_merge_export",
+                                      text="📦 Merge & Export")
+                    op.avatar_name = avatar_name
                 else:
-                    box.label(text="No meshes assigned", icon="OUTLINER_OB_ARMATURE")
+                    box.label(text="No meshes assigned",
+                              icon="OUTLINER_OB_ERROR")
+                    box.label(text="Select this armature and some meshes")
 
             else:
                 op = row.operator(
                     "nyaa.configure_avatar_armature", text="Make New Avatar")
+                op.avatar_name = ""
+                op.export_path = "./Export.fbx"
+
+        elif 1 < len(selected_armatures):
+            box = layout.box()
+            box.label(text="Avatar Armature", icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Select only 1 armature")
+
+        else:
+            box = layout.box()
+            box.label(text="Avatar Armature", icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Select an armature")
 
         #############################################
-        # Avatar Mesh
+        # Avatar Meshes
 
         if is_mesh:
             box = layout.box()
-            box.label(text="Avatar Layer", icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
             row = box.row(align=True)
 
-            # Loop and list all known avatars here:
-            # Ex If single object selected:
-            # "Avatar Name"
-            # [➕ add 1 mesh]  OR  [🗑️ remove 1 mesh]
-            #   ->  "Layer Name: ________"    (blanks treated as remove)
-            #    A  -> add_avatar_layer(mesh, avatar_name, layer_name)
-            #    R  -> remove_avatar_layer(mesh, avatar_name)
+            if is_avatar:
+                if 0 < len(selected_avatar_layers):
+                    # List meshes in selected_avatar_layers
+                    for path_layer_name in selected_avatar_layers:
+                        # Display layer name
+                        row.label(text=path_layer_name)
+
+                        meshes = selected_avatar_layers[path_layer_name]
+                        for mesh in meshes:
+                            row = box.row(align=True)
+                            split = row.split(factor=0.1)
+                            split.label(text="")
+                            split.label(text=mesh.name)
+
+                        row = box.row(align=True)
+
+                    if 0 < len(unassigned_meshes):
+                        # Display unassigned meshes
+                        row.label(text="(Unassigned)")
+                        for mesh in unassigned_meshes:
+                            row = box.row(align=True)
+                            split = row.split(factor=0.1)
+                            split.label(text="")
+                            split.label(text=mesh.name)
+                else:
+                    box.label(text="(no meshes assigned)")
+
+                row = box.row(align=True)
+
+                c = str(len(selected_meshes))
+                if all_selected_meshes_using_this_avatar:
+                    # Remove selection action
+                    op = row.operator("nyaa.remove_meshes_from_avatar",
+                                      text="➖ Remove " + c + " from avatar")
+                elif no_selected_meshes_using_this_avatar:
+                    # Add selection action
+                    text = ""
+                    if len(selected_meshes) == 1:
+                        text = "➕ Add " + c + " to avatar"
+                    else:
+                        text = "🔗 Combine " + c + " to single layer"
+                    op = row.operator("nyaa.configure_meshes_on_avatar",
+                                      text=text)
+                    if len(selected_meshes) == 1:
+                        op.layer_name = selected_meshes[0].name
+                    else:
+                        op.layer_name = ""
+                else:
+                    # Recombine selection action
+                    op = row.operator("nyaa.configure_meshes_on_avatar",
+                                      text="🔗 Recombine " + c + " to single layer")
+                    op.layer_name = ""
+
+            else:
+                row.label(text="(no armature selected)")
+
+        elif len(selected_meshes) == 0:
+            box = layout.box()
+            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
+            box.label(text="Select some meshes")
 
         #############################################
-        # Mesh
+        # Mesh Tools
 
         if is_mesh:
             box = layout.box()
@@ -161,32 +261,45 @@ class NyaaPanel(bpy.types.Panel):
             op.vg = True
             op.sk = True
             op.mat = True
-            row.operator("nyaa.mesh_cleanup", text="Vertex Groups").vg = True
+
+            op = row.operator("nyaa.mesh_cleanup", text="Vertex Groups")
+            op.vg = True
+            op.sk = False
+            op.mat = False
             row = box.row(align=True)
 
-            row.operator("nyaa.mesh_cleanup", text="Shape Keys").sk = True
-            row.operator("nyaa.mesh_cleanup", text="Materials").mat = True
+            op = row.operator("nyaa.mesh_cleanup", text="Shape Keys")
+            op.vg = False
+            op.sk = True
+            op.mat = False
+
+            op = row.operator("nyaa.mesh_cleanup", text="Materials")
+            op.vg = False
+            op.sk = False
+            op.mat = True
 
             box.label(text="Add Modifiers", icon="TOOL_SETTINGS")
             row = box.row(align=True)
 
-            row.operator("nyaa.add_modifier",
-                         text="Armature").which = "Armature"
+            op = row.operator("nyaa.add_modifier", text="Armature")
+            op.which_modifier = "Armature"
 
-            row.operator("nyaa.add_modifier",
-                         text="Data Transfer").which = "DataTransfer"
+            op = row.operator("nyaa.add_modifier", text="Data Transfer")
+            op.which_modifier = "DataTransfer"
 
             row = box.row(align=True)
 
             row = row.split(factor=0.5)
-            row.operator("nyaa.add_modifier",
-                         text="Decimate").which = "Decimate"
+
+            op = row.operator("nyaa.add_modifier", text="Decimate")
+            op.which_modifier = "Decimate"
 
             box.label(text="Modifier with Shape Keys",
                       icon="SHAPEKEY_DATA")
             row = box.row(align=True)
 
-            row.operator("nyaa.apply_top_modifier", text="Apply Top Modifier")
+            row.operator("przemir.apply_top_modifier",
+                         text="Apply Top Modifier")
 
         elif not has_selection:
             box = layout.box()
@@ -194,31 +307,42 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Select a mesh to edit.")
 
         #############################################
-        # Armature
+        # Armature Tools
 
         if is_armature:
             box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            row.operator("nyaa.normalize_armature_a_pose",
-                         text="A-Pose",
-                         icon="ERROR")
-            row.operator("nyaa.normalize_armature_t_pose",
-                         text="T-Pose",
-                         icon="ERROR")
+            op = row.operator("nyaa.normalize_armature_at_pose",
+                              text="A-Pose",
+                              icon="ERROR")
+            op.which_pose = "a-pose"
+            op.apply_pose = True
+
+            op = row.operator("nyaa.normalize_armature_at_pose",
+                              text="T-Pose",
+                              icon="ERROR")
+            op.which_pose = "t-pose"
+            op.apply_pose = True
 
             box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            row.operator("nyaa.set_armature_a_pose", text="Set A-Pose")
-            row.operator("nyaa.set_armature_t_pose", text="Set T-Pose")
+            op = row.operator("nyaa.normalize_armature_at_pose",
+                              text="Set A-Pose")
+            op.which_pose = "a-pose"
+            op.apply_pose = False
+
+            op = row.operator("nyaa.normalize_armature_at_pose",
+                              text="Set T-Pose")
+            op.which_pose = "t-pose"
+            op.apply_pose = False
 
         elif not has_selection:
             box = layout.box()
-            box.label(text="Armature",
-                      icon="OUTLINER_OB_ARMATURE")
-            box.label(text="Select an armature to edit.")
+            box.label(text="Armature", icon="OUTLINER_OB_ARMATURE")
+            box.label(text="Select an armature to edit")
 
         #############################################
 
