@@ -40,9 +40,7 @@ jobs:
 
       - name: Set message
         run: |
-          git log -1 --pretty=%B > release/body.md
-          printf "%s" "$(< release/body.md)" > release/body.md
-          cat release/body.md
+          mv release-notes.md release/body.md
 
       - name: Create a release zip
         run: |
