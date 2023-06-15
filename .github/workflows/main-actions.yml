@@ -48,7 +48,7 @@ jobs:
         run: |
           FILENAME="NyaaTools v${{ steps.set_version.outputs.version }}.zip"
           zip -r "release/$FILENAME" NyaaTools/
-          zip -ur "release/$FILENAME" LICENSE README
+          zip -ur "release/$FILENAME" LICENSE README.md
           sha256sum "release/$FILENAME"
 
       - name: Upload artifact
