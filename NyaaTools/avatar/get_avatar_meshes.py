@@ -10,7 +10,7 @@ def get_avatar_meshes(avatar):
         if (obj.type == "MESH"):
             key = get_prop(obj, PROP_AVATAR_LAYERS)
             if (key != None):
-                keySplit = key.split(",")
+                keySplit = key.split(",") if key != "" else []
                 for path in keySplit:
                     pathStart = path.strip()[:len(avatar) + 1]
                     if (pathStart == avatar + "/"):

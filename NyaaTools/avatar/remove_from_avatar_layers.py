@@ -1,9 +1,9 @@
-from ..avatar.get_avatar_layers import get_avatar_layers
+from .get_avatar_layers import get_avatar_layers
 from ..common.set_prop import set_prop
 from ..consts import PROP_AVATAR_LAYERS
 
 
-def remove_avatar_layer(mesh, avatar_name):
+def remove_from_avatar_layers(avatar_name, mesh):
     layers = get_avatar_layers(mesh)
     layers = [layer for layer in layers if layer[0] != avatar_name]
 

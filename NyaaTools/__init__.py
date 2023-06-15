@@ -1,16 +1,14 @@
 import bpy
 
 from .operators.NyaaPanel import NyaaPanel
-from .operators.NyaaToolsNormalizeArmatureAPose import NyaaToolsNormalizeArmatureAPose
-from .operators.NyaaToolsNormalizeArmatureTPose import NyaaToolsNormalizeArmatureTPose
-from .operators.NyaaToolsSetArmatureAPose import NyaaToolsSetArmatureAPose
-from .operators.NyaaToolsSetArmatureTPose import NyaaToolsSetArmatureTPose
-from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsAddModifier import NyaaToolsAddModifier
-from .operators.NyaaToolsApplyTopModifier import NyaaToolsApplyTopModifier
+from .operators.NyaaToolsAvatarMergeExport import NyaaToolsAvatarMergeExport
 from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatarArmature
-from .operators.NyaaToolsConfigureAvatarMesh import NyaaToolsConfigureAvatarMesh
-from .operators.NyaaToolsAvatarMergeTool import NyaaToolsAvatarMergeTool
+from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
+from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
+from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
+from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
+from .operators.PrzemirApplyTopModifier import PrzemirApplyTopModifier
 from .operators.LinkButton import LinkButton
 
 
@@ -27,22 +25,20 @@ bl_info = {
 
 classes = [
     NyaaPanel,
-    NyaaToolsNormalizeArmatureAPose,
-    NyaaToolsNormalizeArmatureTPose,
-    NyaaToolsSetArmatureAPose,
-    NyaaToolsSetArmatureTPose,
-    NyaaToolsMeshCleanup,
     NyaaToolsAddModifier,
-    NyaaToolsApplyTopModifier,
+    NyaaToolsAvatarMergeExport,
     NyaaToolsConfigureAvatarArmature,
-    NyaaToolsConfigureAvatarMesh,
-    NyaaToolsAvatarMergeTool,
+    NyaaToolsConfigureMeshesOnAvatar,
+    NyaaToolsMeshCleanup,
+    NyaaToolsNormalizeArmatureATPose,
+    NyaaToolsRemoveMeshesFromAvatar,
+    PrzemirApplyTopModifier,
     LinkButton,
 ]
 
 
 def register():
-    for cls in classes:
+    for cls in reversed(classes):
         bpy.utils.register_class(cls)
 
 
