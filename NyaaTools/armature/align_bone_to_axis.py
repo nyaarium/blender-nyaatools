@@ -50,9 +50,9 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
 
         # Matrix that rotates bone to v
         M = (
-            Matrix.Translation(head) @
-            rd.to_matrix().to_4x4() @
-            Matrix.Translation(-head)
+            Matrix.Translation(head)
+            @ rd.to_matrix().to_4x4()
+            @ Matrix.Translation(-head)
         )
 
         bone.matrix = M @ bone.matrix
@@ -67,7 +67,9 @@ def align_bone_to_axis(armature, bone, axis_x, axis_y, axis_z):
     if bone == None:
         raise TypeError("Bone was not found")
 
-    if not isinstance(bone, bpy.types.EditBone) and not isinstance(bone, bpy.types.PoseBone):
+    if not isinstance(bone, bpy.types.EditBone) and not isinstance(
+        bone, bpy.types.PoseBone
+    ):
         raise TypeError("Bone must be a EditBone or PoseBone")
 
     if isinstance(bone, bpy.types.EditBone):
