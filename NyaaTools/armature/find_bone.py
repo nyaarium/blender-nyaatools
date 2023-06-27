@@ -114,6 +114,10 @@ def find_bone(which, armature: bpy.types.Armature, bone_desc_name: str) -> bpy.t
         if bone.name == bone_desc_name:
             return bone
 
+        # If exists in BONE_DESC_MAP as a different bone, skip
+        if bone.name in BONE_DESC_MAP:
+            continue
+
         if 0.75 <= similarity_to_common_names(bone.name, bone_desc_name):
             bone_matches.append(bone)
 
