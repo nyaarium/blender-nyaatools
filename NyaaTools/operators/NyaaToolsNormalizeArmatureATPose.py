@@ -4,7 +4,9 @@ from bpy.props import BoolProperty, StringProperty
 
 
 from ..armature.estimate_is_normalized import estimate_is_normalized
-from ..armature.find_meshes_affected_by_armature_modifier import find_meshes_affected_by_armature_modifier
+from ..armature.find_meshes_affected_by_armature_modifier import (
+    find_meshes_affected_by_armature_modifier,
+)
 from ..armature.normalize_armature_pose import normalize_armature_pose
 from ..armature.normalize_armature_rename_bones import normalize_armature_rename_bones
 from ..armature.normalize_armature_roll_bones import normalize_armature_roll_bones
@@ -14,6 +16,7 @@ from ..bone_desc_map import BONE_DESC_MAP
 
 class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
     """Normalizes armatures to my preferred A or T pose layout"""
+
     bl_idname = "nyaa.normalize_armature_at_pose"
     bl_label = "Enforce Pose"
     bl_options = {"REGISTER", "UNDO"}
@@ -53,22 +56,21 @@ def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
         progress[0] = progress[0] + 1
         wm.progress_update(progress[0] / progress_total * 100)
 
-    # Progress Total: Rename bones is the length of the bone descriptors
-    progress_total += len(BONE_DESC_MAP)
-
     # Progress Total: T-Pose is:
     # - Fixed count of callback_progress_tick() in the function
     # - Total number of affected meshes
     # - Total number of shape keys in affected meshes
     progress_total += 36
+    total_shapekeys = 0
     if apply_rest_pose:
         # Only during apply mode
-        affected_meshes = find_meshes_affected_by_armature_modifier(
-            armature)
+        affected_meshes = find_meshes_affected_by_armature_modifier(armature)
         progress_total += len(affected_meshes)
         for mesh, modifier in affected_meshes:
             if mesh.data.shape_keys != None:
-                progress_total += len(mesh.data.shape_keys.key_blocks)
+                total_shapekeys += len(mesh.data.shape_keys.key_blocks)
+
+        progress_total += total_shapekeys
 
     ######################
     ##  Begin progress  ##
@@ -80,14 +82,17 @@ def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
     wm.progress_begin(0, 100)
 
     # Rename bones
-    normalize_armature_rename_bones(armature, callback_progress_tick)
+    normalize_armature_rename_bones(armature)
 
     # Set T-Pose
-    normalize_armature_pose(armature, which_pose,
-                            apply_rest_pose, callback_progress_tick)
+    normalize_armature_pose(
+        armature, which_pose, apply_rest_pose, callback_progress_tick
+    )
 
-    # Set roll (not worth progress tracking)
+    # Set roll
     normalize_armature_roll_bones(armature, which_pose)
+
+    bpy.ops.object.mode_set(mode="OBJECT")
 
     wm.progress_end()
 
@@ -122,13 +127,12 @@ def perform_fast_pose(armature, which_pose):
     bpy.context.view_layer.objects.active = armature
 
     if estimate_is_normalized(armature):
-
         wm.progress_begin(0, 100)
 
-        normalize_armature_pose(armature, which_pose,
-                                False, callback_progress_tick)
+        normalize_armature_pose(armature, which_pose, False, callback_progress_tick)
+
+        bpy.ops.object.mode_set(mode="OBJECT")
 
         wm.progress_end()
     else:
-        raise Exception(
-            "Armature is not Nyaa-normalized! Please normalize first.")
+        raise Exception("Armature is not Nyaa-normalized! Please normalize first.")

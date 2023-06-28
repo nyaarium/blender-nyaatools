@@ -13,13 +13,13 @@ from .operators.LinkButton import LinkButton
 
 
 bl_info = {
-    "name":         "NyaaTools",
-    "author":       "Nyaarium",
-    "blender":      (3, 0, 0),
-    "version":      (1, 2, 0),
-    "description":  "Various Nyaarium tools to normalize & export avatar FBX's",
-    "location":     "Tool > NyaaTools",
-    "category":     "Object",
+    "name": "NyaaTools",
+    "author": "Nyaarium",
+    "blender": (3, 0, 0),
+    "version": (1, 3, 0),
+    "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
+    "location": "Tool > NyaaTools",
+    "category": "Object",
 }
 
 

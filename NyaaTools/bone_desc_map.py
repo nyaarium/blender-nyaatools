@@ -2,7 +2,6 @@
 BONE_DESC_MAP = {
     # Bone Descriptions
     # common_names: Use "." instead of "_" for improved search results
-
     "Hips": {
         "common_names": ["Hips", "Hip", "Pelvis"],
         "parent": None,
@@ -50,7 +49,6 @@ BONE_DESC_MAP = {
         "mirror": "Eye.L",
         "roll": 90,
     },
-
     "Breast Root": {
         "common_names": ["Breast Root", "Boob Root"],
         "parent": "Chest",
@@ -72,7 +70,6 @@ BONE_DESC_MAP = {
         "mirror": "Breast.L",
         "optional": True,
     },
-
     "Upper Leg.L": {
         "common_names": ["Upper Leg.L", "Thigh.L", "Leg.L", "Left Leg"],
         "parent": "Hips",
@@ -101,7 +98,6 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Toes.R",
     },
-
     "Upper Leg.R": {
         "common_names": ["Upper Leg.R", "Thigh.R", "Leg.R", "Right Leg"],
         "parent": "Hips",
@@ -130,7 +126,6 @@ BONE_DESC_MAP = {
         "children": None,
         "mirror": "Toes.L",
     },
-
     "Shoulder.L": {
         "common_names": ["Shoulder.L", "Left Shoulder"],
         "parent": "Chest",
@@ -155,11 +150,16 @@ BONE_DESC_MAP = {
     "Hand.L": {
         "common_names": ["Hand.L", "Wrist.L", "Left Wrist"],
         "parent": "Lower Arm.L",
-        "children": ["Thumb 1.L", "Little Finger 1.L", "Ring Finger 1.L", "Middle Finger 1.L", "Index Finger 1.L"],
+        "children": [
+            "Thumb 1.L",
+            "Little Finger 1.L",
+            "Ring Finger 1.L",
+            "Middle Finger 1.L",
+            "Index Finger 1.L",
+        ],
         "mirror": "Hand.R",
         "connected": True,
     },
-
     "Shoulder.R": {
         "common_names": ["Shoulder.R", "Right Shoulder"],
         "parent": "Chest",
@@ -184,20 +184,25 @@ BONE_DESC_MAP = {
     "Hand.R": {
         "common_names": ["Hand.R", "Wrist.R", "Right Wrist"],
         "parent": "Lower Arm.R",
-        "children": ["Thumb 1.R", "Little Finger 1.R", "Ring Finger 1.R", "Middle Finger 1.R", "Index Finger 1.R"],
+        "children": [
+            "Thumb 1.R",
+            "Little Finger 1.R",
+            "Ring Finger 1.R",
+            "Middle Finger 1.R",
+            "Index Finger 1.R",
+        ],
         "mirror": "Hand.L",
         "connected": True,
     },
-
     "Thumb 1.L": {
-        "common_names": ["Thumb0.L"],
+        "common_names": ["Thumb0.L", "Thumb Proximal.L"],
         "parent": "Hand.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R",
         "roll": 90,
     },
     "Thumb 2.L": {
-        "common_names": ["Thumb1.L"],
+        "common_names": ["Thumb1.L", "Thumb Intermediate.L"],
         "parent": "Thumb 1.L",
         "children": ["Thumb 3.L"],
         "mirror": "Thumb 2.R",
@@ -205,7 +210,7 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Thumb 3.L": {
-        "common_names": ["Thumb2.L"],
+        "common_names": ["Thumb2.L", "Thumb Distal.L"],
         "parent": "Thumb 2.L",
         "children": None,
         "mirror": "Thumb 3.R",
@@ -213,95 +218,102 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Index Finger 1.L": {
-        "common_names": ["IndexFinger1.L", "Index Finger Left"],
+        "common_names": ["IndexFinger1.L", "Index Finger Left", "Index Proximal.L"],
         "parent": "Hand.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R",
     },
     "Index Finger 2.L": {
-        "common_names": ["IndexFinger2.L", "Index Finger Left"],
+        "common_names": ["IndexFinger2.L", "Index Finger Left", "Index Intermediate.L"],
         "parent": "Index Finger 1.L",
         "children": ["Index Finger 3.L"],
         "mirror": "Index Finger 2.R",
         "connected": True,
     },
     "Index Finger 3.L": {
-        "common_names": ["IndexFinger3.L", "Index Finger Left"],
+        "common_names": ["IndexFinger3.L", "Index Finger Left", "Index Distal.L"],
         "parent": "Index Finger 2.L",
         "children": None,
         "mirror": "Index Finger 3.R",
         "connected": True,
     },
     "Middle Finger 1.L": {
-        "common_names": ["MiddleFinger1.L", "Middle Finger Left"],
+        "common_names": ["MiddleFinger1.L", "Middle Finger Left", "Middle Proximal.L"],
         "parent": "Hand.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R",
     },
     "Middle Finger 2.L": {
-        "common_names": ["MiddleFinger2.L", "Middle Finger Left"],
+        "common_names": [
+            "MiddleFinger2.L",
+            "Middle Finger Left",
+            "Middle Intermediate.L",
+        ],
         "parent": "Middle Finger 1.L",
         "children": ["Middle Finger 3.L"],
         "mirror": "Middle Finger 2.R",
         "connected": True,
     },
     "Middle Finger 3.L": {
-        "common_names": ["MiddleFinger3.L", "Middle Finger Left"],
+        "common_names": ["MiddleFinger3.L", "Middle Finger Left", "Middle Distal.L"],
         "parent": "Middle Finger 2.L",
         "children": None,
         "mirror": "Middle Finger 3.R",
         "connected": True,
     },
     "Ring Finger 1.L": {
-        "common_names": ["RingFinger1.L", "Ring Finger Left"],
+        "common_names": ["RingFinger1.L", "Ring Finger Left", "Ring Proximal.L"],
         "parent": "Hand.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R",
     },
     "Ring Finger 2.L": {
-        "common_names": ["RingFinger2.L", "Ring Finger Left"],
+        "common_names": ["RingFinger2.L", "Ring Finger Left", "Ring Intermediate.L"],
         "parent": "Ring Finger 1.L",
         "children": ["Ring Finger 3.L"],
         "mirror": "Ring Finger 2.R",
         "connected": True,
     },
     "Ring Finger 3.L": {
-        "common_names": ["RingFinger3.L", "Ring Finger Left"],
+        "common_names": ["RingFinger3.L", "Ring Finger Left", "Ring Distal.L"],
         "parent": "Ring Finger 2.L",
         "children": None,
         "mirror": "Ring Finger 3.R",
         "connected": True,
     },
     "Little Finger 1.L": {
-        "common_names": ["LittleFinger1.L", "Little Finger Left"],
+        "common_names": ["LittleFinger1.L", "Little Finger Left", "Little Proximal.L"],
         "parent": "Hand.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R",
     },
     "Little Finger 2.L": {
-        "common_names": ["LittleFinger2.L", "Little Finger Left"],
+        "common_names": [
+            "LittleFinger2.L",
+            "Little Finger Left",
+            "Little Intermediate.L",
+        ],
         "parent": "Little Finger 1.L",
         "children": ["Little Finger 3.L"],
         "mirror": "Little Finger 2.R",
         "connected": True,
     },
     "Little Finger 3.L": {
-        "common_names": ["LittleFinger3.L", "Little Finger Left"],
+        "common_names": ["LittleFinger3.L", "Little Finger Left", "Little Distal.L"],
         "parent": "Little Finger 2.L",
         "children": None,
         "mirror": "Little Finger 3.R",
         "connected": True,
     },
-
     "Thumb 1.R": {
-        "common_names": ["Thumb0.R"],
+        "common_names": ["Thumb0.R", "Thumb Proximal.R"],
         "parent": "Hand.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L",
         "roll": -90,
     },
     "Thumb 2.R": {
-        "common_names": ["Thumb1.R"],
+        "common_names": ["Thumb1.R", "Thumb Intermediate.R"],
         "parent": "Thumb 1.R",
         "children": ["Thumb 3.R"],
         "mirror": "Thumb 2.L",
@@ -309,7 +321,7 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Thumb 3.R": {
-        "common_names": ["Thumb2.R"],
+        "common_names": ["Thumb2.R", "Thumb Distal.R"],
         "parent": "Thumb 2.R",
         "children": None,
         "mirror": "Thumb 3.L",
@@ -317,80 +329,92 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Index Finger 1.R": {
-        "common_names": ["IndexFinger1.R", "Index Finger Right"],
+        "common_names": ["IndexFinger1.R", "Index Finger Right", "Index Proximal.R"],
         "parent": "Hand.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L",
     },
     "Index Finger 2.R": {
-        "common_names": ["IndexFinger2.R", "Index Finger Right"],
+        "common_names": [
+            "IndexFinger2.R",
+            "Index Finger Right",
+            "Index Intermediate.R",
+        ],
         "parent": "Index Finger 1.R",
         "children": ["Index Finger 3.R"],
         "mirror": "Index Finger 2.L",
         "connected": True,
     },
     "Index Finger 3.R": {
-        "common_names": ["IndexFinger3.R", "Index Finger Right"],
+        "common_names": ["IndexFinger3.R", "Index Finger Right", "Index Distal.R"],
         "parent": "Index Finger 2.R",
         "children": None,
         "mirror": "Index Finger 3.L",
         "connected": True,
     },
     "Middle Finger 1.R": {
-        "common_names": ["MiddleFinger1.R", "Middle Finger Right"],
+        "common_names": ["MiddleFinger1.R", "Middle Finger Right", "Middle Proximal.R"],
         "parent": "Hand.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L",
     },
     "Middle Finger 2.R": {
-        "common_names": ["MiddleFinger2.R", "Middle Finger Right"],
+        "common_names": [
+            "MiddleFinger2.R",
+            "Middle Finger Right",
+            "Middle Intermediate.R",
+        ],
         "parent": "Middle Finger 1.R",
         "children": ["Middle Finger 3.R"],
         "mirror": "Middle Finger 2.L",
         "connected": True,
     },
     "Middle Finger 3.R": {
-        "common_names": ["MiddleFinger3.R", "Middle Finger Right"],
+        "common_names": ["MiddleFinger3.R", "Middle Finger Right", "Middle Distal.R"],
         "parent": "Middle Finger 2.R",
         "children": None,
         "mirror": "Middle Finger 3.L",
         "connected": True,
     },
     "Ring Finger 1.R": {
-        "common_names": ["RingFinger1.R", "Ring Finger Right"],
+        "common_names": ["RingFinger1.R", "Ring Finger Right", "Ring Proximal.R"],
         "parent": "Hand.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L",
     },
     "Ring Finger 2.R": {
-        "common_names": ["RingFinger2.R", "Ring Finger Right"],
+        "common_names": ["RingFinger2.R", "Ring Finger Right", "Ring Intermediate.R"],
         "parent": "Ring Finger 1.R",
         "children": ["Ring Finger 3.R"],
         "mirror": "Ring Finger 2.L",
         "connected": True,
     },
     "Ring Finger 3.R": {
-        "common_names": ["RingFinger3.R", "Ring Finger Right"],
+        "common_names": ["RingFinger3.R", "Ring Finger Right", "Ring Distal.R"],
         "parent": "Ring Finger 2.R",
         "children": None,
         "mirror": "Ring Finger 3.L",
         "connected": True,
     },
     "Little Finger 1.R": {
-        "common_names": ["LittleFinger1.R", "Little Finger Right"],
+        "common_names": ["LittleFinger1.R", "Little Finger Right", "Little Proximal.R"],
         "parent": "Hand.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L",
     },
     "Little Finger 2.R": {
-        "common_names": ["LittleFinger2.R", "Little Finger Right"],
+        "common_names": [
+            "LittleFinger2.R",
+            "Little Finger Right",
+            "Little Intermediate.R",
+        ],
         "parent": "Little Finger 1.R",
         "children": ["Little Finger 3.R"],
         "mirror": "Little Finger 2.L",
         "connected": True,
     },
     "Little Finger 3.R": {
-        "common_names": ["LittleFinger3.R", "Little Finger Right"],
+        "common_names": ["LittleFinger3.R", "Little Finger Right", "Little Distal.R"],
         "parent": "Little Finger 2.R",
         "children": None,
         "mirror": "Little Finger 3.L",

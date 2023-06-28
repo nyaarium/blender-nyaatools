@@ -4,7 +4,13 @@ from bpy.props import StringProperty
 from ..avatar.get_avatar_layers import get_avatar_layers
 from ..common.get_prop import get_prop
 from ..common.has_value import has_value
-from ..consts import PROP_AVATAR_EXPORT_PATH, PROP_AVATAR_NAME, ISSUES_URL, UPDATE_URL, VERSION
+from ..consts import (
+    PROP_AVATAR_EXPORT_PATH,
+    PROP_AVATAR_NAME,
+    ISSUES_URL,
+    UPDATE_URL,
+    VERSION,
+)
 
 
 class NyaaPanel(bpy.types.Panel):
@@ -55,8 +61,7 @@ class NyaaPanel(bpy.types.Panel):
                         armature = obj
                         is_armature = True
                         avatar_name = get_prop(armature, PROP_AVATAR_NAME)
-                        export_path = get_prop(
-                            armature, PROP_AVATAR_EXPORT_PATH)
+                        export_path = get_prop(armature, PROP_AVATAR_EXPORT_PATH)
                         is_avatar = has_value(avatar_name)
                     elif 1 < len(selected_armatures):
                         # Deselect armature
@@ -86,8 +91,7 @@ class NyaaPanel(bpy.types.Panel):
                             # Add to selected_avatar_layers
                             if not path_layer_name in selected_avatar_layers:
                                 selected_avatar_layers[path_layer_name] = []
-                            selected_avatar_layers[path_layer_name].append(
-                                mesh)
+                            selected_avatar_layers[path_layer_name].append(mesh)
 
                             break
                     if is_using_this_avatar:
@@ -149,24 +153,26 @@ class NyaaPanel(bpy.types.Panel):
 
             if is_avatar:
                 op = row.operator(
-                    "nyaa.configure_avatar_armature", text="🔧 Reconfigure")
+                    "nyaa.configure_avatar_armature", text="🔧 Reconfigure"
+                )
                 op.avatar_name = avatar_name
                 op.export_path = export_path
 
                 row = box.row(align=True)
 
                 if 0 < mesh_layers_count:
-                    op = row.operator("nyaa.avatar_merge_export",
-                                      text="📦 Merge & Export")
+                    op = row.operator(
+                        "nyaa.avatar_merge_export", text="📦 Merge & Export"
+                    )
                     op.avatar_name = avatar_name
                 else:
-                    box.label(text="No meshes assigned",
-                              icon="OUTLINER_OB_ERROR")
+                    box.label(text="No meshes assigned", icon="ERROR")
                     box.label(text="Select this armature and some meshes")
 
             else:
                 op = row.operator(
-                    "nyaa.configure_avatar_armature", text="Make New Avatar")
+                    "nyaa.configure_avatar_armature", text="Make New Avatar"
+                )
                 op.avatar_name = ""
                 op.export_path = "./Export.fbx"
 
@@ -181,11 +187,11 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Select an armature")
 
         #############################################
-        # Avatar Meshes
+        # Selected Avatar Meshes
 
         if is_mesh:
             box = layout.box()
-            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
+            box.label(text="Selected Avatar Meshes", icon="OUTLINER_OB_MESH")
             row = box.row(align=True)
 
             if is_avatar:
@@ -220,8 +226,10 @@ class NyaaPanel(bpy.types.Panel):
                 c = str(len(selected_meshes))
                 if all_selected_meshes_using_this_avatar:
                     # Remove selection action
-                    op = row.operator("nyaa.remove_meshes_from_avatar",
-                                      text="➖ Remove " + c + " from avatar")
+                    op = row.operator(
+                        "nyaa.remove_meshes_from_avatar",
+                        text="➖ Remove " + c + " from avatar",
+                    )
                 elif no_selected_meshes_using_this_avatar:
                     # Add selection action
                     text = ""
@@ -229,16 +237,17 @@ class NyaaPanel(bpy.types.Panel):
                         text = "➕ Add " + c + " to avatar"
                     else:
                         text = "🔗 Combine " + c + " to single layer"
-                    op = row.operator("nyaa.configure_meshes_on_avatar",
-                                      text=text)
+                    op = row.operator("nyaa.configure_meshes_on_avatar", text=text)
                     if len(selected_meshes) == 1:
                         op.layer_name = selected_meshes[0].name
                     else:
                         op.layer_name = ""
                 else:
                     # Recombine selection action
-                    op = row.operator("nyaa.configure_meshes_on_avatar",
-                                      text="🔗 Recombine " + c + " to single layer")
+                    op = row.operator(
+                        "nyaa.configure_meshes_on_avatar",
+                        text="🔗 Recombine " + c + " to single layer",
+                    )
                     op.layer_name = ""
 
             else:
@@ -246,7 +255,7 @@ class NyaaPanel(bpy.types.Panel):
 
         elif len(selected_meshes) == 0:
             box = layout.box()
-            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
+            box.label(text="Selected Avatar Meshes", icon="OUTLINER_OB_MESH")
             box.label(text="Select some meshes")
 
         #############################################
@@ -294,12 +303,10 @@ class NyaaPanel(bpy.types.Panel):
             op = row.operator("nyaa.add_modifier", text="Decimate")
             op.which_modifier = "Decimate"
 
-            box.label(text="Modifier with Shape Keys",
-                      icon="SHAPEKEY_DATA")
+            box.label(text="Modifier with Shape Keys", icon="SHAPEKEY_DATA")
             row = box.row(align=True)
 
-            row.operator("przemir.apply_top_modifier",
-                         text="Apply Top Modifier")
+            row.operator("przemir.apply_top_modifier", text="Apply Top Modifier")
 
         elif not has_selection:
             box = layout.box()
@@ -314,28 +321,26 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            op = row.operator("nyaa.normalize_armature_at_pose",
-                              text="A-Pose",
-                              icon="ERROR")
+            op = row.operator(
+                "nyaa.normalize_armature_at_pose", text="A-Pose", icon="ERROR"
+            )
             op.which_pose = "a-pose"
             op.apply_pose = True
 
-            op = row.operator("nyaa.normalize_armature_at_pose",
-                              text="T-Pose",
-                              icon="ERROR")
+            op = row.operator(
+                "nyaa.normalize_armature_at_pose", text="T-Pose", icon="ERROR"
+            )
             op.which_pose = "t-pose"
             op.apply_pose = True
 
             box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            op = row.operator("nyaa.normalize_armature_at_pose",
-                              text="Set A-Pose")
+            op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
             op.which_pose = "a-pose"
             op.apply_pose = False
 
-            op = row.operator("nyaa.normalize_armature_at_pose",
-                              text="Set T-Pose")
+            op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
             op.which_pose = "t-pose"
             op.apply_pose = False
 
@@ -352,8 +357,6 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            row.operator("ops.open_link", text="Updates",
-                         icon="WORLD").url = UPDATE_URL
+            row.operator("ops.open_link", text="Updates", icon="WORLD").url = UPDATE_URL
 
-            row.operator("ops.open_link", text="Issues?",
-                         icon="WORLD").url = ISSUES_URL
+            row.operator("ops.open_link", text="Issues?", icon="WORLD").url = ISSUES_URL

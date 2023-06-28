@@ -4,7 +4,7 @@ from ..armature.find_bone import find_bone
 from ..bone_desc_map import BONE_DESC_MAP
 
 
-def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progress_tick=None):
+def normalize_armature_rename_bones(armature: bpy.types.Armature):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -13,9 +13,6 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature, callback_progr
 
     # Iterate over descriptors in BONE_DESC_MAP & rename if not the desired name
     for bone_desc_name in BONE_DESC_MAP:
-        if callback_progress_tick != None:
-            callback_progress_tick()
-
         bone_desc = BONE_DESC_MAP[bone_desc_name]
 
         bone = find_bone("edit", armature, bone_desc_name)

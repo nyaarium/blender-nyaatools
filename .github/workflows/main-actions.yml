@@ -40,15 +40,13 @@ jobs:
 
       - name: Set message
         run: |
-          git log -1 --pretty=%B > release/body.md
-          printf "%s" "$(< release/body.md)" > release/body.md
-          cat release/body.md
+          mv release-notes.md release/body.md
 
       - name: Create a release zip
         run: |
           FILENAME="NyaaTools v${{ steps.set_version.outputs.version }}.zip"
           zip -r "release/$FILENAME" NyaaTools/
-          zip -ur "release/$FILENAME" LICENSE README
+          zip -ur "release/$FILENAME" LICENSE README.md
           sha256sum "release/$FILENAME"
 
       - name: Upload artifact
