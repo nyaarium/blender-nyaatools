@@ -1,5 +1,6 @@
 import math
 import bpy
+from mathutils import Vector
 
 from .align_bone_to_axis import align_bone_to_axis as abta
 from .apply_pose import apply_pose
@@ -25,6 +26,10 @@ def normalize_armature_pose(
 
     # Find all meshes that have an armature modifier with this armature
     affected_meshes = find_meshes_affected_by_armature_modifier(armature)
+    total_shapekeys = 0
+    for mesh, modifier in affected_meshes:
+        if mesh.data.shape_keys != None:
+            total_shapekeys += len(mesh.data.shape_keys.key_blocks)
 
     clear_pose(armature)
 
@@ -75,6 +80,26 @@ def normalize_armature_pose(
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
+
+    ################
+    # Shoulder Realignment - Make a temp bone for later
+
+    if apply_rest_pose:
+        pb_shoulder_y = find_bone("pose", armature, "Shoulder.L").head.y
+        pb_shoulder_z = find_bone("pose", armature, "Shoulder.L").head.z
+
+        bpy.ops.object.mode_set(mode="EDIT")
+        eb_realign_shoulder = armature.data.edit_bones.new("__ Shoulder Realign __")
+
+        eb_shoulder_l = find_bone("edit", armature, "Shoulder.L")
+        eb_chest = find_bone("edit", armature, "Chest")
+
+        y = eb_shoulder_l.head.y + (eb_shoulder_l.head.y - pb_shoulder_y)
+        z = eb_shoulder_l.head.z + (eb_shoulder_l.head.z - pb_shoulder_z)
+
+        eb_realign_shoulder.head = Vector((0, y, z))
+        eb_realign_shoulder.tail = Vector((0, y, z + 0.1))
+        eb_realign_shoulder.parent = eb_chest
 
     ################
     # Body Round 1
@@ -147,13 +172,13 @@ def normalize_armature_pose(
     # Body Round 4
 
     # Align neck to z-axis
-    if abta(armature, find_bone("pose", armature, "Neck"), 0, 0, 1):
+    neck = find_bone("pose", armature, "Neck")
+    if abta(armature, neck, 0, 0, 1):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
 
     # Move neck to z=0
-    neck = find_bone("pose", armature, "Neck")
     if neck.matrix.translation.y != 0:
         neck.matrix.translation.y = 0
         should_apply = True
@@ -161,11 +186,14 @@ def normalize_armature_pose(
         callback_progress_tick()
 
     # Move shoulder to z=0
-    pose_sh_l = find_bone("pose", armature, "Shoulder.L")
-    pose_sh_r = find_bone("pose", armature, "Shoulder.R")
-    if pose_sh_l.matrix.translation.y != 0 or pose_sh_r.matrix.translation.y != 0:
-        pose_sh_l.matrix.translation.y = 0
-        pose_sh_r.matrix.translation.y = 0
+    pb_shoulder_l = find_bone("pose", armature, "Shoulder.L")
+    pb_shoulder_r = find_bone("pose", armature, "Shoulder.R")
+    if (
+        pb_shoulder_l.matrix.translation.y != 0
+        or pb_shoulder_r.matrix.translation.y != 0
+    ):
+        pb_shoulder_l.matrix.translation.y = 0
+        pb_shoulder_r.matrix.translation.y = 0
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
@@ -190,6 +218,22 @@ def normalize_armature_pose(
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
+
+    ################
+    # Shoulder Realignment - Temporarily attach to realign_temp_bone
+
+    if apply_rest_pose:
+        bpy.ops.object.mode_set(mode="EDIT")
+        eb_realign_shoulder = armature.data.edit_bones["__ Shoulder Realign __"]
+        eb_shoulder_l = find_bone("edit", armature, "Shoulder.L")
+        eb_shoulder_r = find_bone("edit", armature, "Shoulder.R")
+        eb_shoulder_l.parent = eb_realign_shoulder
+        eb_shoulder_r.parent = eb_realign_shoulder
+
+        bpy.ops.object.mode_set(mode="POSE")
+        pb_realign_shoulder = armature.pose.bones["__ Shoulder Realign __"]
+        if abta(armature, pb_realign_shoulder, 0, 0, 1):
+            should_apply = True
 
     ################
     # Fingers Round 1
@@ -297,11 +341,23 @@ def normalize_armature_pose(
 
         abta(armature, find_bone("pose", armature, "Shoulder.L"), 1, 0, -z)
         abta(armature, find_bone("pose", armature, "Upper Arm.L"), 1, 0, -1)
-        # dont callback tick since this is a dynamic choice
 
     ################
-
     # Apply to all meshes / shape keys
+
     if apply_rest_pose and should_apply:
         apply_pose(armature, affected_meshes, callback_progress_tick)
         clear_pose(armature)
+
+    ################
+    # Shoulder Realignment - Remove temporary realign_temp_bone
+
+    if apply_rest_pose:
+        bpy.ops.object.mode_set(mode="EDIT")
+        eb_realign_shoulder = armature.data.edit_bones["__ Shoulder Realign __"]
+        eb_shoulder_l = find_bone("edit", armature, "Shoulder.L")
+        eb_shoulder_r = find_bone("edit", armature, "Shoulder.R")
+        eb_chest = find_bone("edit", armature, "Chest")
+        eb_shoulder_l.parent = eb_chest
+        eb_shoulder_r.parent = eb_chest
+        armature.data.edit_bones.remove(eb_realign_shoulder)
