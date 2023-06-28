@@ -108,8 +108,8 @@ def find_bone(
         bpy.ops.object.mode_set(mode="EDIT")
         bones = armature.data.edit_bones
     elif which == "pose":
-        bones = armature.pose.bones
         bpy.ops.object.mode_set(mode="POSE")
+        bones = armature.pose.bones
 
     bone_matches = []
 
