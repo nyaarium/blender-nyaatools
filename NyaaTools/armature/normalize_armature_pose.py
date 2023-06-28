@@ -171,16 +171,17 @@ def normalize_armature_pose(
     ################
     # Body Round 4
 
-    # Align neck to z-axis
     neck = find_bone("pose", armature, "Neck")
-    if abta(armature, neck, 0, 0, 1):
-        should_apply = True
-    if callback_progress_tick != None:
-        callback_progress_tick()
 
     # Move neck to z=0
     if neck.matrix.translation.y != 0:
         neck.matrix.translation.y = 0
+        should_apply = True
+    if callback_progress_tick != None:
+        callback_progress_tick()
+
+    # Align neck to z-axis
+    if abta(armature, neck, 0, 0, 1):
         should_apply = True
     if callback_progress_tick != None:
         callback_progress_tick()
