@@ -40,14 +40,12 @@ BONE_DESC_MAP = {
         "parent": "Head",
         "children": None,
         "mirror": "Eye.R",
-        "roll": 90,
     },
     "Eye.R": {
         "common_names": ["Eye.R", "Right Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.L",
-        "roll": 90,
     },
     "Breast Root": {
         "common_names": ["Breast Root", "Boob Root"],
