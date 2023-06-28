@@ -160,8 +160,7 @@ class NyaaPanel(bpy.types.Panel):
                                       text="📦 Merge & Export")
                     op.avatar_name = avatar_name
                 else:
-                    box.label(text="No meshes assigned",
-                              icon="OUTLINER_OB_ERROR")
+                    box.label(text="No meshes assigned", icon="ERROR")
                     box.label(text="Select this armature and some meshes")
 
             else:
@@ -181,11 +180,11 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Select an armature")
 
         #############################################
-        # Avatar Meshes
+        # Selected Avatar Meshes
 
         if is_mesh:
             box = layout.box()
-            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
+            box.label(text="Selected Avatar Meshes", icon="OUTLINER_OB_MESH")
             row = box.row(align=True)
 
             if is_avatar:
@@ -246,7 +245,7 @@ class NyaaPanel(bpy.types.Panel):
 
         elif len(selected_meshes) == 0:
             box = layout.box()
-            box.label(text="Avatar Meshes", icon="OUTLINER_OB_MESH")
+            box.label(text="Selected Avatar Meshes", icon="OUTLINER_OB_MESH")
             box.label(text="Select some meshes")
 
         #############################################
