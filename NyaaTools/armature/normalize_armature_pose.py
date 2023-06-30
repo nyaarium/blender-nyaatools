@@ -9,6 +9,8 @@ from .find_bone import find_bone
 from .find_meshes_affected_by_armature_modifier import (
     find_meshes_affected_by_armature_modifier,
 )
+from ..common.deselect_all import deselect_all
+from ..common.selection_add import selection_add
 from ..consts import A_POSE_SHOULDER_ANGLE
 
 
@@ -24,13 +26,27 @@ def normalize_armature_pose(
 
     debug_print("Starting normalize_armature_pose()")
 
+    #################
     # Find all meshes that have an armature modifier with this armature
     affected_meshes = find_meshes_affected_by_armature_modifier(armature)
     total_shapekeys = 0
     for mesh, modifier in affected_meshes:
+        # Show in viewport
+        selection_add(mesh)
+        modifier.show_viewport = True
+        modifier.use_deform_preserve_volume = True
+        mesh.hide_viewport = False
+
         if mesh.data.shape_keys != None:
             total_shapekeys += len(mesh.data.shape_keys.key_blocks)
 
+        if callback_progress_tick != None:
+            callback_progress_tick()
+
+    deselect_all()
+    #################
+
+    selection_add(armature)
     clear_pose(armature)
 
     should_apply = False
