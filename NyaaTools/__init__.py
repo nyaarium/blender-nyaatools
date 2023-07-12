@@ -8,6 +8,7 @@ from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshes
 from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
+from .operators.NyaaSelectStandardBones import NyaaSelectStandardBones
 from .operators.PrzemirApplyTopModifier import PrzemirApplyTopModifier
 from .operators.LinkButton import LinkButton
 
@@ -32,6 +33,7 @@ classes = [
     NyaaToolsMeshCleanup,
     NyaaToolsNormalizeArmatureATPose,
     NyaaToolsRemoveMeshesFromAvatar,
+    NyaaSelectStandardBones,
     PrzemirApplyTopModifier,
     LinkButton,
 ]

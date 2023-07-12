@@ -322,6 +322,14 @@ class NyaaPanel(bpy.types.Panel):
 
         if is_armature:
             box = layout.box()
+            box.label(text="Armature", icon="OUTLINER_OB_ARMATURE")
+            row = box.row(align=True)
+
+            op = row.operator(
+                "nyaa.select_standard_bones", text="Select Standard Bones"
+            )
+
+            box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 

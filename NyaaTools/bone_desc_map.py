@@ -1,7 +1,6 @@
 # This bone description map is used to
 BONE_DESC_MAP = {
     # Bone Descriptions
-    # common_names: Use "." instead of "_" for improved search results
     "Hips": {
         "common_names": ["Hips", "Hip", "Pelvis"],
         "parent": None,
