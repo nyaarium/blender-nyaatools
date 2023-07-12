@@ -298,10 +298,14 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            row = row.split(factor=0.5)
-
             op = row.operator("nyaa.add_modifier", text="Decimate")
             op.which_modifier = "Decimate"
+
+            op = row.operator("nyaa.add_modifier", text="Outline")
+            op.which_modifier = "Outline"
+
+            # To fill in an empty cell
+            # row = row.split(factor=0.5)
 
             box.label(text="Modifier with Shape Keys", icon="SHAPEKEY_DATA")
             row = box.row(align=True)
