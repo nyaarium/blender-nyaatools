@@ -1,12 +1,14 @@
 import traceback
 import bpy
 
+from ..common.deselect_all import deselect_all
 from ..common.selection_get_meshes import selection_get_meshes
 from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
 
 
 class PrzemirApplyTopModifier(bpy.types.Operator):
     """Apply the topmost modifier for object with shape keys (GitHub/przemir)"""
+
     bl_idname = "przemir.apply_top_modifier"
     bl_label = "Add Modifier"
     bl_options = {"REGISTER", "UNDO"}
@@ -54,7 +56,7 @@ def perform_apply_top_modifier(meshes):
 
     for mesh in meshes:
         if 0 < len(mesh.modifiers):
-            mesh.select_set(True)
+            bpy.context.view_layer.objects.active = mesh
 
             modifier = mesh.modifiers[0]
 

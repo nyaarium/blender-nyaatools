@@ -68,6 +68,7 @@ def perform_add_modifier(meshes, which_modifier):
         for mesh in meshes:
             if mesh.type != "MESH":
                 continue
+            bpy.context.view_layer.objects.active = mesh
             name = "Armature"
             mod = mesh.modifiers.get(name)
             if mod:
@@ -88,6 +89,7 @@ def perform_add_modifier(meshes, which_modifier):
         for mesh in meshes:
             if mesh.type != "MESH":
                 continue
+            bpy.context.view_layer.objects.active = mesh
             name = "DataTransfer"
             mod = mesh.modifiers.get(name)
             if mod:
@@ -105,6 +107,7 @@ def perform_add_modifier(meshes, which_modifier):
         for mesh in meshes:
             if mesh.type != "MESH":
                 continue
+            bpy.context.view_layer.objects.active = mesh
             name = "Final - Decimate"
             mod = mesh.modifiers.get(name)
             if mod:
@@ -131,6 +134,7 @@ def perform_add_modifier(meshes, which_modifier):
         for mesh in meshes:
             if mesh.type != "MESH":
                 continue
+            bpy.context.view_layer.objects.active = mesh
             name = "-- Outline"
             mod = mesh.modifiers.get(name)
             if mod:
@@ -150,9 +154,6 @@ def perform_add_modifier(meshes, which_modifier):
 
             if "-- Outline" in mesh.vertex_groups:
                 mod.vertex_group = "-- Outline"
-
-            # Set mesh as active
-            bpy.context.view_layer.objects.active = mesh
 
             # If anywhere in the list, remove
             for i in reversed(range(len(mesh.material_slots))):
