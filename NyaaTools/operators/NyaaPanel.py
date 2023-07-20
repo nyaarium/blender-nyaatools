@@ -331,6 +331,12 @@ class NyaaPanel(bpy.types.Panel):
 
             box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
+
+            row = box.row(align=True)
+            row.label(text="Don't touch unless you're")
+            row = box.row(align=True)
+            row.label(text="mocap/animating in Blender")
+
             row = box.row(align=True)
 
             op = row.operator(
@@ -345,16 +351,16 @@ class NyaaPanel(bpy.types.Panel):
             op.which_pose = "t-pose"
             op.apply_pose = True
 
-            box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
-            row = box.row(align=True)
+            # box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
+            # row = box.row(align=True)
 
-            op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
-            op.which_pose = "a-pose"
-            op.apply_pose = False
+            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
+            # op.which_pose = "a-pose"
+            # op.apply_pose = False
 
-            op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
-            op.which_pose = "t-pose"
-            op.apply_pose = False
+            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
+            # op.which_pose = "t-pose"
+            # op.apply_pose = False
 
         elif not has_selection:
             box = layout.box()
