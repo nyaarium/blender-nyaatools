@@ -6,4 +6,6 @@
 
 ### Release Notes
 
-- Improved Nyaa Normalization a bunch. Better finger bones detection, and A/T posing
+- Fixed a bad Merge & Export bug where armature would be deleted if you started in Pose Mode (#19)
+
+- Fixed some bugs related to hidden collections (#19, #27)
