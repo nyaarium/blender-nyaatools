@@ -9,6 +9,8 @@ from .find_bone import find_bone
 from .find_meshes_affected_by_armature_modifier import (
     find_meshes_affected_by_armature_modifier,
 )
+from ..common.deselect_all import deselect_all
+from ..common.selection_add import selection_add
 from ..consts import A_POSE_SHOULDER_ANGLE
 
 
@@ -24,13 +26,27 @@ def normalize_armature_pose(
 
     debug_print("Starting normalize_armature_pose()")
 
+    #################
     # Find all meshes that have an armature modifier with this armature
     affected_meshes = find_meshes_affected_by_armature_modifier(armature)
     total_shapekeys = 0
     for mesh, modifier in affected_meshes:
+        # Show in viewport
+        selection_add(mesh)
+        modifier.show_viewport = True
+        modifier.use_deform_preserve_volume = True
+        mesh.hide_viewport = False
+
         if mesh.data.shape_keys != None:
             total_shapekeys += len(mesh.data.shape_keys.key_blocks)
 
+        if callback_progress_tick != None:
+            callback_progress_tick()
+
+    deselect_all()
+    #################
+
+    selection_add(armature)
     clear_pose(armature)
 
     should_apply = False
@@ -362,3 +378,18 @@ def normalize_armature_pose(
         eb_shoulder_l.parent = eb_chest
         eb_shoulder_r.parent = eb_chest
         armature.data.edit_bones.remove(eb_realign_shoulder)
+
+    ################
+    # Eye Length
+
+    EYE_LENGTH = 0.05
+    eb_eye_l = find_bone("edit", armature, "Eye.L")
+    eb_eye_r = find_bone("edit", armature, "Eye.R")
+    if (eb_eye_l.tail.z - eb_eye_l.head.z) != EYE_LENGTH:
+        eb_eye_l.tail.x = eb_eye_l.head.x
+        eb_eye_l.tail.y = eb_eye_l.head.y
+        eb_eye_l.tail.z = eb_eye_l.head.z + EYE_LENGTH
+
+        eb_eye_r.tail.x = eb_eye_r.head.x
+        eb_eye_r.tail.y = eb_eye_r.head.y
+        eb_eye_r.tail.z = eb_eye_r.head.z + EYE_LENGTH

@@ -298,10 +298,14 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            row = row.split(factor=0.5)
-
             op = row.operator("nyaa.add_modifier", text="Decimate")
             op.which_modifier = "Decimate"
+
+            op = row.operator("nyaa.add_modifier", text="Outline")
+            op.which_modifier = "Outline"
+
+            # To fill in an empty cell
+            # row = row.split(factor=0.5)
 
             box.label(text="Modifier with Shape Keys", icon="SHAPEKEY_DATA")
             row = box.row(align=True)
@@ -318,7 +322,21 @@ class NyaaPanel(bpy.types.Panel):
 
         if is_armature:
             box = layout.box()
+            box.label(text="Armature", icon="OUTLINER_OB_ARMATURE")
+            row = box.row(align=True)
+
+            op = row.operator(
+                "nyaa.select_standard_bones", text="Select Standard Bones"
+            )
+
+            box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
+
+            row = box.row(align=True)
+            row.label(text="Don't touch unless you're")
+            row = box.row(align=True)
+            row.label(text="mocap/animating in Blender")
+
             row = box.row(align=True)
 
             op = row.operator(
@@ -333,16 +351,16 @@ class NyaaPanel(bpy.types.Panel):
             op.which_pose = "t-pose"
             op.apply_pose = True
 
-            box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
-            row = box.row(align=True)
+            # box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
+            # row = box.row(align=True)
 
-            op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
-            op.which_pose = "a-pose"
-            op.apply_pose = False
+            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
+            # op.which_pose = "a-pose"
+            # op.apply_pose = False
 
-            op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
-            op.which_pose = "t-pose"
-            op.apply_pose = False
+            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
+            # op.which_pose = "t-pose"
+            # op.apply_pose = False
 
         elif not has_selection:
             box = layout.box()

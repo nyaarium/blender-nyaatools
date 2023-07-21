@@ -65,7 +65,7 @@ def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
     if apply_rest_pose:
         # Only during apply mode
         affected_meshes = find_meshes_affected_by_armature_modifier(armature)
-        progress_total += len(affected_meshes)
+        progress_total += 2 * len(affected_meshes)
         for mesh, modifier in affected_meshes:
             if mesh.data.shape_keys != None:
                 total_shapekeys += len(mesh.data.shape_keys.key_blocks)
