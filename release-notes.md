@@ -18,4 +18,4 @@
   - Network paths: `\\wsl$\Ubuntu\home\nyaarium\my-stuff`
   - Relative path: `../../Unity/Assets/Avatar/avatar.fbx`
 
-- Improved bone detection
+- Greatly improved breast detection, and all bone detection in general (#18)
