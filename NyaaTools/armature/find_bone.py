@@ -6,10 +6,13 @@ from ..bone_desc_map import BONE_DESC_MAP
 
 # returns bone or None that is most likely to be the bone_desc_name described in bones_map
 def find_bone(
-    which, armature: bpy.types.Armature, bone_desc_name: str
+    which,
+    armature: bpy.types.Armature,
+    bone_desc_name: str,
+    parent_override=None,
 ) -> bpy.types.EditBone:
     def debug_print(*msgs):
-        print("   ", *msgs)
+        # print("   ", *msgs)
         return
 
     if which not in ["edit", "pose"]:
@@ -35,28 +38,32 @@ def find_bone(
             raise TypeError("bone_desc_name must be type str")
 
         # This check only happens if there is a parent to compare
-        if bone.parent and BONE_DESC_MAP[bone_desc_name]["parent"] and stop_counter < 3:
+        if bone.parent and stop_counter < 3:
             parent_name = bone.parent.name
+            parent_desc_name = ""
 
-            # Parent descriptor
-            parent_desc_name = BONE_DESC_MAP[bone_desc_name]["parent"]
+            if parent_override != None:
+                parent_desc_name = parent_override
+            elif BONE_DESC_MAP[bone_desc_name]["parent"]:
+                parent_desc_name = BONE_DESC_MAP[bone_desc_name]["parent"]
 
-            # If exact match, return bone
-            if parent_name == parent_desc_name:
-                debug_print("* Exact match ", parent_name, " == ", parent_desc_name)
-                return 1
+            if parent_desc_name:
+                # If exact match, return bone
+                if parent_name == parent_desc_name:
+                    debug_print("* Exact match ", parent_name, " == ", parent_desc_name)
+                    return 1
 
-            debug_print("Comparing ", parent_name, " to ", parent_desc_name)
+                debug_print("Comparing ", parent_name, " to ", parent_desc_name)
 
-            # If the parent is a match, return the bone
-            if 0.8 <= similarity_to_common_names(parent_name, parent_desc_name):
-                debug_print(bone.name, " seems to be ", bone_desc_name)
-                return probability_parent(
-                    parent_desc_name, bone.parent, stop_counter + 1
-                )
-            else:
-                debug_print("* Not a match!")
-                return 0
+                # If the parent is a match, return the bone
+                if 0.8 <= similarity_to_common_names(parent_name, parent_desc_name):
+                    debug_print(bone.name, " seems to be ", bone_desc_name)
+                    return probability_parent(
+                        parent_desc_name, bone.parent, stop_counter + 1
+                    )
+                else:
+                    debug_print("* Not a match!")
+                    return 0
 
         s = similarity_to_common_names(bone.name, bone_desc_name)
         s += 0.1 * stop_counter
@@ -165,7 +172,7 @@ def find_bone(
         )
         return max(likely_bone, key=lambda b: b[0])[1]
 
-    else:
+    elif parent_override == None:
         # Check immediate bones, and if they look like what BONE_DESC_MAP describes, add them to likely_bone
         for bone in bone_matches:
             if bone.children:
