@@ -59,16 +59,21 @@ def normalize_armature_pose(
     if callback_progress_tick != None:
         callback_progress_tick()
 
-    if abta(armature, find_bone("edit", armature, "Toes.L"), 0, -1, 0):
-        should_apply = True
-    if callback_progress_tick != None:
-        callback_progress_tick()
-
     # Align ankle to y-axis
-    if abta(armature, find_bone("pose", armature, "Foot.L"), 0, -1, 0):
-        should_apply = True
-    if callback_progress_tick != None:
-        callback_progress_tick()
+
+    eb_toes_l = find_bone("edit", armature, "Toes.L")
+    if eb_toes_l:
+        if abta(armature, eb_toes_l, 0, -1, 0):
+            should_apply = True
+        if callback_progress_tick != None:
+            callback_progress_tick()
+
+    eb_toes_r = find_bone("edit", armature, "Toes.R")
+    if eb_toes_r:
+        if abta(armature, eb_toes_r, 0, -1, 0):
+            should_apply = True
+        if callback_progress_tick != None:
+            callback_progress_tick()
 
     ################
     # Arm
@@ -231,10 +236,12 @@ def normalize_armature_pose(
         callback_progress_tick()
 
     # Align toes to y-axis
-    if abta(armature, find_bone("pose", armature, "Toes.L"), 0, -1, 0):
-        should_apply = True
-    if callback_progress_tick != None:
-        callback_progress_tick()
+    pb_toes_l = find_bone("pose", armature, "Toes.L")
+    if pb_toes_l:
+        if abta(armature, pb_toes_l, 0, -1, 0):
+            should_apply = True
+        if callback_progress_tick != None:
+            callback_progress_tick()
 
     ################
     # Shoulder Realignment - Temporarily attach to realign_temp_bone
@@ -382,14 +389,34 @@ def normalize_armature_pose(
     ################
     # Eye Length
 
-    EYE_LENGTH = 0.05
+    DEFAULT_LENGTH = 0.05
     eb_eye_l = find_bone("edit", armature, "Eye.L")
     eb_eye_r = find_bone("edit", armature, "Eye.R")
-    if (eb_eye_l.tail.z - eb_eye_l.head.z) != EYE_LENGTH:
+    if (eb_eye_l.tail.z - eb_eye_l.head.z) != DEFAULT_LENGTH:
         eb_eye_l.tail.x = eb_eye_l.head.x
         eb_eye_l.tail.y = eb_eye_l.head.y
-        eb_eye_l.tail.z = eb_eye_l.head.z + EYE_LENGTH
+        eb_eye_l.tail.z = eb_eye_l.head.z + DEFAULT_LENGTH
 
         eb_eye_r.tail.x = eb_eye_r.head.x
         eb_eye_r.tail.y = eb_eye_r.head.y
-        eb_eye_r.tail.z = eb_eye_r.head.z + EYE_LENGTH
+        eb_eye_r.tail.z = eb_eye_r.head.z + DEFAULT_LENGTH
+
+    ################
+    # Breast Root
+
+    eb_breast_root = find_bone("edit", armature, "Breast Root")
+    if eb_breast_root:
+        eb_chest = find_bone("edit", armature, "Chest")
+        eb_breast_l = find_bone("edit", armature, "Breast.L")
+
+        eb_breast_root.head = (
+            0,
+            eb_chest.head.y - 0.02,
+            eb_breast_l.head.z,
+        )
+
+        eb_breast_root.tail = (
+            0,
+            eb_chest.head.y - 0.02,
+            eb_breast_l.head.z + DEFAULT_LENGTH,
+        )

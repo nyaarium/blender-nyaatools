@@ -17,7 +17,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (3, 0, 0),
-    "version": (1, 3, 1),
+    "version": (1, 4, 0),
     "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
     "location": "Tool > NyaaTools",
     "category": "Object",
