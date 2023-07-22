@@ -123,10 +123,27 @@ def find_bone(
         if bone.name in BONE_DESC_MAP:
             continue
 
+        # Depending on mirrorness and x-threshold, skip
+        if BONE_DESC_MAP[bone_desc_name]["mirror"]:
+            if abs(bone.head.x) <= 0.001 and abs(bone.tail.x) <= 0.001:
+                continue
+        else:
+            if not (abs(bone.head.x) <= 0.001 and abs(bone.tail.x) <= 0.001):
+                continue
+
+        # If wrong x-axis side, skip
+        if BONE_DESC_MAP[bone_desc_name]["mirror"]:
+            if bone_desc_name.endswith(".L"):
+                if bone.head.x < 0:
+                    continue
+            elif bone_desc_name.endswith(".R"):
+                if 0 < bone.head.x:
+                    continue
+
         if 0.75 <= similarity_to_common_names(bone.name, bone_desc_name):
             bone_matches.append(bone)
 
-    debug_print("Similar names:", [b.name for b in bone_matches])
+    debug_print(bone_desc_name + ": Similar names:", [b.name for b in bone_matches])
 
     if len(bone_matches) == 0:
         return None
@@ -142,22 +159,36 @@ def find_bone(
 
     # If a likely one was found, return the max of likely_bone[1]
     if len(likely_bone):
-        debug_print("Very likely matches:", [(b[1].name) for b in likely_bone])
+        debug_print(
+            bone_desc_name + ": Very likely matches:",
+            [(b[1].name) for b in likely_bone],
+        )
         return max(likely_bone, key=lambda b: b[0])[1]
 
-    # Check immediate bones, and if they look like what BONE_DESC_MAP describes, add them to likely_bone
-    if bone.children:
+    else:
+        # Check immediate bones, and if they look like what BONE_DESC_MAP describes, add them to likely_bone
         for bone in bone_matches:
-            if check_child(bone_desc_name, bone):
-                likely_bone.append(
-                    [similarity_to_common_names(bone.name, bone_desc_name), bone]
+            if bone.children:
+                for bone in bone_matches:
+                    if check_child(bone_desc_name, bone):
+                        likely_bone.append(
+                            [
+                                similarity_to_common_names(bone.name, bone_desc_name),
+                                bone,
+                            ]
+                        )
+
+                debug_print(
+                    bone_desc_name + ": Likely matches:",
+                    [(b[1].name) for b in likely_bone],
                 )
 
-        debug_print("Likely matches:", [(b[1].name) for b in likely_bone])
-
-        # If a likely one was found, return it
-        if len(likely_bone):
-            debug_print("Very likely matches:", [(b[1].name) for b in likely_bone])
-            return max(likely_bone, key=lambda b: b[0])[1]
+                # If a likely one was found, return it
+                if len(likely_bone):
+                    debug_print(
+                        bone_desc_name + ": Very likely matches:",
+                        [(b[1].name) for b in likely_bone],
+                    )
+                    return max(likely_bone, key=lambda b: b[0])[1]
 
     return None

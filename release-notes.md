@@ -17,3 +17,5 @@
   - Absolute paths: `D:/My stuff`
   - Network paths: `\\wsl$\Ubuntu\home\nyaarium\my-stuff`
   - Relative path: `../../Unity/Assets/Avatar/avatar.fbx`
+
+- Improved bone detection
