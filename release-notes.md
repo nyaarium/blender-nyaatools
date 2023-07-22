@@ -6,6 +6,10 @@
 
 ### Release Notes
 
+- "Apply Top Modifier" now runs it for all selected meshes
+
+- Added an Outline modifier button. ⚠️ Suitable for renders, not game exports.
+
 - Fixed a bad Merge & Export bug where armature would be deleted if you started in Pose Mode (#19)
 
 - Fixed some bugs related to hidden collections (#19, #27)
@@ -18,4 +22,8 @@
   - Network paths: `\\wsl$\Ubuntu\home\nyaarium\my-stuff`
   - Relative path: `../../Unity/Assets/Avatar/avatar.fbx`
 
+_Nyaa's Normalization:_
+
 - Greatly improved breast detection, and all bone detection in general (#18)
+
+- Added a "Select Standard Bones" button
