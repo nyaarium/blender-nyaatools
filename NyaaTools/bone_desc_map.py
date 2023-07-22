@@ -94,6 +94,7 @@ BONE_DESC_MAP = {
         "parent": "Foot.L",
         "children": None,
         "mirror": "Toes.R",
+        "optional": True,
     },
     "Upper Leg.R": {
         "common_names": ["Upper Leg.R", "Thigh.R", "Leg.R", "Right Leg"],
@@ -122,6 +123,7 @@ BONE_DESC_MAP = {
         "parent": "Foot.R",
         "children": None,
         "mirror": "Toes.L",
+        "optional": True,
     },
     "Shoulder.L": {
         "common_names": ["Shoulder.L", "Left Shoulder"],
