@@ -5,10 +5,15 @@ from ..bone_desc_map import BONE_DESC_MAP
 from ..consts import A_POSE_SHOULDER_ANGLE
 
 
-def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
+def normalize_armature_roll_bones(
+    armature: bpy.types.Armature, which_pose, apply_roll=False
+):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
+
+    if not isinstance(apply_roll, bool):
+        raise Exception("apply_roll must be a boolean")
 
     debug_print("Starting normalize_armature_roll_bones()")
 
@@ -24,6 +29,12 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
 
         # Get bone
         bone = armature.data.edit_bones[bone_desc_name]
+
+        # Clear roll instead if !apply_roll
+        if not apply_roll:
+            debug_print("Clearing roll of", bone.name)
+            bone.roll = 0
+            continue
 
         desc_roll = 0
 
@@ -42,7 +53,16 @@ def normalize_armature_roll_bones(armature: bpy.types.Armature, which_pose):
                 debug_print("For A-Pose, shoulder", desc_roll)
 
             # Arm and below:
-            if sw("Upper Arm") or sw("Lower Arm") or sw("Hand") or sw("Thumb") or sw("Index") or sw("Middle") or sw("Ring") or sw("Little"):
+            if (
+                sw("Upper Arm")
+                or sw("Lower Arm")
+                or sw("Hand")
+                or sw("Thumb")
+                or sw("Index")
+                or sw("Middle")
+                or sw("Ring")
+                or sw("Little")
+            ):
                 r = 45
                 if bone_desc_name.endswith(".R"):
                     r *= -1

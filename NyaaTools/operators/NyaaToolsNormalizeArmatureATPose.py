@@ -24,12 +24,18 @@ class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
     which_pose: StringProperty(name="Which Pose", default="")
     apply_pose: BoolProperty(name="Apply Pose", default=True)
 
+    apply_roll: BoolProperty(
+        name="Roll Bones",
+        description="Roll bones such that rotation on local X rotates along the joint. Suitable for posing and animating in Blender. Not so suitable for game character mods.",
+        default=False,
+    )
+
     def execute(self, context):
         try:
             armature = selection_get_armature()
 
             if self.apply_pose:
-                perform_normalize_armature(armature, self.which_pose)
+                perform_normalize_armature(armature, self.which_pose, self.apply_roll)
             else:
                 perform_fast_pose(armature, self.which_pose)
             return {"FINISHED"}
@@ -39,12 +45,15 @@ class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
             return {"CANCELLED"}
 
 
-def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
+def perform_normalize_armature(armature, which_pose, apply_roll=False):
     if armature == None or armature.type != "ARMATURE":
         raise Exception("Expected an armature")
 
     if not which_pose in {"a-pose", "t-pose"}:
         raise Exception("which_pose must be a-pose or t-pose")
+
+    if not isinstance(apply_roll, bool):
+        raise Exception("apply_roll must be a boolean")
 
     wm = bpy.context.window_manager
 
@@ -62,15 +71,14 @@ def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
     # - Total number of shape keys in affected meshes
     progress_total += 36
     total_shapekeys = 0
-    if apply_rest_pose:
-        # Only during apply mode
-        affected_meshes = find_meshes_affected_by_armature_modifier(armature)
-        progress_total += 2 * len(affected_meshes)
-        for mesh, modifier in affected_meshes:
-            if mesh.data.shape_keys != None:
-                total_shapekeys += len(mesh.data.shape_keys.key_blocks)
 
-        progress_total += total_shapekeys
+    affected_meshes = find_meshes_affected_by_armature_modifier(armature)
+    progress_total += 2 * len(affected_meshes)
+    for mesh, modifier in affected_meshes:
+        if mesh.data.shape_keys != None:
+            total_shapekeys += len(mesh.data.shape_keys.key_blocks)
+
+    progress_total += total_shapekeys
 
     ######################
     ##  Begin progress  ##
@@ -85,12 +93,10 @@ def perform_normalize_armature(armature, which_pose, apply_rest_pose=True):
     normalize_armature_rename_bones(armature)
 
     # Set T-Pose
-    normalize_armature_pose(
-        armature, which_pose, apply_rest_pose, callback_progress_tick
-    )
+    normalize_armature_pose(armature, which_pose, True, callback_progress_tick)
 
     # Set roll
-    normalize_armature_roll_bones(armature, which_pose)
+    normalize_armature_roll_bones(armature, which_pose, apply_roll)
 
     bpy.ops.object.mode_set(mode="OBJECT")
 
