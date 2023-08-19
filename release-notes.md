@@ -27,3 +27,7 @@ _Nyaa's Normalization:_
 - Greatly improved breast detection, and all bone detection in general (#18)
 
 - Added a "Select Standard Bones" button
+
+- Roll normalization now optional. Closes #24
+
+- Changed bone rolls to better represent rotation on the joints.
