@@ -6,6 +6,10 @@
 
 ### Release Notes
 
+- Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
+
+- Added a "Select Standard Bones" button
+
 - "Apply Top Modifier" now runs it for all selected meshes
 
 - Added an Outline modifier button. ⚠️ Suitable for renders, not game exports.
@@ -26,8 +30,6 @@ _Nyaa's Normalization:_
 
 - Greatly improved breast detection, and all bone detection in general (#18)
 
-- Added a "Select Standard Bones" button
-
-- Roll normalization now optional. Closes #24
+- Roll normalization now optional. Defaults to false. (#24)
 
 - Changed bone rolls to better represent rotation on the joints.

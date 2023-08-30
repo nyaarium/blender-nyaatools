@@ -5,6 +5,7 @@ from .operators.NyaaToolsAddModifier import NyaaToolsAddModifier
 from .operators.NyaaToolsAvatarMergeExport import NyaaToolsAvatarMergeExport
 from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatarArmature
 from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
+from .operators.NyaaToolsDissolveBones import NyaaToolsDissolveBones
 from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
@@ -30,6 +31,7 @@ classes = [
     NyaaToolsAvatarMergeExport,
     NyaaToolsConfigureAvatarArmature,
     NyaaToolsConfigureMeshesOnAvatar,
+    NyaaToolsDissolveBones,
     NyaaToolsMeshCleanup,
     NyaaToolsNormalizeArmatureATPose,
     NyaaToolsRemoveMeshesFromAvatar,

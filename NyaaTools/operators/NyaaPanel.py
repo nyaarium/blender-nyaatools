@@ -329,6 +329,10 @@ class NyaaPanel(bpy.types.Panel):
                 "nyaa.select_standard_bones", text="Select Standard Bones"
             )
 
+            row = box.row(align=True)
+
+            op = row.operator("nyaa.dissolve_bones", text="Dissolve Bones")
+
             box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
 
