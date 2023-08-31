@@ -12,6 +12,6 @@
 
 _Nyaa's Normalization:_
 
-- Roll normalization now optional. Defaults to false. (#24)
+- Roll normalization now optional. Defaults to true. (#24)
 
 - Changed bone rolls to better represent rotation on the joints.

@@ -27,7 +27,7 @@ class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
     apply_roll: BoolProperty(
         name="Roll Bones",
         description="Roll bones such that rotation on local X rotates along the joint. Suitable for posing and animating in Blender. Not so suitable for game character mods.",
-        default=False,
+        default=True,
     )
 
     def execute(self, context):
