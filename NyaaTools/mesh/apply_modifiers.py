@@ -5,21 +5,23 @@ from ..common.selection_add import selection_add
 
 
 def apply_modifiers(obj):
-    if (obj == None):
-        raise BaseException(
-            "applyModifiers() :: Expected a mesh object, got: None")
+    if obj == None:
+        raise BaseException("applyModifiers() :: Expected a mesh object, got: None")
 
     selection_add(obj)
 
     for modifier in obj.modifiers:
-        if (modifier.name == "Armature" or modifier.name.startswith("--")):
+        if (
+            modifier.name == "Armature"
+            or modifier.name.startswith("MToon")
+            or modifier.name.startswith("--")
+        ):
             bpy.ops.object.modifier_remove(modifier=modifier.name)
         else:
             bpy.ops.object.modifier_apply(modifier=modifier.name)
 
     try:
-        bpy.ops.object.transform_apply(
-            location=True, rotation=True, scale=True)
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     except:
         None
 
