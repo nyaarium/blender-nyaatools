@@ -59,9 +59,10 @@ def perform_merge_export(avatar_name):
     bpy.context.scene.collection.children.link(export_col)
     export_col.color_tag = "COLOR_01"
 
-    # Rename all objects to avoid collisions
+    # Rename all objects except EMPTYs, to avoid collisions
     for obj in bpy.data.objects:
-        obj.name = "____" + obj.name
+        if obj.type != "EMPTY":
+            obj.name = "____" + obj.name
 
     # Rename & move Armature to exports
     armature.name = "Armature"
@@ -96,7 +97,7 @@ def perform_merge_export(avatar_name):
         else:
             print("    BUG: Mesh doesn't exist, skipping for now:  " + meshName)
 
-    # Cleanup temp objects
+    # Delete everything else except EMPTYs
     for obj in bpy.data.objects:
         if obj.name.startswith("____"):
             bpy.data.objects.remove(obj)
@@ -105,6 +106,17 @@ def perform_merge_export(avatar_name):
     for obj in bpy.data.objects:
         if obj.type == "MESH":
             cleanup_mesh(obj)
+
+    # Purge orphaned data
+    bpy.ops.outliner.orphans_purge(do_recursive=True)
+
+    # Export EMPTYs that have users, otherwise delete them
+    for obj in bpy.data.objects:
+        if obj.type == "EMPTY":
+            if obj.users != 1:
+                bpy.data.collections["__Export Temp__"].objects.link(obj)
+            else:
+                bpy.data.objects.remove(obj)
 
     for col in bpy.context.scene.collection.children:
         if col.name != "__Export Temp__":
@@ -115,6 +127,10 @@ def perform_merge_export(avatar_name):
     select_collection(EXPORT_COLLECTION)
 
     deselect_all()
+
+    # Purge orphaned data
+    bpy.ops.outliner.orphans_purge(do_recursive=True)
+
     selection_add(armature)
 
     if get_prop(armature, PROP_AVATAR_EXPORT_PATH):
