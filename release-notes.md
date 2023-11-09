@@ -6,6 +6,12 @@
 
 ### Release Notes
 
+- Merge & Export now skips applying the "MToon Outline" modifier in prep for VRM avatars
+
+- Merge & Export now keeps **EMPTY**s that are in use, in prep for VRM avatar exporting
+
+- Merge & Export now finishes up by recursive pruning unused data
+
 - Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
 
 - Added a "Select Standard Bones" button
