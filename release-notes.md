@@ -12,6 +12,8 @@
 
 - Merge & Export now finishes up by recursive pruning unused data
 
+- Merge and Export removes UV Maps beginning with "--"
+
 - Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
 
 - Added a "Select Standard Bones" button

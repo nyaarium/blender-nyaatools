@@ -26,6 +26,11 @@ def merge_onto_avatar_layer(targetName, sourceName, armature=None):
         source = clone_to_export(source)
         apply_modifiers(source)
 
+        # Remove UV maps beginning with "--"
+        for uv in source.data.uv_layers:
+            if uv.name.startswith("--"):
+                source.data.uv_layers.remove(uv)
+
         # print("    [ merge layer ] Copied  " + source.name + "  to merge on  " + targetName)
 
         # Ensure UV Maps match
@@ -44,6 +49,11 @@ def merge_onto_avatar_layer(targetName, sourceName, armature=None):
         source.name = targetName
         source.data.name = targetName
         apply_modifiers(source)
+
+        # Remove UV maps beginning with "--"
+        for uv in source.data.uv_layers:
+            if uv.name.startswith("--"):
+                source.data.uv_layers.remove(uv)
 
         # print("    [ new layer ] Copied  " + source.name + "  as  " + targetName)
 
