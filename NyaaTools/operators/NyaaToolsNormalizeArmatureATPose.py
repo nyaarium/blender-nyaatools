@@ -15,18 +15,18 @@ from ..bone_desc_map import BONE_DESC_MAP
 
 
 class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
-    """Normalizes armatures to my preferred A or T pose layout"""
+    """Normalizes armatures to Nyaa's preferred A or T pose layout"""
 
     bl_idname = "nyaa.normalize_armature_at_pose"
     bl_label = "Enforce Pose"
     bl_options = {"REGISTER", "UNDO"}
 
-    which_pose: StringProperty(name="Which Pose", default="")
+    which_pose: StringProperty(name="Which Pose", default="t-pose")
     apply_pose: BoolProperty(name="Apply Pose", default=True)
 
     apply_roll: BoolProperty(
         name="Roll Bones",
-        description="Roll bones such that rotation on local X rotates along the joint. Suitable for posing and animating in Blender. Not so suitable for game character mods.",
+        description="Roll bones such that rotation on Local-X rotates along the joint. Suitable for posing and animating in Blender. Might not be suitable for all video game mods? Just try it.",
         default=True,
     )
 
