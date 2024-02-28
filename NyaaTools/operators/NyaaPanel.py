@@ -16,7 +16,7 @@ from ..consts import (
 class NyaaPanel(bpy.types.Panel):
     bl_label = "NyaaTools v" + ".".join(str(i) for i in VERSION)
     bl_idname = "OBJECT_PT_NYAAPANEL"
-    bl_category = "Tool"
+    bl_category = "NyaaTools"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
 
