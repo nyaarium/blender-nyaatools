@@ -8,6 +8,8 @@
 
 - Moved to NyaaTools to **N-Panel > NyaaTools** (#41)
 
+- Merge & Export now skips armature modifiers that point to any Avatar (#33, #34)
+
 - Merge & Export now skips applying the "MToon Outline" modifier in prep for VRM avatars
 
 - Merge & Export now keeps **EMPTY**s that are in use, in prep for VRM avatar exporting
