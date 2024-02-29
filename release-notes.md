@@ -2,32 +2,30 @@
 
 > - Be sure to **restart Blender** after updating this addon. Not sure why it wont update without a restart. (issue #10)
 >
-> - Like much of other Blender operators, most of my buttons will open a **small panel** to the bottom left of your 3D viewport, where you can enter the settings.
+> - Like most Blender operators, my buttons will open a **small panel** to the bottom left of your 3D viewport, where you can enter the settings. Expand it to configure settings.
 
 ### Release Notes
 
-- "Apply Top Modifier" now runs it for all selected meshes
+- Moved to NyaaTools to **N-Panel > NyaaTools** (#41)
 
-- Added an Outline modifier button. ⚠️ Suitable for renders, not game exports.
+- Merge & Export now skips armature modifiers that point to any Avatar (#33, #34)
 
-- Fixed a bad Merge & Export bug where armature would be deleted if you started in Pose Mode (#19)
+- Merge & Export now skips applying the "MToon Outline" modifier in prep for VRM avatars
 
-- Fixed some bugs related to hidden collections (#19, #27)
+- Merge & Export now keeps **EMPTY**s that are in use, in prep for VRM avatar exporting
 
-- Improved path handling for Export:
+- Merge & Export now finishes up by recursive pruning unused data
 
-  - Handles either slashes
-  - Can omit directory or filename. Both `D:/My Stuff` and `Avatar.fbx` are valid paths.
-  - Absolute paths: `D:/My stuff`
-  - Network paths: `\\wsl$\Ubuntu\home\nyaarium\my-stuff`
-  - Relative path: `../../Unity/Assets/Avatar/avatar.fbx`
+- Merge and Export removes UV Maps beginning with "--"
 
-_Nyaa's Normalization:_
+- Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
 
-- Greatly improved breast detection, and all bone detection in general (#18)
+- Fixed some unpredictable Dissolve Bones bugs (#37)
 
 - Added a "Select Standard Bones" button
 
-- Roll normalization now optional. Closes #24
+_Nyaa's Normalization:_
+
+- Roll normalization now optional. Defaults to true. (#24, #42)
 
 - Changed bone rolls to better represent rotation on the joints.
