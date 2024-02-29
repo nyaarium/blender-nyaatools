@@ -20,6 +20,53 @@ class NyaaToolsDissolveBones(bpy.types.Operator):
             return {"CANCELLED"}
 
 
+def contiguous_check(selected_bones):
+    selected_set = set(selected_bones)
+    
+    top_parent = None
+    leaf_bone = None  # Track the leaf-most bone
+    orphans = []
+
+    # Find the top-most parent in the selection
+    for bone in selected_bones:
+        if bone.parent not in selected_set:
+            if top_parent is not None:
+                raise Exception("Multiple top-most parents found. Make sure your selection is contiguous.")
+            top_parent = bone
+    
+    if top_parent is None:
+        raise Exception("No top-most parent found. Make sure your selection is contiguous.")
+
+    # Traverse from the top_parent down, ensuring all selected bones are connected, and determine orphans
+    def recurse(bone, visited):
+        nonlocal leaf_bone
+        visited.add(bone)
+        # Collect orphans from children of the current bone if it's not the top_parent
+        if bone != top_parent:
+            for child in bone.children:
+                if child not in selected_set:
+                    orphans.append(child)
+        # Continue traversing the selected bones
+        leaf_bone = bone  # Update the leaf-most bone at each step
+        for child in bone.children:
+            if child in selected_set and child not in visited:
+                recurse(child, visited)
+    
+    visited = set()
+    recurse(top_parent, visited)
+    
+    if visited != selected_set:
+        raise Exception("Not all selected bones are in the same chain. Make sure your selection is contiguous.")
+    
+    if leaf_bone is None:
+        raise Exception("No leaf-most bone found. Make sure your selection is contiguous.")
+    
+    # Get the tail position of the leaf-most bone
+    tail_position = leaf_bone.tail
+    
+    return top_parent, orphans, tail_position
+
+
 def perform_dissolve_bones():
     obj = bpy.context.view_layer.objects.active
     if obj == None or obj.type != "ARMATURE":
@@ -28,21 +75,24 @@ def perform_dissolve_bones():
     if bpy.context.mode != "EDIT_ARMATURE":
         raise Exception("Must be in edit mode of an armature")
 
-    def find_starting_point(selected_bones, bone):
-        # If the bone has a parent and the parent is not in the selected bones,
-        # return the parent
-        if bone.parent and bone.parent not in selected_bones:
-            return bone.parent
-        # If the bone has a parent that is in the selected bones,
-        # recursively find the starting point
-        elif bone.parent:
-            return find_starting_point(selected_bones, bone.parent)
-        # If the bone has no parent or its parent is not in the selected bones,
-        # it is the starting point
-        else:
-            return bone
+    selected_bones = bpy.context.selected_bones
+    selected_bones_names = [bone.name for bone in selected_bones]
+    if len(selected_bones) < 2:
+        raise Exception("At least two bones must be selected")
 
-    # Step 1: Loop over all mesh objects and include if it is affected by armature.
+    # Step 1: Verify selection of bones
+    top_parent, orphans, tail_position = contiguous_check(selected_bones)
+    print("Selected bones:", [bone.name for bone in selected_bones])
+    print("Top parent:", top_parent.name)
+    print("Orphans:", [bone.name for bone in orphans])
+    print("Tail position:", tail_position)
+
+    # Step 2: Make selected bones connected if their parent is also selected
+    for bone in selected_bones:
+        if bone.parent and bone.parent in selected_bones:
+            bone.use_connect = True
+
+    # Step 3: Loop over all mesh objects and include if it is affected by armature.
     meshes_affected_by_armature = []
     for mesh in bpy.data.objects:
         if mesh.type == "MESH":
@@ -50,47 +100,47 @@ def perform_dissolve_bones():
                 if mod.type == "ARMATURE":
                     meshes_affected_by_armature.append(mesh)
 
-    # Step 2: Get selection of bones from current selection
-    selected_bones = bpy.context.selected_bones
-    print("Selected bones:", selected_bones)
-
-    # Step 3: Loop over selected bones and make them connected if their parent is also selected
-    for bone in selected_bones:
-        if bone.parent in selected_bones:
-            bone.use_connect = True
-
     # Step 4: Loop over meshes and combine the affected vertex group weights.
     for mesh in meshes_affected_by_armature:
+        vg_names_to_remove = []
+        
         for bone in selected_bones:
-            starting_bone = find_starting_point(selected_bones, bone)
-            print("Starting bone:", starting_bone.name, "  Bone:", bone.name)
-
-            # Get the vertex group for the bone
+            # Get the vertex group for the bone (skip if not found)
             vg = mesh.vertex_groups.get(bone.name)
-
-            # If the vertex group exists
             if vg:
-                # Get the vertex group for the starting bone
-                starting_vg = mesh.vertex_groups.get(starting_bone.name)
-
-                # If the starting vertex group doesn't exist, create it
-                if not starting_vg:
-                    starting_vg = mesh.vertex_groups.new(name=starting_bone.name)
+                if bone != top_parent:
+                    vg_names_to_remove.append(bone.name)
+                
+                # Get the vertex group for the top bone (create if not found)
+                top_vg = mesh.vertex_groups.get(top_parent.name)
+                if not top_vg:
+                    top_vg = mesh.vertex_groups.new(name=top_parent.name)
 
                 # Loop over the vertices in the vertex group
                 for vert in mesh.data.vertices:
-                    # Try to get the weight of the vertex for the current bone
                     try:
                         weight = vg.weight(vert.index)
 
-                        # Add the weight to the starting bone's vertex group
-                        starting_vg.add([vert.index], weight, "ADD")
+                        # Add the weight to the top bone's vertex group
+                        top_vg.add([vert.index], weight, "ADD")
                     except RuntimeError:
                         continue
 
-                # Remove the current bone's vertex group
-                mesh.vertex_groups.remove(vg)
-                print("Removed vertex group:", bone.name)
+        for vg_name in vg_names_to_remove:
+            vg = mesh.vertex_groups.get(vg_name)
+            mesh.vertex_groups.remove(vg)
+            print("Removed vertex group:", mesh.name, ">", vg_name)
 
-    # Step 5: Dissolve bone selection.
-    bpy.ops.armature.dissolve()
+    # Step 5: Reparent orphans to the top parent and move tail
+    for orphan in orphans:
+        orphan.parent = top_parent
+        if orphan.head == top_parent.tail:
+            orphan.use_connect = True
+    top_parent.tail = tail_position
+
+    # Step 6: Delete non-top bones (last because cache destructive)
+    bpy.ops.armature.select_all(action="DESELECT")
+    for bone in selected_bones:
+        if bone != top_parent:
+            bone.select = True
+    bpy.ops.armature.delete(confirm=False)

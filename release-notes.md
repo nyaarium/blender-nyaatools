@@ -20,6 +20,8 @@
 
 - Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
 
+- Fixed some unpredictable Dissolve Bones bugs (#37)
+
 - Added a "Select Standard Bones" button
 
 _Nyaa's Normalization:_
