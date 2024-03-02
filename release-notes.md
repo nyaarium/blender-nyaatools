@@ -6,26 +6,10 @@
 
 ### Release Notes
 
-- Moved to NyaaTools to **N-Panel > NyaaTools** (#41)
+#### 🎉 Major rework to make "Merge & Export" less destructive (#29, #36)
 
-- Merge & Export now skips armature modifiers that point to any Avatar (#33, #34)
+❌ _In previous versions,_ I warned you **_NOT TO SAVE_** after pressing that dangerous "Merge & Export" button.
 
-- Merge & Export now skips applying the "MToon Outline" modifier in prep for VRM avatars
+✅ _Now,_ you can safely press "Merge & Export", and then continue working. It performs the merge in a temporary Blender scene instead of your main scene.
 
-- Merge & Export now keeps **EMPTY**s that are in use, in prep for VRM avatar exporting
-
-- Merge & Export now finishes up by recursive pruning unused data
-
-- Merge and Export removes UV Maps beginning with "--"
-
-- Added "Dissolve Bones" button. Good for reducing hair bones down (#25)
-
-- Fixed some unpredictable Dissolve Bones bugs (#37)
-
-- Added a "Select Standard Bones" button
-
-_Nyaa's Normalization:_
-
-- Roll normalization now optional. Defaults to true. (#24, #42)
-
-- Changed bone rolls to better represent rotation on the joints.
+## 🎊🎊🎊🎊
