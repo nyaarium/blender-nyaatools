@@ -91,6 +91,7 @@ def perform_merge_export(avatar_name):
     # Objects that already exist with some desired name are temporarily renamed. Restore them in the end.
     unrename_info = []
 
+    error = None
     try:
         # Get the avatar name & armature
         avatar_armature = get_avatar_armature(avatar_name)
@@ -141,6 +142,9 @@ def perform_merge_export(avatar_name):
             path = resolve_path(path, avatar_name + ".fbx")
             export_fbx(path)
 
+    except Exception as e:
+        error = e
+
     finally:
         # Cleanup - let the error pass through
 
@@ -154,6 +158,9 @@ def perform_merge_export(avatar_name):
 
             # Restore original names
             renamer_restore(unrename_info)
+
+        if error:
+            raise error
 
 
 def export_fbx(path):
