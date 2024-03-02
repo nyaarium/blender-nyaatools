@@ -1,65 +1,23 @@
 import bpy
 
-from ..avatar.apply_avatar_modifiers import apply_avatar_modifiers
+from ..avatar.apply_avatar_mesh import apply_avatar_mesh
 from ..avatar.asserts import assert_uv_match
 from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
 
 
-def merge_onto_avatar_layer(targetName, sourceName, armature=None):
-    def clone_to_export(obj):
-        if obj == None:
-            raise BaseException("cloneToExport() :: Expected a mesh object, got: None")
-
-        copied = obj.copy()
-        if obj.type == "MESH":
-            copied.data = copied.data.copy()
-        bpy.data.collections["__Export Temp__"].objects.link(copied)
-        return copied
-
-    source = bpy.context.scene.objects.get(sourceName)
-
+def merge_onto_avatar_layer(layer_name, source_obj, armature=None):
+    apply_avatar_mesh(source_obj, armature)
+    
     # Create target if it doesn't exist
-    target = bpy.context.scene.objects.get(targetName)
-    if target != None:
-        # Clone source to be merged onto the target
-        source = clone_to_export(source)
-        apply_avatar_modifiers(source)
-
-        # Remove UV maps beginning with "--"
-        for uv in source.data.uv_layers:
-            if uv.name.startswith("--"):
-                source.data.uv_layers.remove(uv)
-
-        # print("    [ merge layer ] Copied  " + source.name + "  to merge on  " + targetName)
-
+    target = bpy.context.scene.objects[layer_name]
+    if target:
         # Ensure UV Maps match
-        assert_uv_match(target, source)
+        assert_uv_match(target, source_obj)
 
-        # Merge source onto target
+        # Join source_obj onto target
         deselect_all()
-        selection_add(source)
+        selection_add(source_obj)
         selection_add(target)
-
-        # Join
         bpy.ops.object.join()
-    else:
-        # Clone source to be renamed as the new target
-        source = clone_to_export(source)
-        source.name = targetName
-        source.data.name = targetName
-        apply_avatar_modifiers(source)
-
-        # Remove UV maps beginning with "--"
-        for uv in source.data.uv_layers:
-            if uv.name.startswith("--"):
-                source.data.uv_layers.remove(uv)
-
-        # print("    [ new layer ] Copied  " + source.name + "  as  " + targetName)
-
-        if armature != None:
-            source.modifiers.new(name="Armature", type="ARMATURE")
-            source.modifiers["Armature"].object = armature
-            source.parent = armature
-        else:
-            source.parent = None
+        deselect_all()
