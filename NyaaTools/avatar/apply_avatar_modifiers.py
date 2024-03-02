@@ -1,6 +1,7 @@
 import bpy
 
 from ..avatar.list_avatar_armatures import list_avatar_armatures
+from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
 from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
 
@@ -37,11 +38,17 @@ def apply_avatar_modifiers(obj):
             if armature.name in avatar_names:
                 bpy.ops.object.modifier_remove(modifier=modifier.name)
             else:
-                bpy.ops.object.modifier_apply(modifier=modifier.name)
+                applyModifierForObjectWithShapeKeys(
+                    bpy.context,
+                    [modifier.name],
+                    False
+                )
         else:
-            # Apply the modifier
-            
-            bpy.ops.object.modifier_apply(modifier=modifier.name)
+            applyModifierForObjectWithShapeKeys(
+                bpy.context,
+                [modifier.name],
+                False
+            )
 
     try:
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
