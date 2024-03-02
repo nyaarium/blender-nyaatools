@@ -1,9 +1,9 @@
 import bpy
 
+from ..avatar.apply_avatar_modifiers import apply_avatar_modifiers
 from ..avatar.asserts import assert_uv_match
 from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
-from ..mesh.apply_modifiers import apply_modifiers
 
 
 def merge_onto_avatar_layer(targetName, sourceName, armature=None):
@@ -24,7 +24,7 @@ def merge_onto_avatar_layer(targetName, sourceName, armature=None):
     if target != None:
         # Clone source to be merged onto the target
         source = clone_to_export(source)
-        apply_modifiers(source)
+        apply_avatar_modifiers(source)
 
         # Remove UV maps beginning with "--"
         for uv in source.data.uv_layers:
@@ -48,7 +48,7 @@ def merge_onto_avatar_layer(targetName, sourceName, armature=None):
         source = clone_to_export(source)
         source.name = targetName
         source.data.name = targetName
-        apply_modifiers(source)
+        apply_avatar_modifiers(source)
 
         # Remove UV maps beginning with "--"
         for uv in source.data.uv_layers:

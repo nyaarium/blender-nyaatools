@@ -5,7 +5,7 @@ from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
 
 
-def apply_modifiers(obj):
+def apply_avatar_modifiers(obj):
     if obj == None:
         raise BaseException("applyModifiers() :: Expected a mesh object, got: None")
 
