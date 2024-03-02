@@ -1,7 +1,9 @@
+import os
 import bpy
+from pathlib import Path
 
 
-def resolve_path(path):
+def resolve_path(path, default_file_name="Export.fbx"):
     # Replace all slashes
     path = path.replace("\\", "/")
 
@@ -13,7 +15,7 @@ def resolve_path(path):
         file_name = path.split("/")[-1]
         file_path = path[: -len(file_name) - 1]
     else:
-        file_name = avatar_name + ".fbx"
+        file_name = default_file_name
         file_path = path
 
     if len(file_path) == 0:
@@ -32,4 +34,6 @@ def resolve_path(path):
     else:
         path = bpy.path.abspath("//" + file_path + "/" + file_name)
 
-    return path
+    resolved = Path(path).resolve()
+    cleaned = os.path.abspath(resolved)
+    return cleaned
