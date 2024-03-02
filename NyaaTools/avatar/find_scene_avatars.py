@@ -8,7 +8,7 @@ from .get_avatar_layers import get_avatar_layers
 def find_scene_avatars(filter_to_avatar_name = None):
     result = {}
 
-    for obj in bpy.data.objects:
+    for obj in bpy.context.scene.objects:
         obj_layers = get_avatar_layers(obj)
 
         for avatar_name, layer_name in obj_layers:
