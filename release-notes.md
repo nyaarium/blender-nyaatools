@@ -9,3 +9,5 @@
 - Added new operator: **Merge Armatures** (closes #47)
 
   - Select 2 armatures. If one is an **Avatar**, it will be the armature base. Otherwise, make sure you actively `Ctrl + Click` your armature base last.
+
+- Reduced the shapekey cleanup tolerance (fixes #49)
