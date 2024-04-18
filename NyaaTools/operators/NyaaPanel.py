@@ -30,6 +30,7 @@ class NyaaPanel(bpy.types.Panel):
 
         is_armature = False
         is_avatar = False
+        is_exactly_2_armatures = False
         is_mesh = False
         armature = None
         avatar_name = None
@@ -75,6 +76,9 @@ class NyaaPanel(bpy.types.Panel):
                     selected_meshes.append(obj)
 
                     is_mesh = True
+
+            if len(selected_armatures) == 2 and len(selected_meshes) == 0:
+                is_exactly_2_armatures = True
 
             if is_avatar:
                 for mesh in selected_meshes:
@@ -177,9 +181,8 @@ class NyaaPanel(bpy.types.Panel):
                 op.export_path = "./Export.fbx"
 
         elif 1 < len(selected_armatures):
-            box = layout.box()
-            box.label(text="Avatar Armature", icon="OUTLINER_OB_ARMATURE")
-            box.label(text="Select only 1 armature")
+            # To configure Avatar, select 1 armature
+            pass
 
         else:
             box = layout.box()
@@ -320,51 +323,45 @@ class NyaaPanel(bpy.types.Panel):
         #############################################
         # Armature Tools
 
-        if is_armature:
+        if is_armature or is_exactly_2_armatures:
             box = layout.box()
             box.label(text="Armature", icon="OUTLINER_OB_ARMATURE")
             row = box.row(align=True)
 
-            op = row.operator(
-                "nyaa.select_standard_bones", text="Select Standard Bones"
-            )
+            if is_armature:
+                op = row.operator(
+                    "nyaa.select_standard_bones", text="Select Standard Bones"
+                )
 
-            row = box.row(align=True)
+                row = box.row(align=True)
 
-            op = row.operator("nyaa.dissolve_bones", text="Dissolve Bones")
+                op = row.operator("nyaa.dissolve_bones", text="Dissolve Bones")
 
-            box = layout.box()
-            box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
+                box = layout.box()
+                box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
 
-            row = box.row(align=True)
-            row.label(text="Don't touch unless you're")
-            row = box.row(align=True)
-            row.label(text="mocap/animating in Blender")
+                row = box.row(align=True)
+                row.label(text="Don't touch unless you're")
+                row = box.row(align=True)
+                row.label(text="mocap/animating in Blender")
 
-            row = box.row(align=True)
+                row = box.row(align=True)
 
-            op = row.operator(
-                "nyaa.normalize_armature_at_pose", text="A-Pose", icon="ERROR"
-            )
-            op.which_pose = "a-pose"
-            op.apply_pose = True
+                op = row.operator(
+                    "nyaa.normalize_armature_at_pose", text="A-Pose", icon="ERROR"
+                )
+                op.which_pose = "a-pose"
+                op.apply_pose = True
 
-            op = row.operator(
-                "nyaa.normalize_armature_at_pose", text="T-Pose", icon="ERROR"
-            )
-            op.which_pose = "t-pose"
-            op.apply_pose = True
+                op = row.operator(
+                    "nyaa.normalize_armature_at_pose", text="T-Pose", icon="ERROR"
+                )
+                op.which_pose = "t-pose"
+                op.apply_pose = True
 
-            # box.label(text="Quick Pose", icon="OUTLINER_OB_ARMATURE")
-            # row = box.row(align=True)
-
-            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set A-Pose")
-            # op.which_pose = "a-pose"
-            # op.apply_pose = False
-
-            # op = row.operator("nyaa.normalize_armature_at_pose", text="Set T-Pose")
-            # op.which_pose = "t-pose"
-            # op.apply_pose = False
+            if is_exactly_2_armatures:
+                op = row.operator("nyaa.merge_armatures", text="Merge 2 Armatures")
+                
 
         elif not has_selection:
             box = layout.box()
