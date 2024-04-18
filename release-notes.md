@@ -6,13 +6,10 @@
 
 ### Release Notes
 
-#### 🎉 Major rework to make "Merge & Export" less destructive (#29, #36)
+- Added new operator: **Merge Armatures** (closes #47)
 
-- Fixed a Merge & Export bug. Forgot to run the "apply modifiers on object with shapekeys" during export
-  - _(using [przemir/ApplyModifierForObjectWithShapeKeys](https://github.com/przemir/ApplyModifierForObjectWithShapeKeys))_
+  - Select 2 armatures. If one is an **Avatar**, it will be the armature base. Otherwise, make sure you actively `Ctrl + Click` your armature base last.
 
-❌ _In previous versions,_ I warned you **_NOT TO SAVE_** after pressing that dangerous "Merge & Export" button.
+- Adjusted the vertex group & shapekey cleanup tolerances (fixes #32, #49, #50)
 
-✅ _Now,_ you can safely press "Merge & Export", and then continue working. It performs the merge in a temporary Blender scene instead of your main scene.
-
-## 🎊🎊🎊🎊
+- For meshes named "Face", "Head", or "Body" _(when no "face" is present)_, skip cleanup of shapekeys named "vrc.\*" or "v\_\*" (closes #17)

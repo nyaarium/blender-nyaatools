@@ -7,6 +7,7 @@ from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatar
 from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
 from .operators.NyaaToolsDissolveBones import NyaaToolsDissolveBones
 from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
+from .operators.NyaaToolsMergeArmatures import NyaaToolsMergeArmatures
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
 from .operators.NyaaSelectStandardBones import NyaaSelectStandardBones
@@ -17,8 +18,8 @@ from .operators.LinkButton import LinkButton
 bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
-    "blender": (3, 0, 0),
-    "version": (1, 6, 1),
+    "blender": (4, 0, 0),
+    "version": (1, 7, 1),
     "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -33,6 +34,7 @@ classes = [
     NyaaToolsConfigureMeshesOnAvatar,
     NyaaToolsDissolveBones,
     NyaaToolsMeshCleanup,
+    NyaaToolsMergeArmatures,
     NyaaToolsNormalizeArmatureATPose,
     NyaaToolsRemoveMeshesFromAvatar,
     NyaaSelectStandardBones,

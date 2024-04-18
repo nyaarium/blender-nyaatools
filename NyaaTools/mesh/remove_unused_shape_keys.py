@@ -1,5 +1,6 @@
-from ..consts import SHAPE_KEY_TOLERANCE
+import bpy
 import numpy
+from ..consts import SHAPE_KEY_TOLERANCE
 
 
 def remove_unused_shape_keys(obj):
@@ -56,7 +57,9 @@ def remove_unused_shape_keys(obj):
         # Check if all the vertex locations are within the tolerance
         if (distances < SHAPE_KEY_TOLERANCE).all():
             # If so, add this shape key to the list to delete
-            to_delete.append(kb.name)
+            # Only if it's not a Face VRC* kb though.
+            if not is_vrc_face_workaround(obj, kb.name):
+                to_delete.append(kb.name)
 
     # Loop through all the shape keys to delete and remove them from the mesh
     for kb_name in to_delete:
@@ -67,3 +70,22 @@ def remove_unused_shape_keys(obj):
         kb = obj.data.shape_keys.key_blocks[0]
         debug_print("Removing shape key: ", obj.name, " -> ", kb.name)
         obj.shape_key_remove(kb)
+
+
+# HACK: This is a VRChat workaround. Reimplement better later.
+def is_vrc_face_workaround(obj, key_name):
+    key_name = key_name.lower()
+
+    if key_name.startswith("vrc.") or key_name.startswith("v_"):
+        if obj.name.lower() == "face" or obj.name.lower() == "head":
+            return True
+
+        elif obj.name.lower() == "body":
+            # If "Body", but there is no mesh in the scene named "Face" or "Head"
+            for obj in bpy.data.objects:
+                if obj.type == "MESH":
+                    if obj.name.lower() == "face" or obj.name.lower() == "head":
+                        return False
+            return True
+
+    return False
