@@ -11,3 +11,5 @@
   - Select 2 armatures. If one is an **Avatar**, it will be the armature base. Otherwise, make sure you actively `Ctrl + Click` your armature base last.
 
 - Reduced the shapekey cleanup tolerance (fixes #49)
+
+- For meshes named "Face", "Head", or "Body" _(when no "face" is present)_, skip cleanup of shapekeys named "vrc.\*" or "v\_\*" (closes #17)
