@@ -33,18 +33,21 @@ BONE_DESC_MAP = {
         "children": ["Eye.L", "Eye.R"],
         "mirror": None,
         "connected": True,
+        "optional": True,
     },
     "Eye.L": {
         "common_names": ["Eye.L", "Left Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.R",
+        "optional": True,
     },
     "Eye.R": {
         "common_names": ["Eye.R", "Right Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.L",
+        "optional": True,
     },
     "Breast Root": {
         "common_names": [
