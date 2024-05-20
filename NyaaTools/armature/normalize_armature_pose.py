@@ -387,19 +387,20 @@ def normalize_armature_pose(
         armature.data.edit_bones.remove(eb_realign_shoulder)
 
     ################
-    # Eye Length
+    # Eye Length (if exists)
 
     DEFAULT_LENGTH = 0.05
     eb_eye_l = find_bone("edit", armature, "Eye.L")
     eb_eye_r = find_bone("edit", armature, "Eye.R")
-    if (eb_eye_l.tail.z - eb_eye_l.head.z) != DEFAULT_LENGTH:
-        eb_eye_l.tail.x = eb_eye_l.head.x
-        eb_eye_l.tail.y = eb_eye_l.head.y
-        eb_eye_l.tail.z = eb_eye_l.head.z + DEFAULT_LENGTH
+    if eb_eye_l and eb_eye_r:
+        if (eb_eye_l.tail.z - eb_eye_l.head.z) != DEFAULT_LENGTH:
+            eb_eye_l.tail.x = eb_eye_l.head.x
+            eb_eye_l.tail.y = eb_eye_l.head.y
+            eb_eye_l.tail.z = eb_eye_l.head.z + DEFAULT_LENGTH
 
-        eb_eye_r.tail.x = eb_eye_r.head.x
-        eb_eye_r.tail.y = eb_eye_r.head.y
-        eb_eye_r.tail.z = eb_eye_r.head.z + DEFAULT_LENGTH
+            eb_eye_r.tail.x = eb_eye_r.head.x
+            eb_eye_r.tail.y = eb_eye_r.head.y
+            eb_eye_r.tail.z = eb_eye_r.head.z + DEFAULT_LENGTH
 
     ################
     # Breast Root

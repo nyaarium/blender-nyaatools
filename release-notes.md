@@ -6,10 +6,4 @@
 
 ### Release Notes
 
-- Added new operator: **Merge Armatures** (closes #47)
-
-  - Select 2 armatures. If one is an **Avatar**, it will be the armature base. Otherwise, make sure you actively `Ctrl + Click` your armature base last.
-
-- Adjusted the vertex group & shapekey cleanup tolerances (fixes #32, #49, #50)
-
-- For meshes named "Face", "Head", or "Body" _(when no "face" is present)_, skip cleanup of shapekeys named "vrc.\*" or "v\_\*" (closes #17)
+- Head & Eye bones optional for Nyaa pose normalization
