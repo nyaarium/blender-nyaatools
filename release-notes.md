@@ -6,4 +6,8 @@
 
 ### Release Notes
 
-- Head & Eye bones optional for Nyaa pose normalization
+- Disabled Decimate and Outline buttons. Unstable.
+
+  - **Decimate button** - Messes up on meshes with the "Apply modifier on object with shapekeys" function. I will need to rewrite that before enabling this button again.
+
+  - **Outline button** - Hasn't worked in ages, and was a short term thing for my renders. I don't use it anymore.

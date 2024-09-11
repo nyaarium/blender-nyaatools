@@ -299,13 +299,13 @@ class NyaaPanel(bpy.types.Panel):
             op = row.operator("nyaa.add_modifier", text="Data Transfer")
             op.which_modifier = "DataTransfer"
 
-            row = box.row(align=True)
+            # row = box.row(align=True)
 
-            op = row.operator("nyaa.add_modifier", text="Decimate")
-            op.which_modifier = "Decimate"
+            # op = row.operator("nyaa.add_modifier", text="Decimate")
+            # op.which_modifier = "Decimate (disabled until fixed)"
 
-            op = row.operator("nyaa.add_modifier", text="Outline")
-            op.which_modifier = "Outline"
+            # op = row.operator("nyaa.add_modifier", text="Outline")
+            # op.which_modifier = "Outline (disabled until fixed)"
 
             # To fill in an empty cell
             # row = row.split(factor=0.5)
@@ -361,7 +361,6 @@ class NyaaPanel(bpy.types.Panel):
 
             if is_exactly_2_armatures:
                 op = row.operator("nyaa.merge_armatures", text="Merge 2 Armatures")
-                
 
         elif not has_selection:
             box = layout.box()
