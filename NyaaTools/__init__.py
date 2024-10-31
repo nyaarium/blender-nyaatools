@@ -10,6 +10,7 @@ from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsMergeArmatures import NyaaToolsMergeArmatures
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
 from .operators.NyaaToolsNormalizeArmatureRename import NyaaToolsNormalizeArmatureRename
+from .operators.NyaaToolsNormalizeArmatureRetarget import NyaaToolsNormalizeArmatureRetarget
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
 from .operators.NyaaSelectStandardBones import NyaaSelectStandardBones
 from .operators.PrzemirApplyTopModifier import PrzemirApplyTopModifier
@@ -38,6 +39,7 @@ classes = [
     NyaaToolsMergeArmatures,
     NyaaToolsNormalizeArmatureATPose,
     NyaaToolsNormalizeArmatureRename,
+    NyaaToolsNormalizeArmatureRetarget,
     NyaaToolsRemoveMeshesFromAvatar,
     NyaaSelectStandardBones,
     PrzemirApplyTopModifier,

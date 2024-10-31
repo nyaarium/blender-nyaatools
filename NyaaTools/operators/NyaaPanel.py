@@ -347,7 +347,7 @@ class NyaaPanel(bpy.types.Panel):
                 
                 row = box.row(align=True)
 
-                row.operator("nyaa.normalize_armature_rename", text="Rename Bones")
+                op = row.operator("nyaa.normalize_armature_rename", text="Rename Bones")
 
                 row = box.row(align=True)
 
@@ -365,6 +365,13 @@ class NyaaPanel(bpy.types.Panel):
 
             if is_exactly_2_armatures:
                 op = row.operator("nyaa.merge_armatures", text="Merge 2 Armatures")
+
+        if is_exactly_2_armatures:
+            box = layout.box()
+            box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
+
+            row = box.row(align=True)
+            op = row.operator("nyaa.normalize_armature_retarget", text="Retarget Armature")
 
         elif not has_selection:
             box = layout.box()
