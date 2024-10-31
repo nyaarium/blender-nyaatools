@@ -36,14 +36,14 @@ BONE_DESC_MAP = {
         "optional": True,
     },
     "Eye.L": {
-        "common_names": ["Eye.L", "Left Eye"],
+        "common_names": ["Eye.L", "EyeL", "Left Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.R",
         "optional": True,
     },
     "Eye.R": {
-        "common_names": ["Eye.R", "Right Eye"],
+        "common_names": ["Eye.R", "EyeR", "Right Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.L",
@@ -64,6 +64,7 @@ BONE_DESC_MAP = {
     "Breast.L": {
         "common_names": [
             "Breast",
+            "BreastL",
             "BreastUpper2_L",
             "Left Breast",
             "Left Boob",
@@ -77,6 +78,7 @@ BONE_DESC_MAP = {
     "Breast.R": {
         "common_names": [
             "Breast",
+            "BreastR",
             "BreastUpper2_R",
             "Right Breast",
             "Right Boob",
@@ -88,14 +90,14 @@ BONE_DESC_MAP = {
         "optional": True,
     },
     "Upper Leg.L": {
-        "common_names": ["Upper Leg.L", "Thigh.L", "Leg.L", "Left Leg"],
+        "common_names": ["Upper Leg.L", "Upper_LegL", "Thigh.L", "Leg.L", "Left Leg"],
         "parent": "Hips",
         "children": ["Lower Leg.L"],
         "mirror": "Upper Leg.R",
         "roll": 0,
     },
     "Lower Leg.L": {
-        "common_names": ["Lower Leg.L", "Knee.L", "Left Knee"],
+        "common_names": ["Lower Leg.L", "Lower_LegL", "Knee.L", "Left Knee"],
         "parent": "Upper Leg.L",
         "children": ["Foot.L"],
         "mirror": "Lower Leg.R",
@@ -103,7 +105,7 @@ BONE_DESC_MAP = {
         "roll": 0,
     },
     "Foot.L": {
-        "common_names": ["Foot.L", "Ankle.L", "Left Ankle", "Left Foot"],
+        "common_names": ["Foot.L", "FootL", "Ankle.L", "Left Ankle", "Left Foot"],
         "parent": "Lower Leg.L",
         "children": ["Toes.L"],
         "mirror": "Foot.R",
@@ -111,7 +113,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Toes.L": {
-        "common_names": ["Toes.L", "Toe.L", "Left Toe"],
+        "common_names": ["Toes.L", "ToesL", "Toe.L", "Left Toe"],
         "parent": "Foot.L",
         "children": None,
         "mirror": "Toes.R",
@@ -119,14 +121,14 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Upper Leg.R": {
-        "common_names": ["Upper Leg.R", "Thigh.R", "Leg.R", "Right Leg"],
+        "common_names": ["Upper Leg.R", "Upper_LegR", "Thigh.R", "Leg.R", "Right Leg"],
         "parent": "Hips",
         "children": ["Lower Leg.R"],
         "mirror": "Upper Leg.L",
         "roll": 0,
     },
     "Lower Leg.R": {
-        "common_names": ["Lower Leg.R", "Knee.R", "Right Knee"],
+        "common_names": ["Lower Leg.R", "Lower_LegR", "Knee.R", "Right Knee"],
         "parent": "Upper Leg.R",
         "children": ["Foot.R"],
         "mirror": "Lower Leg.L",
@@ -134,7 +136,7 @@ BONE_DESC_MAP = {
         "roll": 0,
     },
     "Foot.R": {
-        "common_names": ["Foot.R", "Ankle.R", "Right Ankle", "Right Foot"],
+        "common_names": ["Foot.R", "FootR", "Ankle.R", "Right Ankle", "Right Foot"],
         "parent": "Lower Leg.R",
         "children": ["Toes.R"],
         "mirror": "Foot.L",
@@ -142,7 +144,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Toes.R": {
-        "common_names": ["Toes.R", "Toe.R", "Right Toe"],
+        "common_names": ["Toes.R", "ToesR", "Toe.R", "Right Toe"],
         "parent": "Foot.R",
         "children": None,
         "mirror": "Toes.L",
@@ -150,13 +152,13 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Shoulder.L": {
-        "common_names": ["Shoulder.L", "Left Shoulder"],
+        "common_names": ["Shoulder.L", "ShoulderL", "Left Shoulder"],
         "parent": "Chest",
         "children": ["Arm.L"],
         "mirror": "Shoulder.R",
     },
     "Upper Arm.L": {
-        "common_names": ["Upper Arm.L", "Arm.L", "Left Arm"],
+        "common_names": ["Upper Arm.L", "Upper_ArmL", "Arm.L", "Left Arm"],
         "parent": "Shoulder.L",
         "children": ["Lower Arm.L"],
         "mirror": "Upper Arm.R",
@@ -164,7 +166,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Lower Arm.L": {
-        "common_names": ["Lower Arm.L", "Elbow.L", "Left Elbow"],
+        "common_names": ["Lower Arm.L", "Lower_ArmL", "Elbow.L", "Left Elbow"],
         "parent": "Upper Arm.L",
         "children": ["Hand.L"],
         "mirror": "Lower Arm.R",
@@ -172,7 +174,7 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Hand.L": {
-        "common_names": ["Hand.L", "Wrist.L", "Left Wrist"],
+        "common_names": ["Hand.L", "HandL", "Wrist.L", "Left Wrist"],
         "parent": "Lower Arm.L",
         "children": [
             "Thumb 1.L",
@@ -186,13 +188,13 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Shoulder.R": {
-        "common_names": ["Shoulder.R", "Right Shoulder"],
+        "common_names": ["Shoulder.R", "ShoulderR", "Right Shoulder"],
         "parent": "Chest",
         "children": ["Arm.R"],
         "mirror": "Shoulder.L",
     },
     "Upper Arm.R": {
-        "common_names": ["Upper Arm.R", "Arm.R", "Right Arm"],
+        "common_names": ["Upper Arm.R", "Upper_ArmR", "Arm.R", "Right Arm"],
         "parent": "Shoulder.R",
         "children": ["Lower Arm.R"],
         "mirror": "Upper Arm.L",
@@ -200,7 +202,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Lower Arm.R": {
-        "common_names": ["Lower Arm.R", "Elbow.R", "Right Elbow"],
+        "common_names": ["Lower Arm.R", "Lower_ArmR", "Elbow.R", "Right Elbow"],
         "parent": "Upper Arm.R",
         "children": ["Hand.R"],
         "mirror": "Lower Arm.L",
@@ -208,7 +210,7 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Hand.R": {
-        "common_names": ["Hand.R", "Wrist.R", "Right Wrist"],
+        "common_names": ["Hand.R", "HandR", "Wrist.R", "Right Wrist"],
         "parent": "Lower Arm.R",
         "children": [
             "Thumb 1.R",
