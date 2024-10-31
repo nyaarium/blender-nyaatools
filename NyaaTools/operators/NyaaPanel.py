@@ -344,6 +344,10 @@ class NyaaPanel(bpy.types.Panel):
                 row.label(text="Don't touch unless you're")
                 row = box.row(align=True)
                 row.label(text="mocap/animating in Blender")
+                
+                row = box.row(align=True)
+
+                row.operator("nyaa.normalize_armature_rename", text="Rename Bones")
 
                 row = box.row(align=True)
 
