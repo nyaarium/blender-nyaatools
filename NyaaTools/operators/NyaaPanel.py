@@ -339,7 +339,6 @@ class NyaaPanel(bpy.types.Panel):
 
                 box = layout.box()
                 box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
-
                 row = box.row(align=True)
                 row.label(text="Don't touch unless you're")
                 row = box.row(align=True)
@@ -348,6 +347,7 @@ class NyaaPanel(bpy.types.Panel):
                 row = box.row(align=True)
 
                 op = row.operator("nyaa.normalize_armature_rename", text="Rename Bones")
+                op = row.operator("nyaa.armature_clear_custom_objects", text="Clear Custom")
 
                 row = box.row(align=True)
 
@@ -369,8 +369,13 @@ class NyaaPanel(bpy.types.Panel):
         if is_exactly_2_armatures:
             box = layout.box()
             box.label(text="Nyaa's Normalization", icon="OUTLINER_OB_ARMATURE")
+            row = box.row(align=True)
+            row.label(text="Don't touch unless you're")
+            row = box.row(align=True)
+            row.label(text="mocap/animating in Blender")
 
             row = box.row(align=True)
+
             op = row.operator("nyaa.normalize_armature_retarget", text="Retarget Armature")
 
         elif not has_selection:
