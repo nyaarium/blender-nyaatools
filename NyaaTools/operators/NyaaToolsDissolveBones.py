@@ -22,7 +22,7 @@ class NyaaToolsDissolveBones(bpy.types.Operator):
 
 def contiguous_check(selected_bones):
     selected_set = set(selected_bones)
-    
+
     top_parent = None
     leaf_bone = None  # Track the leaf-most bone
     orphans = []
@@ -31,11 +31,15 @@ def contiguous_check(selected_bones):
     for bone in selected_bones:
         if bone.parent not in selected_set:
             if top_parent is not None:
-                raise Exception("Multiple top-most parents found. Make sure your selection is contiguous.")
+                raise Exception(
+                    "Multiple top-most parents found. Make sure your selection is contiguous."
+                )
             top_parent = bone
-    
+
     if top_parent is None:
-        raise Exception("No top-most parent found. Make sure your selection is contiguous.")
+        raise Exception(
+            "No top-most parent found. Make sure your selection is contiguous."
+        )
 
     # Traverse from the top_parent down, ensuring all selected bones are connected, and determine orphans
     def recurse(bone, visited):
@@ -51,19 +55,23 @@ def contiguous_check(selected_bones):
         for child in bone.children:
             if child in selected_set and child not in visited:
                 recurse(child, visited)
-    
+
     visited = set()
     recurse(top_parent, visited)
-    
+
     if visited != selected_set:
-        raise Exception("Not all selected bones are in the same chain. Make sure your selection is contiguous.")
-    
+        raise Exception(
+            "Not all selected bones are in the same chain. Make sure your selection is contiguous."
+        )
+
     if leaf_bone is None:
-        raise Exception("No leaf-most bone found. Make sure your selection is contiguous.")
-    
+        raise Exception(
+            "No leaf-most bone found. Make sure your selection is contiguous."
+        )
+
     # Get the tail position of the leaf-most bone
     tail_position = leaf_bone.tail
-    
+
     return top_parent, orphans, tail_position
 
 
@@ -75,14 +83,20 @@ def perform_dissolve_bones():
     if bpy.context.mode != "EDIT_ARMATURE":
         raise Exception("Must be in edit mode of an armature")
 
-    selected_bones = bpy.context.selected_bones
+    # Store original state
+    original_x_mirror = obj.data.use_mirror_x
+
+    # Disable X mirror temporarily
+    obj.data.use_mirror_x = False
+
+    selected_bones = bpy.context.selected_editable_bones
     selected_bones_names = [bone.name for bone in selected_bones]
     if len(selected_bones) < 2:
         raise Exception("At least two bones must be selected")
 
     # Step 1: Verify selection of bones
     top_parent, orphans, tail_position = contiguous_check(selected_bones)
-    print("Selected bones:", [bone.name for bone in selected_bones])
+    print("Selected bones:", selected_bones_names)
     print("Top parent:", top_parent.name)
     print("Orphans:", [bone.name for bone in orphans])
     print("Tail position:", tail_position)
@@ -103,14 +117,14 @@ def perform_dissolve_bones():
     # Step 4: Loop over meshes and combine the affected vertex group weights.
     for mesh in meshes_affected_by_armature:
         vg_names_to_remove = []
-        
+
         for bone in selected_bones:
             # Get the vertex group for the bone (skip if not found)
             vg = mesh.vertex_groups.get(bone.name)
             if vg:
                 if bone != top_parent:
                     vg_names_to_remove.append(bone.name)
-                
+
                 # Get the vertex group for the top bone (create if not found)
                 top_vg = mesh.vertex_groups.get(top_parent.name)
                 if not top_vg:
@@ -144,3 +158,6 @@ def perform_dissolve_bones():
         if bone != top_parent:
             bone.select = True
     bpy.ops.armature.delete(confirm=False)
+
+    # Restore original state after all operations are complete
+    obj.data.use_mirror_x = original_x_mirror

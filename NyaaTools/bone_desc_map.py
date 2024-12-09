@@ -36,14 +36,14 @@ BONE_DESC_MAP = {
         "optional": True,
     },
     "Eye.L": {
-        "common_names": ["Eye.L", "Left Eye"],
+        "common_names": ["Eye.L", "EyeL", "Left Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.R",
         "optional": True,
     },
     "Eye.R": {
-        "common_names": ["Eye.R", "Right Eye"],
+        "common_names": ["Eye.R", "EyeR", "Right Eye"],
         "parent": "Head",
         "children": None,
         "mirror": "Eye.L",
@@ -64,6 +64,7 @@ BONE_DESC_MAP = {
     "Breast.L": {
         "common_names": [
             "Breast",
+            "BreastL",
             "BreastUpper2_L",
             "Left Breast",
             "Left Boob",
@@ -77,6 +78,7 @@ BONE_DESC_MAP = {
     "Breast.R": {
         "common_names": [
             "Breast",
+            "BreastR",
             "BreastUpper2_R",
             "Right Breast",
             "Right Boob",
@@ -88,14 +90,14 @@ BONE_DESC_MAP = {
         "optional": True,
     },
     "Upper Leg.L": {
-        "common_names": ["Upper Leg.L", "Thigh.L", "Leg.L", "Left Leg"],
+        "common_names": ["Upper Leg.L", "Upper_LegL", "leftUpperLeg", "Thigh.L", "Leg.L", "Left Leg"],
         "parent": "Hips",
         "children": ["Lower Leg.L"],
         "mirror": "Upper Leg.R",
         "roll": 0,
     },
     "Lower Leg.L": {
-        "common_names": ["Lower Leg.L", "Knee.L", "Left Knee"],
+        "common_names": ["Lower Leg.L", "Lower_LegL", "leftLowerLeg", "Knee.L", "Left Knee"],
         "parent": "Upper Leg.L",
         "children": ["Foot.L"],
         "mirror": "Lower Leg.R",
@@ -103,7 +105,7 @@ BONE_DESC_MAP = {
         "roll": 0,
     },
     "Foot.L": {
-        "common_names": ["Foot.L", "Ankle.L", "Left Ankle", "Left Foot"],
+        "common_names": ["Foot.L", "FootL", "Ankle.L", "Left Ankle", "Left Foot"],
         "parent": "Lower Leg.L",
         "children": ["Toes.L"],
         "mirror": "Foot.R",
@@ -111,7 +113,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Toes.L": {
-        "common_names": ["Toes.L", "Toe.L", "Left Toe"],
+        "common_names": ["Toes.L", "ToesL", "Toe.L", "Left Toe", "leftToes"],
         "parent": "Foot.L",
         "children": None,
         "mirror": "Toes.R",
@@ -119,14 +121,14 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Upper Leg.R": {
-        "common_names": ["Upper Leg.R", "Thigh.R", "Leg.R", "Right Leg"],
+        "common_names": ["Upper Leg.R", "Upper_LegR", "rightUpperLeg", "Thigh.R", "Leg.R", "Right Leg"],
         "parent": "Hips",
         "children": ["Lower Leg.R"],
         "mirror": "Upper Leg.L",
         "roll": 0,
     },
     "Lower Leg.R": {
-        "common_names": ["Lower Leg.R", "Knee.R", "Right Knee"],
+        "common_names": ["Lower Leg.R", "Lower_LegR", "rightLowerLeg", "Knee.R", "Right Knee"],
         "parent": "Upper Leg.R",
         "children": ["Foot.R"],
         "mirror": "Lower Leg.L",
@@ -134,7 +136,7 @@ BONE_DESC_MAP = {
         "roll": 0,
     },
     "Foot.R": {
-        "common_names": ["Foot.R", "Ankle.R", "Right Ankle", "Right Foot"],
+        "common_names": ["Foot.R", "FootR", "Ankle.R", "Right Ankle", "Right Foot"],
         "parent": "Lower Leg.R",
         "children": ["Toes.R"],
         "mirror": "Foot.L",
@@ -142,7 +144,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Toes.R": {
-        "common_names": ["Toes.R", "Toe.R", "Right Toe"],
+        "common_names": ["Toes.R", "ToesR", "Toe.R", "Right Toe", "rightToes"],
         "parent": "Foot.R",
         "children": None,
         "mirror": "Toes.L",
@@ -150,13 +152,13 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Shoulder.L": {
-        "common_names": ["Shoulder.L", "Left Shoulder"],
+        "common_names": ["Shoulder.L", "ShoulderL", "Left Shoulder"],
         "parent": "Chest",
         "children": ["Arm.L"],
         "mirror": "Shoulder.R",
     },
     "Upper Arm.L": {
-        "common_names": ["Upper Arm.L", "Arm.L", "Left Arm"],
+        "common_names": ["Upper Arm.L", "Upper_ArmL", "leftUpperArm", "Arm.L", "Left Arm"],
         "parent": "Shoulder.L",
         "children": ["Lower Arm.L"],
         "mirror": "Upper Arm.R",
@@ -164,7 +166,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Lower Arm.L": {
-        "common_names": ["Lower Arm.L", "Elbow.L", "Left Elbow"],
+        "common_names": ["Lower Arm.L", "Lower_ArmL", "leftLowerArm", "Elbow.L", "Left Elbow"],
         "parent": "Upper Arm.L",
         "children": ["Hand.L"],
         "mirror": "Lower Arm.R",
@@ -172,7 +174,7 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Hand.L": {
-        "common_names": ["Hand.L", "Wrist.L", "Left Wrist"],
+        "common_names": ["Hand.L", "HandL", "leftHand", "Wrist.L", "Left Wrist"],
         "parent": "Lower Arm.L",
         "children": [
             "Thumb 1.L",
@@ -186,13 +188,13 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Shoulder.R": {
-        "common_names": ["Shoulder.R", "Right Shoulder"],
+        "common_names": ["Shoulder.R", "ShoulderR", "Right Shoulder"],
         "parent": "Chest",
         "children": ["Arm.R"],
         "mirror": "Shoulder.L",
     },
     "Upper Arm.R": {
-        "common_names": ["Upper Arm.R", "Arm.R", "Right Arm"],
+        "common_names": ["Upper Arm.R", "Upper_ArmR", "rightUpperArm", "Arm.R", "Right Arm"],
         "parent": "Shoulder.R",
         "children": ["Lower Arm.R"],
         "mirror": "Upper Arm.L",
@@ -200,7 +202,7 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Lower Arm.R": {
-        "common_names": ["Lower Arm.R", "Elbow.R", "Right Elbow"],
+        "common_names": ["Lower Arm.R", "Lower_ArmR", "rightLowerArm", "Elbow.R", "Right Elbow"],
         "parent": "Upper Arm.R",
         "children": ["Hand.R"],
         "mirror": "Lower Arm.L",
@@ -208,7 +210,7 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Hand.R": {
-        "common_names": ["Hand.R", "Wrist.R", "Right Wrist"],
+        "common_names": ["Hand.R", "HandR", "rightHand", "Wrist.R", "Right Wrist"],
         "parent": "Lower Arm.R",
         "children": [
             "Thumb 1.R",
@@ -222,14 +224,14 @@ BONE_DESC_MAP = {
         "roll": 180,
     },
     "Thumb 1.L": {
-        "common_names": ["Thumb 1.L", "Thumb0.L", "Thumb.L", "Thumb Proximal.L"],
+        "common_names": ["Thumb 1.L", "Thumb0.L", "Thumb.L", "Thumb Proximal.L", "leftThumbProximal"],
         "parent": "Hand.L",
         "children": ["Thumb 2.L"],
         "mirror": "Thumb 1.R",
         "roll": -90,
     },
     "Thumb 2.L": {
-        "common_names": ["Thumb 2.L", "Thumb1.L", "Thumb Intermediate.L"],
+        "common_names": ["Thumb 2.L", "Thumb1.L", "Thumb Intermediate.L", "leftThumbIntermediate"],
         "parent": "Thumb 1.L",
         "children": ["Thumb 3.L"],
         "mirror": "Thumb 2.R",
@@ -237,7 +239,7 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Thumb 3.L": {
-        "common_names": ["Thumb 3.L", "Thumb2.L", "Thumb Distal.L"],
+        "common_names": ["Thumb 3.L", "Thumb2.L", "Thumb Distal.L", "leftThumbDistal"],
         "parent": "Thumb 2.L",
         "children": None,
         "mirror": "Thumb 3.R",
@@ -245,24 +247,14 @@ BONE_DESC_MAP = {
         "roll": -90,
     },
     "Index Finger 1.L": {
-        "common_names": [
-            "Index Finger 1.L",
-            "IndexFinger1.L",
-            "Index Finger Left",
-            "Index Proximal.L",
-        ],
+        "common_names": ["Index Finger 1.L", "IndexFinger1.L", "Index Finger Left", "Index Proximal.L", "leftIndexProximal"],
         "parent": "Hand.L",
         "children": ["Index Finger 2.L"],
         "mirror": "Index Finger 1.R",
         "roll": 180,
     },
     "Index Finger 2.L": {
-        "common_names": [
-            "Index Finger 2.L",
-            "IndexFinger2.L",
-            "Index Finger Left",
-            "Index Intermediate.L",
-        ],
+        "common_names": ["Index Finger 2.L", "IndexFinger2.L", "Index Finger Left", "Index Intermediate.L", "leftIndexIntermediate"],
         "parent": "Index Finger 1.L",
         "children": ["Index Finger 3.L"],
         "mirror": "Index Finger 2.R",
@@ -270,12 +262,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Index Finger 3.L": {
-        "common_names": [
-            "Index Finger 3.L",
-            "IndexFinger3.L",
-            "Index Finger Left",
-            "Index Distal.L",
-        ],
+        "common_names": ["Index Finger 3.L", "IndexFinger3.L", "Index Finger Left", "Index Distal.L", "leftIndexDistal"],
         "parent": "Index Finger 2.L",
         "children": None,
         "mirror": "Index Finger 3.R",
@@ -283,24 +270,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Middle Finger 1.L": {
-        "common_names": [
-            "Middle Finger 1.L",
-            "MiddleFinger1.L",
-            "Middle Finger Left",
-            "Middle Proximal.L",
-        ],
+        "common_names": ["Middle Finger 1.L", "MiddleFinger1.L", "Middle Finger Left", "Middle Proximal.L", "leftMiddleProximal"],
         "parent": "Hand.L",
         "children": ["Middle Finger 2.L"],
         "mirror": "Middle Finger 1.R",
         "roll": 180,
     },
     "Middle Finger 2.L": {
-        "common_names": [
-            "Middle Finger 2.L",
-            "MiddleFinger2.L",
-            "Middle Finger Left",
-            "Middle Intermediate.L",
-        ],
+        "common_names": ["Middle Finger 2.L", "MiddleFinger2.L", "Middle Finger Left", "Middle Intermediate.L", "leftMiddleIntermediate"],
         "parent": "Middle Finger 1.L",
         "children": ["Middle Finger 3.L"],
         "mirror": "Middle Finger 2.R",
@@ -308,12 +285,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Middle Finger 3.L": {
-        "common_names": [
-            "Middle Finger 3.L",
-            "MiddleFinger3.L",
-            "Middle Finger Left",
-            "Middle Distal.L",
-        ],
+        "common_names": ["Middle Finger 3.L", "MiddleFinger3.L", "Middle Finger Left", "Middle Distal.L", "leftMiddleDistal"],
         "parent": "Middle Finger 2.L",
         "children": None,
         "mirror": "Middle Finger 3.R",
@@ -321,24 +293,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Ring Finger 1.L": {
-        "common_names": [
-            "Ring Finger 1.L",
-            "RingFinger1.L",
-            "Ring Finger Left",
-            "Ring Proximal.L",
-        ],
+        "common_names": ["Ring Finger 1.L", "RingFinger1.L", "Ring Finger Left", "Ring Proximal.L", "leftRingProximal"],
         "parent": "Hand.L",
         "children": ["Ring Finger 2.L"],
         "mirror": "Ring Finger 1.R",
         "roll": 180,
     },
     "Ring Finger 2.L": {
-        "common_names": [
-            "Ring Finger 2.L",
-            "RingFinger2.L",
-            "Ring Finger Left",
-            "Ring Intermediate.L",
-        ],
+        "common_names": ["Ring Finger 2.L", "RingFinger2.L", "Ring Finger Left", "Ring Intermediate.L", "leftRingIntermediate"],
         "parent": "Ring Finger 1.L",
         "children": ["Ring Finger 3.L"],
         "mirror": "Ring Finger 2.R",
@@ -346,12 +308,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Ring Finger 3.L": {
-        "common_names": [
-            "Ring Finger 3.L",
-            "RingFinger3.L",
-            "Ring Finger Left",
-            "Ring Distal.L",
-        ],
+        "common_names": ["Ring Finger 3.L", "RingFinger3.L", "Ring Finger Left", "Ring Distal.L", "leftRingDistal"],
         "parent": "Ring Finger 2.L",
         "children": None,
         "mirror": "Ring Finger 3.R",
@@ -359,24 +316,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Little Finger 1.L": {
-        "common_names": [
-            "Little Finger 1.L",
-            "LittleFinger1.L",
-            "Little Finger Left",
-            "Little Proximal.L",
-        ],
+        "common_names": ["Little Finger 1.L", "LittleFinger1.L", "Little Finger Left", "Little Proximal.L", "leftLittleProximal"],
         "parent": "Hand.L",
         "children": ["Little Finger 2.L"],
         "mirror": "Little Finger 1.R",
         "roll": 180,
     },
     "Little Finger 2.L": {
-        "common_names": [
-            "Little Finger 2.L",
-            "LittleFinger2.L",
-            "Little Finger Left",
-            "Little Intermediate.L",
-        ],
+        "common_names": ["Little Finger 2.L", "LittleFinger2.L", "Little Finger Left", "Little Intermediate.L", "leftLittleIntermediate"],
         "parent": "Little Finger 1.L",
         "children": ["Little Finger 3.L"],
         "mirror": "Little Finger 2.R",
@@ -384,12 +331,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Little Finger 3.L": {
-        "common_names": [
-            "Little Finger 3.L",
-            "LittleFinger3.L",
-            "Little Finger Left",
-            "Little Distal.L",
-        ],
+        "common_names": ["Little Finger 3.L", "LittleFinger3.L", "Little Finger Left", "Little Distal.L", "leftLittleDistal"],
         "parent": "Little Finger 2.L",
         "children": None,
         "mirror": "Little Finger 3.R",
@@ -397,14 +339,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Thumb 1.R": {
-        "common_names": ["Thumb 1.R", "Thumb0.R", "Thumb.R", "Thumb Proximal.R"],
+        "common_names": ["Thumb 1.R", "Thumb0.R", "Thumb.R", "Thumb Proximal.R", "rightThumbProximal"],
         "parent": "Hand.R",
         "children": ["Thumb 2.R"],
         "mirror": "Thumb 1.L",
         "roll": 90,
     },
     "Thumb 2.R": {
-        "common_names": ["Thumb 2.R", "Thumb1.R", "Thumb Intermediate.R"],
+        "common_names": ["Thumb 2.R", "Thumb1.R", "Thumb Intermediate.R", "rightThumbIntermediate"],
         "parent": "Thumb 1.R",
         "children": ["Thumb 3.R"],
         "mirror": "Thumb 2.L",
@@ -412,7 +354,7 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Thumb 3.R": {
-        "common_names": ["Thumb 3.R", "Thumb2.R", "Thumb Distal.R"],
+        "common_names": ["Thumb 3.R", "Thumb2.R", "Thumb Distal.R", "rightThumbDistal"],
         "parent": "Thumb 2.R",
         "children": None,
         "mirror": "Thumb 3.L",
@@ -420,24 +362,14 @@ BONE_DESC_MAP = {
         "roll": 90,
     },
     "Index Finger 1.R": {
-        "common_names": [
-            "Index Finger 1.R",
-            "IndexFinger1.R",
-            "Index Finger Right",
-            "Index Proximal.R",
-        ],
+        "common_names": ["Index Finger 1.R", "IndexFinger1.R", "Index Finger Right", "Index Proximal.R", "rightIndexProximal"],
         "parent": "Hand.R",
         "children": ["Index Finger 2.R"],
         "mirror": "Index Finger 1.L",
         "roll": 180,
     },
     "Index Finger 2.R": {
-        "common_names": [
-            "Index Finger 2.R",
-            "IndexFinger2.R",
-            "Index Finger Right",
-            "Index Intermediate.R",
-        ],
+        "common_names": ["Index Finger 2.R", "IndexFinger2.R", "Index Finger Right", "Index Intermediate.R", "rightIndexIntermediate"],
         "parent": "Index Finger 1.R",
         "children": ["Index Finger 3.R"],
         "mirror": "Index Finger 2.L",
@@ -445,12 +377,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Index Finger 3.R": {
-        "common_names": [
-            "Index Finger 3.R",
-            "IndexFinger3.R",
-            "Index Finger Right",
-            "Index Distal.R",
-        ],
+        "common_names": ["Index Finger 3.R", "IndexFinger3.R", "Index Finger Right", "Index Distal.R", "rightIndexDistal"],
         "parent": "Index Finger 2.R",
         "children": None,
         "mirror": "Index Finger 3.L",
@@ -458,24 +385,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Middle Finger 1.R": {
-        "common_names": [
-            "Middle Finger 1.R",
-            "MiddleFinger1.R",
-            "Middle Finger Right",
-            "Middle Proximal.R",
-        ],
+        "common_names": ["Middle Finger 1.R", "MiddleFinger1.R", "Middle Finger Right", "Middle Proximal.R", "rightMiddleProximal"],
         "parent": "Hand.R",
         "children": ["Middle Finger 2.R"],
         "mirror": "Middle Finger 1.L",
         "roll": 180,
     },
     "Middle Finger 2.R": {
-        "common_names": [
-            "Middle Finger 2.R",
-            "MiddleFinger2.R",
-            "Middle Finger Right",
-            "Middle Intermediate.R",
-        ],
+        "common_names": ["Middle Finger 2.R", "MiddleFinger2.R", "Middle Finger Right", "Middle Intermediate.R", "rightMiddleIntermediate"],
         "parent": "Middle Finger 1.R",
         "children": ["Middle Finger 3.R"],
         "mirror": "Middle Finger 2.L",
@@ -483,12 +400,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Middle Finger 3.R": {
-        "common_names": [
-            "Middle Finger 3.R",
-            "MiddleFinger3.R",
-            "Middle Finger Right",
-            "Middle Distal.R",
-        ],
+        "common_names": ["Middle Finger 3.R", "MiddleFinger3.R", "Middle Finger Right", "Middle Distal.R", "rightMiddleDistal"],
         "parent": "Middle Finger 2.R",
         "children": None,
         "mirror": "Middle Finger 3.L",
@@ -496,24 +408,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Ring Finger 1.R": {
-        "common_names": [
-            "Ring Finger 1.R",
-            "RingFinger1.R",
-            "Ring Finger Right",
-            "Ring Proximal.R",
-        ],
+        "common_names": ["Ring Finger 1.R", "RingFinger1.R", "Ring Finger Right", "Ring Proximal.R", "rightRingProximal"],
         "parent": "Hand.R",
         "children": ["Ring Finger 2.R"],
         "mirror": "Ring Finger 1.L",
         "roll": 180,
     },
     "Ring Finger 2.R": {
-        "common_names": [
-            "Ring Finger 2.R",
-            "RingFinger2.R",
-            "Ring Finger Right",
-            "Ring Intermediate.R",
-        ],
+        "common_names": ["Ring Finger 2.R", "RingFinger2.R", "Ring Finger Right", "Ring Intermediate.R", "rightRingIntermediate"],
         "parent": "Ring Finger 1.R",
         "children": ["Ring Finger 3.R"],
         "mirror": "Ring Finger 2.L",
@@ -521,12 +423,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Ring Finger 3.R": {
-        "common_names": [
-            "Ring Finger 3.R",
-            "RingFinger3.R",
-            "Ring Finger Right",
-            "Ring Distal.R",
-        ],
+        "common_names": ["Ring Finger 3.R", "RingFinger3.R", "Ring Finger Right", "Ring Distal.R", "rightRingDistal"],
         "parent": "Ring Finger 2.R",
         "children": None,
         "mirror": "Ring Finger 3.L",
@@ -534,24 +431,14 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Little Finger 1.R": {
-        "common_names": [
-            "Little Finger 1.R",
-            "LittleFinger1.R",
-            "Little Finger Right",
-            "Little Proximal.R",
-        ],
+        "common_names": ["Little Finger 1.R", "LittleFinger1.R", "Little Finger Right", "Little Proximal.R", "rightLittleProximal"],
         "parent": "Hand.R",
         "children": ["Little Finger 2.R"],
         "mirror": "Little Finger 1.L",
         "roll": 180,
     },
     "Little Finger 2.R": {
-        "common_names": [
-            "Little Finger 2.R",
-            "LittleFinger2.R",
-            "Little Finger Right",
-            "Little Intermediate.R",
-        ],
+        "common_names": ["Little Finger 2.R", "LittleFinger2.R", "Little Finger Right", "Little Intermediate.R", "rightLittleIntermediate"],
         "parent": "Little Finger 1.R",
         "children": ["Little Finger 3.R"],
         "mirror": "Little Finger 2.L",
@@ -559,12 +446,7 @@ BONE_DESC_MAP = {
         "connected": True,
     },
     "Little Finger 3.R": {
-        "common_names": [
-            "Little Finger 3.R",
-            "LittleFinger3.R",
-            "Little Finger Right",
-            "Little Distal.R",
-        ],
+        "common_names": ["Little Finger 3.R", "LittleFinger3.R", "Little Finger Right", "Little Distal.R", "rightLittleDistal"],
         "parent": "Little Finger 2.R",
         "children": None,
         "mirror": "Little Finger 3.L",

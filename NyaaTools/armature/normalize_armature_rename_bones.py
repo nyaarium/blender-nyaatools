@@ -4,7 +4,7 @@ from ..armature.find_bone import find_bone
 from ..bone_desc_map import BONE_DESC_MAP
 
 
-def normalize_armature_rename_bones(armature: bpy.types.Armature):
+def normalize_armature_rename_bones(armature: bpy.types.Armature, cleanup: bool = True):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
@@ -35,20 +35,21 @@ def normalize_armature_rename_bones(armature: bpy.types.Armature):
 
         perform_rename(bone_desc_name, bone)
 
-        # Check if bone is connected
-        if "connected" in bone_desc and bone_desc["connected"]:
-            if not bone.use_connect:
-                debug_print("Connecting bone: ", bone.name)
+        if cleanup:
+            # Check if bone is connected
+            if "connected" in bone_desc and bone_desc["connected"]:
+                if not bone.use_connect:
+                    debug_print("Connecting bone: ", bone.name)
 
-                # Move parent's tail to this head
-                bone.parent.tail = bone.head
+                    # Move parent's tail to this head
+                    bone.parent.tail = bone.head
 
-                bone.use_connect = True
-        else:
-            if bone.use_connect:
-                debug_print("Detaching bone: ", bone.name)
+                    bone.use_connect = True
+            else:
+                if bone.use_connect:
+                    debug_print("Detaching bone: ", bone.name)
 
-                bone.use_connect = False
+                    bone.use_connect = False
 
     # Handle breast bones
     using_breast_bones = (
