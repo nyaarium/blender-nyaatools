@@ -6,4 +6,6 @@
 
 ### Release Notes
 
+- Fixed a problem where Dissolve Bones would not work with mirrorable bones. (fixes #54)
+
 - Some mocap utility functions for my personal stuff

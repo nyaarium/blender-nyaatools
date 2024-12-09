@@ -9,9 +9,13 @@ from .operators.NyaaToolsDissolveBones import NyaaToolsDissolveBones
 from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsMergeArmatures import NyaaToolsMergeArmatures
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
-from .operators.NyaaToolsNormalizeArmatureClearCustomObjects import NyaaToolsNormalizeArmatureClearCustomObjects
+from .operators.NyaaToolsNormalizeArmatureClearCustomObjects import (
+    NyaaToolsNormalizeArmatureClearCustomObjects,
+)
 from .operators.NyaaToolsNormalizeArmatureRename import NyaaToolsNormalizeArmatureRename
-from .operators.NyaaToolsNormalizeArmatureRetarget import NyaaToolsNormalizeArmatureRetarget
+from .operators.NyaaToolsNormalizeArmatureRetarget import (
+    NyaaToolsNormalizeArmatureRetarget,
+)
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
 from .operators.NyaaSelectStandardBones import NyaaSelectStandardBones
 from .operators.PrzemirApplyTopModifier import PrzemirApplyTopModifier
@@ -22,7 +26,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (4, 0, 0),
-    "version": (1, 7, 4),
+    "version": (1, 8, 0),
     "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
