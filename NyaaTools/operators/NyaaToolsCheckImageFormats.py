@@ -28,13 +28,16 @@ class NyaaToolsCheckImageFormats(bpy.types.Operator):
 
 
 def perform():
-    results_error = []
+    bad_names = []
 
     for image in bpy.data.images:
         if not is_filename_nyaatoon_formatted(image.name):
-            results_error.append(f"Invalid format: {image.name}")
+            bad_names.append(image.name)
 
-    if results_error:
-        return {"error": "\n".join(results_error)}
+    if bad_names:
+        return {
+            "error": "Not in Nyaatoon convention. These will skip repacking:\n\n"
+            + "\n".join(bad_names)
+        }
 
     return {"ok": "All images follow nyaatoon naming convention."}

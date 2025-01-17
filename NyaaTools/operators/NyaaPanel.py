@@ -328,7 +328,14 @@ class NyaaPanel(bpy.types.Panel):
         row = box.row(align=True)
 
         op = row.operator("nyaa.check_image_formats", text="Check Image Formats")
+
+        row = box.row(align=True)
+
         op = row.operator("nyaa.rename_packed_images", text="Rename Packed Images")
+
+        row = box.row(align=True)
+
+        op = row.operator("nyaa.help_image_formats", text="???")
 
         #############################################
         # Armature Tools
