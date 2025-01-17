@@ -7,3 +7,7 @@
 ### Release Notes
 
 - Added a new operator to rename packed images to match their name in Blender. Good for grabbing textures from various folders and resaving them to 1 folder.
+
+- Added a new operator to check if all images follow the nyaatoon naming convention.
+
+- And a help button for the texture naming convention.

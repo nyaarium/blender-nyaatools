@@ -3,6 +3,7 @@ import bpy
 from .operators.NyaaPanel import NyaaPanel
 from .operators.NyaaToolsAddModifier import NyaaToolsAddModifier
 from .operators.NyaaToolsAvatarMergeExport import NyaaToolsAvatarMergeExport
+from .operators.NyaaToolsCheckImageFormats import NyaaToolsCheckImageFormats
 from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatarArmature
 from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
 from .operators.NyaaToolsDissolveBones import NyaaToolsDissolveBones
@@ -27,7 +28,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (4, 3, 0),
-    "version": (1, 8, 1),
+    "version": (1, 8, 2),
     "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -38,6 +39,7 @@ classes = [
     NyaaPanel,
     NyaaToolsAddModifier,
     NyaaToolsAvatarMergeExport,
+    NyaaToolsCheckImageFormats,
     NyaaToolsConfigureAvatarArmature,
     NyaaToolsConfigureMeshesOnAvatar,
     NyaaToolsDissolveBones,
