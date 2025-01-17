@@ -321,6 +321,15 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Select a mesh to edit.")
 
         #############################################
+        # Image Tools
+
+        box = layout.box()
+        box.label(text="Image Tools", icon="OUTLINER_OB_IMAGE")
+        row = box.row(align=True)
+
+        op = row.operator("nyaa.rename_packed_images", text="Rename Packed Images")
+
+        #############################################
         # Armature Tools
 
         if is_armature or is_exactly_2_armatures:
@@ -343,11 +352,13 @@ class NyaaPanel(bpy.types.Panel):
                 row.label(text="Don't touch unless you're")
                 row = box.row(align=True)
                 row.label(text="mocap/animating in Blender")
-                
+
                 row = box.row(align=True)
 
                 op = row.operator("nyaa.normalize_armature_rename", text="Rename Bones")
-                op = row.operator("nyaa.armature_clear_custom_objects", text="Clear Custom")
+                op = row.operator(
+                    "nyaa.armature_clear_custom_objects", text="Clear Custom"
+                )
 
                 row = box.row(align=True)
 
@@ -376,7 +387,9 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
-            op = row.operator("nyaa.normalize_armature_retarget", text="Retarget Armature")
+            op = row.operator(
+                "nyaa.normalize_armature_retarget", text="Retarget Armature"
+            )
 
         elif not has_selection:
             box = layout.box()

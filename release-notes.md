@@ -6,6 +6,4 @@
 
 ### Release Notes
 
-- Fixed a problem where Dissolve Bones would not work with mirrorable bones. (fixes #54)
-
-- Some mocap utility functions for my personal stuff
+- Added a new operator to rename packed images to match their name in Blender. Good for grabbing textures from various folders and resaving them to 1 folder.

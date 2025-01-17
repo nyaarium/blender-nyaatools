@@ -17,6 +17,7 @@ from .operators.NyaaToolsNormalizeArmatureRetarget import (
     NyaaToolsNormalizeArmatureRetarget,
 )
 from .operators.NyaaToolsRemoveMeshesFromAvatar import NyaaToolsRemoveMeshesFromAvatar
+from .operators.NyaaToolsRenamePackedImage import NyaaToolsRenamePackedImage
 from .operators.NyaaSelectStandardBones import NyaaSelectStandardBones
 from .operators.PrzemirApplyTopModifier import PrzemirApplyTopModifier
 from .operators.LinkButton import LinkButton
@@ -25,8 +26,8 @@ from .operators.LinkButton import LinkButton
 bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
-    "blender": (4, 0, 0),
-    "version": (1, 8, 0),
+    "blender": (4, 3, 0),
+    "version": (1, 8, 1),
     "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -47,6 +48,7 @@ classes = [
     NyaaToolsNormalizeArmatureRename,
     NyaaToolsNormalizeArmatureRetarget,
     NyaaToolsRemoveMeshesFromAvatar,
+    NyaaToolsRenamePackedImage,
     NyaaSelectStandardBones,
     PrzemirApplyTopModifier,
     LinkButton,
