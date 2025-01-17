@@ -324,7 +324,7 @@ class NyaaPanel(bpy.types.Panel):
         # Image Tools
 
         box = layout.box()
-        box.label(text="Image Tools", icon="OUTLINER_OB_IMAGE")
+        box.label(text="Nyaatoon Tools", icon="OUTLINER_OB_IMAGE")
         row = box.row(align=True)
 
         op = row.operator("nyaa.rename_packed_images", text="Rename Packed Images")

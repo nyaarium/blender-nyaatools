@@ -5,7 +5,7 @@ from .nyaatoon import is_filename_nyaatoon_formatted, is_filename_color_encoded
 
 
 def renamePackedImage(image: bpy.types.Image):
-    if image.packed_file:
+    if image.source == "FILE" and image.packed_file:
         # Extract the original filename from the image's filepath
         original_filename = os.path.basename(image.filepath)
         temp_path = bpy.path.abspath(f"//{original_filename}")
@@ -16,12 +16,11 @@ def renamePackedImage(image: bpy.types.Image):
 
         # Skip if the paths are already the same
         if temp_path == new_path:
-            return
+            return {"ok": "Image already in nyaatoon name format."}
 
         supported = is_filename_nyaatoon_formatted(image.name)
         if not supported:
-            print(image.name, "not in nyaatoon name format")
-            return
+            return {"error": "Image not in nyaatoon name format: " + image.name}
 
         # Save the image to the original filename
         image.save_render(temp_path)
@@ -46,18 +45,17 @@ def renamePackedImage(image: bpy.types.Image):
         # Clean up
         os.remove(new_path)
 
+        return {"ok": "Renamed and repacked: " + image.name}
+
     elif image.source == "GENERATED":
         supported = is_filename_nyaatoon_formatted(image.name)
         if not supported:
-            print(image.name, "not in nyaatoon name format")
-            return
+            return {"error": "Image not in nyaatoon name format: " + image.name}
 
         # Get extension
         ext = image.name.split(".")[-1].lower()
-        print(ext)
 
         requires_color = is_filename_color_encoded(image.name)
-        print(requires_color)
 
         # Set color space based on flags
         if requires_color:
@@ -78,7 +76,7 @@ def renamePackedImage(image: bpy.types.Image):
             bpy.context.scene.render.image_settings.quality = 100
         else:
             print(f"Unsupported format: {ext}")
-            return
+            return {"error": "Unsupported format: " + ext}
 
         # Save the image
         image.save_render(bpy.path.abspath(f"//{image.name}"))
@@ -97,4 +95,6 @@ def renamePackedImage(image: bpy.types.Image):
         # Clean up the temporary file
         os.remove(bpy.path.abspath(f"//{image.name}"))
 
-        print(f"Saved and repacked {image.name}.")
+        return {"ok": "Saved generated image and repacked: " + image.name}
+
+    return {"ok": "Image is not packed."}

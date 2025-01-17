@@ -13,7 +13,8 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            perform()
+            result = perform()
+            self.report({"INFO"}, result)
             return {"FINISHED"}
 
         except Exception as error:
@@ -23,5 +24,43 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
 
 
 def perform():
-    for image in bpy.data.images:
-        renamePackedImage(image)
+    results_ok = []
+    results_error = []
+
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, len(bpy.data.images))
+
+    for i, image in enumerate(bpy.data.images):
+        result = renamePackedImage(image)
+        wm.progress_update(i)
+        if "ok" in result:
+            match result["ok"]:
+                case "Image already in nyaatoon name format.":
+                    pass
+                case "Image is not packed.":
+                    pass
+                case _:
+                    results_ok.append(result["ok"])
+        else:
+            results_error.append(result["error"])
+
+    wm.progress_end()
+
+    count = len(results_ok)
+    results_ok = "\n".join(results_ok)
+    results_error = "\n".join(results_error)
+
+    print("")
+    print("")
+    print(results_ok)
+    print("")
+    print(results_error)
+    print("")
+
+    if results_error:
+        return (
+            f"{count} images renamed and repacked.\n\nSome images could not be renamed.\n"
+            + results_error
+        )
+
+    return f"{count} images renamed and repacked."
