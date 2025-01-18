@@ -304,13 +304,21 @@ class NyaaPanel(bpy.types.Panel):
             box.label(text="Image Pack/Unpack", icon="IMAGE_DATA")
             row = box.row(align=True)
 
-            op = row.operator("nyaa.image_packer", text="Pack Images")
+            op = row.operator("nyaa.image_packer", text="Pack")
             op.pack = True
             op.unpack = False
-
-            op = row.operator("nyaa.image_packer", text="Unpack Images")
+            op = row.operator("nyaa.image_packer", text="Unpack")
             op.pack = False
             op.unpack = True
+
+            row = box.row(align=True)
+
+            op = row.operator("nyaa.check_image_formats", text="Check")
+            op = row.operator("nyaa.rename_packed_images", text="Fix Names")
+
+            row = box.row(align=True)
+
+            op = row.operator("nyaa.help_image_formats", text="???")
 
             # row = box.row(align=True)
 
@@ -332,23 +340,6 @@ class NyaaPanel(bpy.types.Panel):
             box = layout.box()
             box.label(text="Mesh", icon="OUTLINER_OB_MESH")
             box.label(text="Select a mesh to edit.")
-
-        #############################################
-        # Image Tools
-
-        box = layout.box()
-        box.label(text="Nyaatoon Tools", icon="OUTLINER_OB_IMAGE")
-        row = box.row(align=True)
-
-        op = row.operator("nyaa.check_image_formats", text="Check Image Formats")
-
-        row = box.row(align=True)
-
-        op = row.operator("nyaa.rename_packed_images", text="Rename Packed Images")
-
-        row = box.row(align=True)
-
-        op = row.operator("nyaa.help_image_formats", text="???")
 
         #############################################
         # Armature Tools

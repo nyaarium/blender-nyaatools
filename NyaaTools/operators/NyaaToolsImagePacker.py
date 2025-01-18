@@ -39,26 +39,36 @@ class NyaaToolsImagePacker(bpy.types.Operator):
                             used_images.add(node.image)
 
             if len(used_images) == 0:
-                self.report({"WARNING"}, "No images found in selected meshes")
+                self.report({"ERROR"}, "❌ No images found in selected meshes")
                 return {"CANCELLED"}
 
             if self.pack:
-                count = 0
+                packed_files = []
                 for image in used_images:
                     if not image.packed_file and image.source == "FILE":
                         image.pack()
-                        count += 1
-                self.report({"INFO"}, f"✅ Packed {count} images from selected meshes")
+                        packed_files.append(image.name)
+
+                if packed_files:
+                    message = f"✅ Packed {len(packed_files)} images:\n"
+                    message += "\n".join(packed_files)
+                else:
+                    message = "🆗 All images already packed"
+                self.report({"ERROR"}, message)
 
             elif self.unpack:
-                count = 0
+                unpacked_files = []
                 for image in used_images:
                     if image.packed_file:
                         image.unpack()
-                        count += 1
-                self.report(
-                    {"INFO"}, f"✅ Unpacked {count} images from selected meshes"
-                )
+                        unpacked_files.append(image.name)
+
+                if unpacked_files:
+                    message = f"✅ Unpacked {len(unpacked_files)} images:\n"
+                    message += "\n".join(unpacked_files)
+                else:
+                    message = "🆗 All images already unpacked"
+                self.report({"ERROR"}, message)
 
             return {"FINISHED"}
 
