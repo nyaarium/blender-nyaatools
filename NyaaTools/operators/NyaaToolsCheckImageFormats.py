@@ -14,12 +14,8 @@ class NyaaToolsCheckImageFormats(bpy.types.Operator):
     def execute(self, context):
         try:
             result = perform()
-            if "ok" in result:
-                self.report({"INFO"}, result["ok"])
-                return {"FINISHED"}
-            else:
-                self.report({"ERROR"}, result["error"])
-                return {"CANCELLED"}
+            self.report({"ERROR"}, result)
+            return {"FINISHED"}
 
         except Exception as error:
             print(traceback.format_exc())
@@ -31,13 +27,13 @@ def perform():
     bad_names = []
 
     for image in bpy.data.images:
+        if image.name == "Render Result":
+            continue
+
         if not is_filename_nyaatoon_formatted(image.name):
             bad_names.append(image.name)
 
     if bad_names:
-        return {
-            "error": "Not in Nyaatoon convention. These will skip repacking:\n\n"
-            + "\n".join(bad_names)
-        }
+        return "🔍 Images that will skip repacking:\n" + "\n".join(bad_names)
 
-    return {"ok": "All images follow nyaatoon naming convention."}
+    return "✅ All images follow nyaatoon naming convention."

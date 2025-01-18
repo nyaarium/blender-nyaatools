@@ -59,9 +59,9 @@ supported_image_types = {
     "exr": True,
     "webp": True,
     "png": True,
-    "tga": True,
     "jpg": True,
     "jpeg": True,
+    "tga": True,
 }
 
 
