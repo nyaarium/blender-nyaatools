@@ -299,6 +299,19 @@ class NyaaPanel(bpy.types.Panel):
             op = row.operator("nyaa.add_modifier", text="Data Transfer")
             op.which_modifier = "DataTransfer"
 
+            row = box.row(align=True)
+
+            box.label(text="Image Pack/Unpack", icon="IMAGE_DATA")
+            row = box.row(align=True)
+
+            op = row.operator("nyaa.image_packer", text="Pack Images")
+            op.pack = True
+            op.unpack = False
+
+            op = row.operator("nyaa.image_packer", text="Unpack Images")
+            op.pack = False
+            op.unpack = True
+
             # row = box.row(align=True)
 
             # op = row.operator("nyaa.add_modifier", text="Decimate")

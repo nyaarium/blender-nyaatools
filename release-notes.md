@@ -6,6 +6,8 @@
 
 ### Release Notes
 
+- Added a Pack/Unpack button for images used by selected meshes.
+
 - Added a new operator to rename packed images to match their name in Blender. Good for grabbing textures from various folders and resaving them to 1 folder.
 
 - Added a new operator to check if all images follow the nyaatoon naming convention.

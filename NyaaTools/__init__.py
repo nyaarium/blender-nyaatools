@@ -8,6 +8,7 @@ from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatar
 from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
 from .operators.NyaaToolsDissolveBones import NyaaToolsDissolveBones
 from .operators.NyaaToolsHelpImageFormat import NyaaToolsHelpImageFormat
+from .operators.NyaaToolsImagePacker import NyaaToolsImagePacker
 from .operators.NyaaToolsMeshCleanup import NyaaToolsMeshCleanup
 from .operators.NyaaToolsMergeArmatures import NyaaToolsMergeArmatures
 from .operators.NyaaToolsNormalizeArmatureATPose import NyaaToolsNormalizeArmatureATPose
@@ -45,6 +46,7 @@ classes = [
     NyaaToolsConfigureMeshesOnAvatar,
     NyaaToolsDissolveBones,
     NyaaToolsHelpImageFormat,
+    NyaaToolsImagePacker,
     NyaaToolsMeshCleanup,
     NyaaToolsMergeArmatures,
     NyaaToolsNormalizeArmatureATPose,
