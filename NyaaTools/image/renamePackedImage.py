@@ -31,36 +31,6 @@ def renamePackedImage(image: bpy.types.Image):
         if not supported:
             return {"result": "notnyaatoon", "name": image.name}
 
-        # Get extension
-        ext = image.name.split(".")[-1].lower()
-
-        requires_color = is_filename_color_encoded(image.name)
-
-        # Set color space based on flags
-        if requires_color:
-            image.colorspace_settings.name = "sRGB"
-        else:
-            image.colorspace_settings.name = "Non-Color"
-
-        # Handle different formats
-        if ext == "exr":
-            bpy.context.scene.render.image_settings.file_format = "OPEN_EXR"
-            bpy.context.scene.render.image_settings.color_depth = "32"
-        elif ext == "png":
-            bpy.context.scene.render.image_settings.file_format = "PNG"
-            bpy.context.scene.render.image_settings.color_depth = "16"
-            bpy.context.scene.render.image_settings.compression = 100
-        elif ext in ["jpg", "jpeg"]:
-            bpy.context.scene.render.image_settings.file_format = "JPEG"
-            bpy.context.scene.render.image_settings.color_depth = "8"
-            bpy.context.scene.render.image_settings.quality = 100
-        elif ext == "tga":
-            bpy.context.scene.render.image_settings.file_format = "TARGA"
-            bpy.context.scene.render.image_settings.color_depth = "8"
-        else:
-            print(f"Unsupported format: {ext}")
-            return {"result": "error", "name": image.name}
-
         # Save and repack
         return repackImage(image)
 
@@ -77,6 +47,33 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
     final_name = new_name if new_name else orig_name
     final_name = final_name.replace("\\", "/").split("/")[-1]
 
+    # Set color space based on flags
+    requires_color = is_filename_color_encoded(final_name)
+    if requires_color:
+        image.colorspace_settings.name = "sRGB"
+    else:
+        image.colorspace_settings.name = "Non-Color"
+
+    # Get extension and configure format settings
+    ext = final_name.split(".")[-1].lower()
+    if ext == "exr":
+        bpy.context.scene.render.image_settings.file_format = "OPEN_EXR"
+        bpy.context.scene.render.image_settings.color_depth = "32"
+    elif ext == "png":
+        bpy.context.scene.render.image_settings.file_format = "PNG"
+        bpy.context.scene.render.image_settings.color_depth = "16"
+        bpy.context.scene.render.image_settings.compression = 100
+    elif ext in ["jpg", "jpeg"]:
+        bpy.context.scene.render.image_settings.file_format = "JPEG"
+        bpy.context.scene.render.image_settings.color_depth = "8"
+        bpy.context.scene.render.image_settings.quality = 100
+    elif ext == "tga":
+        bpy.context.scene.render.image_settings.file_format = "TARGA"
+        bpy.context.scene.render.image_settings.color_depth = "8"
+    else:
+        print(f"Unsupported format: {ext}")
+        return {"result": "error", "name": image.name}
+
     # Build paths
     path_final_name = Path("./textures") / final_name
     os_final_name_abs = str(path_final_name.resolve())
@@ -88,8 +85,8 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
     # Create textures directory if it doesn't exist
     os.makedirs("textures", exist_ok=True)
 
-    # Save the image using save() to preserve color data
-    image.save(filepath=os_final_name_abs)
+    # Save the image
+    image.save_render(filepath=os_final_name_abs)
 
     # Update the image's filepath and reload it
     image.source = "FILE"

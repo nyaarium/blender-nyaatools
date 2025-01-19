@@ -13,3 +13,5 @@
 - Added a new operator to check if all images follow the nyaatoon naming convention.
 
 - And a help button for the texture naming convention.
+
+- Fixed a bug where all formats (JPG, EXR, TGA, etc.) were being saved as PNG.
