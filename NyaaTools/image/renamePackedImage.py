@@ -55,21 +55,36 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
         image.colorspace_settings.name = "Non-Color"
 
     # Get extension and configure format settings
+    settings = bpy.context.scene.render.image_settings
     ext = final_name.split(".")[-1].lower()
+
     if ext == "exr":
-        bpy.context.scene.render.image_settings.file_format = "OPEN_EXR"
-        bpy.context.scene.render.image_settings.color_depth = "32"
+        settings.file_format = "OPEN_EXR"
+        settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"
+        settings.color_depth = "32" if image.depth >= 32 else "16"
+        settings.exr_codec = "DWAA"
+
     elif ext == "png":
-        bpy.context.scene.render.image_settings.file_format = "PNG"
-        bpy.context.scene.render.image_settings.color_depth = "16"
-        bpy.context.scene.render.image_settings.compression = 100
+        settings.file_format = "PNG"
+        settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"
+        settings.compression = 100
+        # Handle float images properly
+        if image.is_float:
+            settings.color_depth = "16"
+        else:
+            settings.color_depth = "16" if image.depth > 8 else "8"
+
     elif ext in ["jpg", "jpeg"]:
-        bpy.context.scene.render.image_settings.file_format = "JPEG"
-        bpy.context.scene.render.image_settings.color_depth = "8"
-        bpy.context.scene.render.image_settings.quality = 100
+        settings.file_format = "JPEG"
+        settings.color_mode = "RGB"
+        settings.color_depth = "8"
+        settings.quality = 100
+
     elif ext == "tga":
-        bpy.context.scene.render.image_settings.file_format = "TARGA"
-        bpy.context.scene.render.image_settings.color_depth = "8"
+        settings.file_format = "TARGA"
+        settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"
+        settings.color_depth = "8"
+
     else:
         print(f"Unsupported format: {ext}")
         return {"result": "error", "name": image.name}
