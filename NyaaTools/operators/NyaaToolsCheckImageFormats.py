@@ -14,7 +14,25 @@ class NyaaToolsCheckImageFormats(bpy.types.Operator):
     def execute(self, context):
         try:
             result = perform(context)
-            self.report({"ERROR"}, result)
+
+            message = ""
+
+            if 0 < len(result["valid"]):
+                message += f"✅ {len(result['valid'])} valid images\n\n"
+
+            if 0 < len(result["mismatched"]):
+                message += f"⚠️ {len(result['mismatched'])} need renaming:\n"
+                message += "\n".join(result["mismatched"]) + "\n\n"
+
+            if 0 < len(result["notnyaatoon"]):
+                message += f"❌ {len(result['notnyaatoon'])} not nyaatoon formatted:\n"
+                message += "\n".join(result["notnyaatoon"]) + "\n\n"
+
+            if 0 < len(result["error"]):
+                message += f"❌ {len(result['error'])} errors:\n"
+                message += "\n".join(result["error"])
+
+            self.report({"ERROR"}, message)
             return {"FINISHED"}
 
         except Exception as error:
@@ -40,20 +58,48 @@ def perform(context):
                     used_images.add(node.image)
 
     if len(used_images) == 0:
-        return "❌ No images found in selected meshes"
+        return {
+            "valid": [],
+            "mismatched": [],
+            "notnyaatoon": [],
+            "error": ["No images found in selected meshes"],
+        }
 
-    bad_names = []
+    results_valid = []
+    results_mismatched = []
+    results_notnyaatoon = []
 
-    for image in used_images:
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, len(used_images))
+
+    for i, image in enumerate(used_images):
+        wm.progress_update(i)
+
         if image.name == "Render Result":
             continue
 
         if not is_filename_nyaatoon_formatted(image.name):
-            bad_names.append(image.name)
+            results_notnyaatoon.append(image.name)
+            continue
 
-    if bad_names:
-        return "🔍 Images in selected meshes that will skip repacking:\n" + "\n".join(
-            bad_names
-        )
+        # Check if image name matches packed file path
+        if image.source == "FILE" and image.packed_file:
+            # Strip paths
+            orig_name = image.filepath.replace("\\", "/").split("/")[-1]
+            final_name = image.name.replace("\\", "/").split("/")[-1]
 
-    return "✅ All images in selected meshes follow Nyaatoon naming convention."
+            if orig_name != final_name:
+                results_mismatched.append(f"{orig_name} → {final_name}")
+            else:
+                results_valid.append(image.name)
+        else:
+            results_valid.append(image.name)
+
+    wm.progress_end()
+
+    return {
+        "valid": results_valid,
+        "mismatched": results_mismatched,
+        "notnyaatoon": results_notnyaatoon,
+        "error": [],
+    }
