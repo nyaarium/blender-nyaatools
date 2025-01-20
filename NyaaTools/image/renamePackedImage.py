@@ -62,7 +62,7 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
         settings.file_format = "OPEN_EXR"
         settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"
         settings.color_depth = "32" if image.depth >= 32 else "16"
-        settings.exr_codec = "DWAA"
+        settings.exr_codec = "ZIP"
 
     elif ext == "png":
         settings.file_format = "PNG"
