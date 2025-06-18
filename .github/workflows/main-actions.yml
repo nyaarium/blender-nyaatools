@@ -16,7 +16,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Init
         run: |
@@ -50,7 +50,7 @@ jobs:
           sha256sum "release/$FILENAME"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: image
           path: release/*
