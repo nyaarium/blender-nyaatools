@@ -68,7 +68,6 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
         settings.file_format = "PNG"
         settings.color_mode = "RGBA" if image.alpha_mode != "NONE" else "RGB"
         settings.compression = 100
-        # Handle float images properly
         if image.is_float:
             settings.color_depth = "16"
         else:
@@ -90,18 +89,44 @@ def repackImage(image: bpy.types.Image, new_name: str = None):
         return {"result": "error", "name": image.name}
 
     # Build paths
-    path_final_name = Path("./textures") / final_name
-    os_final_name_abs = str(path_final_name.resolve())
     bl_final_name = "//textures/" + final_name
+    os_final_name_abs = str(Path(bpy.path.abspath(bl_final_name)).resolve())
+    textures_dir = str(Path(bpy.path.abspath("//textures/")).resolve())
 
     # Delete if target already exists
     deleteFile(os_final_name_abs)
 
     # Create textures directory if it doesn't exist
-    os.makedirs("textures", exist_ok=True)
+    os.makedirs(textures_dir, exist_ok=True)
 
-    # Save the image
-    image.save_render(filepath=os_final_name_abs)
+    # If image is already packed, unpack it first
+    if image.packed_file is not None:
+        image.unpack(method="WRITE_LOCAL")
+
+    # Store original color management settings to restore after saving
+    scene = bpy.context.scene
+    original_device = scene.display_settings.display_device
+    original_view_transform = scene.view_settings.view_transform
+    original_look = scene.view_settings.look
+    original_exposure = scene.view_settings.exposure
+    original_gamma = scene.view_settings.gamma
+    original_use_nodes = scene.use_nodes
+    try:
+        scene.display_settings.display_device = "sRGB"
+        scene.view_settings.view_transform = "Raw"
+        scene.view_settings.look = "None"
+        scene.view_settings.exposure = 0.0
+        scene.view_settings.gamma = 1.0
+        scene.use_nodes = False
+
+        image.save_render(filepath=os_final_name_abs)
+    finally:
+        scene.display_settings.display_device = original_device
+        scene.view_settings.view_transform = original_view_transform
+        scene.view_settings.look = original_look
+        scene.view_settings.exposure = original_exposure
+        scene.view_settings.gamma = original_gamma
+        scene.use_nodes = original_use_nodes
 
     # Update the image's filepath and reload it
     image.source = "FILE"

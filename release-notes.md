@@ -6,12 +6,8 @@
 
 ### Release Notes
 
-- Added a Pack/Unpack button for images used by selected meshes.
+Couple of fixes for the **Rename** button for Pack/Unpack:
 
-- Added a new operator to rename packed images to match their name in Blender. Good for grabbing textures from various folders and resaving them to 1 folder.
+- Fixed an error relating to local paths.
 
-- Added a new operator to check if all images follow the nyaatoon naming convention.
-
-- And a help button for the texture naming convention.
-
-- Fixed a bug where all formats (JPG, EXR, TGA, etc.) were being saved as PNG.
+- Fixed a bug where it would washout the colors of the image due to scene color management changes.
