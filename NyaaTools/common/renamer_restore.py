@@ -7,6 +7,8 @@ def renamer_restore(unrename_info):
             return bpy.data.meshes[name]
         elif t == "armature":
             return bpy.data.armatures[name]
+        elif t == "material":
+            return bpy.data.materials[name]
         else:
             return None
     

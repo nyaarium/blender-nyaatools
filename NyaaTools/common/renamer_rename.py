@@ -1,7 +1,7 @@
 import bpy
 
 
-def renamer_rename(obj, new_name):
+def rename_object(obj, new_name):
     def get_obj_data(obj):
         if obj.type == "MESH":
             return bpy.data.meshes
@@ -45,4 +45,26 @@ def renamer_rename(obj, new_name):
             # No conflict, rename data
             obj.data.name = new_name
 
+    return unrename_info
+
+
+def rename_material(material, new_name):
+    """Rename a material and handle conflicts, returning unrename info."""
+    unrename_info = []
+    
+    if new_name in bpy.data.materials:
+        if material == bpy.data.materials[new_name]:
+            # This material is itself, skip renaming
+            pass
+        else:
+            # There is a conflict, rename the original material and supply an unrename
+            conflict_material = bpy.data.materials[new_name]
+            temp_name = "____" + conflict_material.name
+            unrename_info.append(("material", temp_name, conflict_material.name))
+            conflict_material.name = temp_name
+            material.name = new_name
+    else:
+        # No conflict, rename material
+        material.name = new_name
+    
     return unrename_info

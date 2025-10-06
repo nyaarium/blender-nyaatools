@@ -6,7 +6,7 @@ from ..mesh.cleanup_mesh import cleanup_mesh
 from ..consts import EXPORT_COLLECTION, PROP_AVATAR_EXPORT_PATH
 from ..common.deselect_all import deselect_all
 from ..common.get_prop import get_prop
-from ..common.renamer_rename import renamer_rename
+from ..common.renamer_rename import rename_object, rename_material
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
 from ..common.select_collection import select_collection
@@ -108,7 +108,7 @@ def perform_merge_export(avatar_name):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
         # Renamer it
-        unrename_info.extend(renamer_rename(avatar_armature_copy, "Armature"))
+        unrename_info.extend(rename_object(avatar_armature_copy, "Armature"))
 
         # Merge meshes that are configured to the same layer
         for layer_name in avatar_meshes_layers:
@@ -127,7 +127,7 @@ def perform_merge_export(avatar_name):
 
                 # If first time on this layer, renamer it
                 if first_visit:
-                    unrename_info.extend(renamer_rename(mesh_copy, layer_name))
+                    unrename_info.extend(rename_object(mesh_copy, layer_name))
                     first_visit = False
 
                 # Merge it to the layer to apply the modifiers
