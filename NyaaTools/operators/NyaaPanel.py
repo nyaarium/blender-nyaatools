@@ -165,10 +165,49 @@ class NyaaPanel(bpy.types.Panel):
                 row = box.row(align=True)
 
                 if 0 < mesh_layers_count:
-                    op = row.operator(
-                        "nyaa.avatar_merge_export", text="📦 Merge & Export"
-                    )
-                    op.avatar_name = avatar_name
+                    show_fbx = False
+                    show_obj = False
+                    show_votv = False
+
+                    if export_path.lower().endswith(".fbx"):
+                        show_fbx = True
+                    elif export_path.lower().endswith(".obj"):
+                        show_obj = True
+                    else:
+                        show_fbx = True
+                        show_obj = True
+                        show_votv = True
+
+                    
+
+                    if (show_fbx):
+                        row = box.row(align=True)
+
+                        op = row.operator(
+                            "nyaa.avatar_merge_export", text="📦  FBX Merge & Export"
+                        )
+                        op.avatar_name = avatar_name
+                        op.export_format = "fbx"
+
+                    if (show_obj):
+                        row = box.row(align=True)
+
+                        op = row.operator(
+                            "nyaa.avatar_merge_export", text="📦  OBJ Merge & Export"
+                        )
+                        op.avatar_name = avatar_name
+                        op.export_format = "obj"
+
+                    if (show_votv):
+                        row = box.row(align=True)
+
+                        op = row.operator(
+                            "nyaa.avatar_merge_export", text="📦  Voices of the Void"
+                        )
+                        op.avatar_name = avatar_name
+                        op.export_format = "votv"
+
+
                 else:
                     box.label(text="No meshes assigned", icon="ERROR")
                     box.label(text="Select this armature and some meshes")

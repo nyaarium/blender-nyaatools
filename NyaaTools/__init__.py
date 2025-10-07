@@ -29,9 +29,9 @@ from .operators.LinkButton import LinkButton
 bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
-    "blender": (4, 3, 0),
-    "version": (1, 8, 8),
-    "description": "Various Nyaarium tools to normalize & fast-export avatar FBX's",
+    "blender": (4, 4, 1),
+    "version": (1, 9, 0),
+    "description": "Various Nyaarium tools to normalize & fast-export avatars",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
 }
