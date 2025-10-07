@@ -320,7 +320,7 @@ def bake_socket(
         if is_normal:
             bpy.ops.object.bake(
                 type='NORMAL',
-                margin=32,
+                margin=128,
                 use_selected_to_active=False,
                 normal_space='TANGENT'
             )
@@ -329,7 +329,7 @@ def bake_socket(
             bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
-                margin=32,
+                margin=128,
                 use_selected_to_active=False
             )
         
