@@ -1,6 +1,7 @@
 """Texture baking utilities for rendering Blender material sockets to texture maps."""
 
 import bpy
+import numpy as np
 import os
 import traceback
 from typing import Optional, Tuple
@@ -312,8 +313,6 @@ def bake_socket(
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
         
-        debug_print(f"Baking {'NORMAL' if is_normal else 'DIFFUSE'} at {width}x{height}...")
-
         # Ensure we're in OBJECT mode
         if bpy.context.object and bpy.context.object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -322,7 +321,7 @@ def bake_socket(
         if is_normal:
             bpy.ops.object.bake(
                 type='NORMAL',
-                margin=32,
+                margin=128,
                 use_selected_to_active=False,
                 normal_space='TANGENT'
             )
@@ -331,7 +330,7 @@ def bake_socket(
             bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
-                margin=32,
+                margin=128,
                 use_selected_to_active=False
             )
         
@@ -483,93 +482,6 @@ def iterate_36_15_uv_point(face_vertices, i):
     
     return (u, v)
 
-
-def scan_uv_tile(face_vertices, target_image, threshold=0.01):
-    """
-    Analyze a single UV face for color consistency.
-    
-    Args:
-        face_vertices: List of 3 UV coordinates defining the triangle
-        target_image: The texture to sample from
-        threshold: Color variance threshold (default 0.01)
-    
-    Returns:
-        Tuple (is_solid, avg_color) where is_solid is bool and avg_color is (R,G,B,A)
-    """
-    def debug_print(*msgs):
-        print("        ", *msgs)
-        return
-    
-    if not target_image or not target_image.pixels:
-        return False, (0.0, 0.0, 0.0, 1.0)
-    
-    width, height = target_image.size
-    pixels = target_image.pixels
-    channels = 4 if target_image.channels == 4 else 3
-    
-    min_r = min_g = min_b = float('inf')
-    max_r = max_g = max_b = float('-inf')
-    total_r = total_g = total_b = 0.0
-    valid_samples = 0
-    
-    # Sample 15 points across the triangle
-    for i in range(15):
-        try:
-            u, v = iterate_36_15_uv_point(face_vertices, i)
-            
-            # Convert UV to pixel coordinates
-            x = int(u * width) % width
-            y = int(v * height) % height
-            
-            # Get pixel index
-            pixel_idx = (y * width + x) * channels
-            
-            # Sample RGB values
-            r = pixels[pixel_idx]
-            g = pixels[pixel_idx + 1] 
-            b = pixels[pixel_idx + 2]
-            
-            # Update min/max/total
-            min_r = min(min_r, r)
-            min_g = min(min_g, g)
-            min_b = min(min_b, b)
-            max_r = max(max_r, r)
-            max_g = max(max_g, g)
-            max_b = max(max_b, b)
-            
-            total_r += r
-            total_g += g
-            total_b += b
-            valid_samples += 1
-            
-        except Exception as e:
-            continue
-    
-    if valid_samples == 0:
-        debug_print("No valid samples collected")
-        return False, (0.0, 0.0, 0.0, 1.0)
-    
-    # Calculate variance
-    variance_r = max_r - min_r
-    variance_g = max_g - min_g
-    variance_b = max_b - min_b
-    max_variance = max(variance_r, variance_g, variance_b)
-    
-    # Check if variance exceeds threshold
-    is_solid = max_variance <= threshold
-    
-    if is_solid:
-        # Calculate average color
-        avg_r = total_r / valid_samples
-        avg_g = total_g / valid_samples
-        avg_b = total_b / valid_samples
-        avg_color = (avg_r, avg_g, avg_b, 1.0)
-    else:
-        avg_color = (0.0, 0.0, 0.0, 1.0)
-    
-    return is_solid, avg_color
-
-
 def scan_and_resize_solids(target_image, obj):
     """
     Scan UV faces and optimize solid color textures to 8x8 pixels.
@@ -595,48 +507,148 @@ def scan_and_resize_solids(target_image, obj):
         debug_print("No UV layers found")
         return target_image
     
-    uv_layer = mesh.uv_layers[0]
+    # Get triangular faces first
+    triangular_faces = [face for face in mesh.polygons if len(face.vertices) == 3]
     
-    solid_colors = []
-    
-    # Scan each UV face
-    for face_idx, face in enumerate(mesh.polygons):
-        if len(face.vertices) != 3:
-            continue
-        
-        # Get UV coordinates for this face
-        face_vertices = []
-        for vert_idx in face.vertices:
-            loop_idx = face.loop_start + list(face.vertices).index(vert_idx)
-            uv_co = uv_layer.data[loop_idx].uv
-            face_vertices.append((uv_co.x, uv_co.y))
-        
-        
-        # Scan this UV tile
-        is_solid, avg_color = scan_uv_tile(face_vertices, target_image)
-        
-        if not is_solid:
-            return target_image
-        
-        solid_colors.append(avg_color)
-    
-    if not solid_colors:
+    if not triangular_faces:
+        debug_print("No triangular faces found")
         return target_image
     
-    # Check if all faces have the same color
-    first_color = solid_colors[0]
-    for i, color in enumerate(solid_colors[1:], 1):
-        if abs(color[0] - first_color[0]) > 0.01 or \
-           abs(color[1] - first_color[1]) > 0.01 or \
-           abs(color[2] - first_color[2]) > 0.01:
-            debug_print(f"Different solid colors detected, keeping original texture")
-            return target_image
+    uv_layer = mesh.uv_layers[0]
+    width, height = target_image.size
+    channels = 4 if target_image.channels == 4 else 3
+    
+    # Convert entire texture to NumPy once - one-time cost for massive speedup
+    debug_print(f"Converting {width}x{height} texture to NumPy array...")
+    pixels_np = np.array(target_image.pixels, dtype=np.float32).reshape(height, width, channels)
+    
+    # Pre-compute barycentric coordinates for 15 sample points - optimized
+    # Direct array creation is faster than loop + assignment
+    barycentric_coords = np.array([
+        [0.143, 0.143, 0.714],
+        [0.286, 0.143, 0.571],
+        [0.143, 0.286, 0.571],
+        [0.429, 0.143, 0.429],
+        [0.286, 0.286, 0.429],
+        [0.143, 0.429, 0.429],
+        [0.571, 0.143, 0.286],
+        [0.429, 0.286, 0.286],
+        [0.286, 0.429, 0.286],
+        [0.143, 0.571, 0.286],
+        [0.714, 0.143, 0.143],
+        [0.571, 0.286, 0.143],
+        [0.429, 0.429, 0.143],
+        [0.286, 0.571, 0.143],
+        [0.143, 0.714, 0.143]
+    ], dtype=np.float32)
+    
+    # Storage for the first color found
+    first_color = None
+    
+    # Batch processing function for UV faces
+    def process_face_batch(faces):
+        nonlocal first_color
+
+        # Maximum number of faces to process at once
+        batch_size = 1000
+        total_faces = len(faces)
+        
+        for batch_start in range(0, total_faces, batch_size):
+            batch_end = min(batch_start + batch_size, total_faces)
+            current_batch = faces[batch_start:batch_end]
+            batch_face_count = len(current_batch)
+            
+            # Pre-allocate arrays for all UV vertex coordinates in this batch
+            face_vertices = np.zeros((batch_face_count, 3, 2), dtype=np.float32)
+            
+            # Fill the UV vertices for all faces in batch
+            uv_data = uv_layer.data
+            for i, face in enumerate(current_batch):
+                loop_start = face.loop_start
+                for j in range(3):  # Triangular faces always have 3 vertices
+                    loop_idx = loop_start + j
+                    uv_co = uv_data[loop_idx].uv
+                    face_vertices[i, j, 0] = uv_co.x
+                    face_vertices[i, j, 1] = uv_co.y
+            
+            # Vectorized UV sample point calculation using NumPy broadcasting
+            # Reshape barycentric coordinates for broadcasting: (1, 15, 3)
+            bary_reshaped = barycentric_coords.reshape(1, 15, 3)
+            
+            # Reshape face vertices for broadcasting: (batch_face_count, 1, 3, 2)
+            vertices_reshaped = face_vertices.reshape(batch_face_count, 1, 3, 2)
+            
+            # Extract vertex coordinates: (batch_face_count, 1, 2) each
+            v0 = vertices_reshaped[:, :, 0, :]  # Shape: (batch_face_count, 1, 2)
+            v1 = vertices_reshaped[:, :, 1, :]  # Shape: (batch_face_count, 1, 2)
+            v2 = vertices_reshaped[:, :, 2, :]  # Shape: (batch_face_count, 1, 2)
+            
+            # Extract barycentric weights: (1, 15, 3)
+            u_bary = bary_reshaped[:, :, 0:1]  # Shape: (1, 15, 1)
+            v_bary = bary_reshaped[:, :, 1:2]  # Shape: (1, 15, 1)
+            w_bary = bary_reshaped[:, :, 2:3]  # Shape: (1, 15, 1)
+            
+            # Vectorized barycentric interpolation
+            # Broadcasting: (batch_face_count, 1, 2) * (1, 15, 1) = (batch_face_count, 15, 2)
+            all_uv_samples = (u_bary * v0 + v_bary * v1 + w_bary * v2)
+            
+            # Vectorized coordinate conversion
+            w, h = width, height
+            all_x_coords = (all_uv_samples[:, :, 0] * w).astype(np.int32) % w
+            all_y_coords = (all_uv_samples[:, :, 1] * h).astype(np.int32) % h
+            
+            # Extract all RGB values
+            rgb_samples = pixels_np[all_y_coords, all_x_coords, :3]
+            
+            # Calculate variance for each face in the batch
+            # Find min/max values for each color channel across the 15 samples for each face
+            min_values = np.min(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
+            max_values = np.max(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
+            variances = max_values - min_values     # Shape: (batch_face_count, 3)
+            max_variances = np.max(variances, axis=1)  # Shape: (batch_face_count)
+            
+            # Check which faces are solid (variance below threshold)
+            is_solid = max_variances <= 0.01
+            
+            # If any face is not solid, we're done
+            if not np.all(is_solid):
+                return False, None
+            
+            # Calculate average colors for each face
+            avg_colors = np.mean(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
+            
+            # Check if all faces have the same color
+            if batch_face_count > 0:
+                # If this is the first batch, store the first color
+                if first_color is None:
+                    first_color = avg_colors[0]
+                
+                # Vectorized color consistency check
+                # Calculate absolute differences for all faces at once
+                color_diffs = np.abs(avg_colors - first_color)
+                max_diffs = np.max(color_diffs, axis=1)
+                
+                # Check if any face has a difference > 0.01
+                if np.any(max_diffs > 0.01):
+                    return False, None
+        
+        # All faces processed successfully
+        return True, first_color
+    
+    # Process all faces directly
+    debug_print(f"Scanning {len(triangular_faces)} faces...")
+
+    success, color = process_face_batch(triangular_faces)
+    
+    if not success:
+        # Non-solid texture found. Return original image.
+        return target_image
     
     # All faces are the same solid color - create optimized 8x8 texture
-    debug_print(f"All faces are solid color: {first_color}")
-    optimized_image = create_default_texture(8, 8, first_color)
+    debug_print(f"All faces are solid color: {tuple(color) + (1.0,)}")
+
+    optimized_image = create_default_texture(8, 8, (float(color[0]), float(color[1]), float(color[2]), 1.0))
     optimized_image.name = f"optimized_{target_image.name}"
-    
     return optimized_image
 
 

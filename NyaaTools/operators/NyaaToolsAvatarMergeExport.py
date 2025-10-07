@@ -551,7 +551,7 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
 physical_material=0
 
 # Emissive strength
-emissive_strength=0
+emissive_strength=1
 
 
 ##########################
