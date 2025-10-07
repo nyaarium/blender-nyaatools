@@ -312,8 +312,6 @@ def bake_socket(
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
         
-        debug_print(f"Baking {'NORMAL' if is_normal else 'DIFFUSE'} at {width}x{height}...")
-
         # Ensure we're in OBJECT mode
         if bpy.context.object and bpy.context.object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -337,14 +335,15 @@ def bake_socket(
         
         debug_print(f"Bake completed! Checking for optimization...")
         
-        # Apply solid color optimization if applicable
-        optimized_image = scan_and_resize_solids(target_image, obj)
-        if optimized_image != target_image:
-            debug_print(f"🎨 Optimized to solid color texture")
-            # Clean up original if we created a new optimized version
-            if optimized_image.name != target_image.name:
-                bpy.data.images.remove(target_image)
-            return optimized_image
+        # FIXME: Need to improve it before making it public
+        # # Apply solid color optimization if applicable
+        # optimized_image = scan_and_resize_solids(target_image, obj)
+        # if optimized_image != target_image:
+        #     debug_print(f"🎨 Optimized to solid color texture")
+        #     # Clean up original if we created a new optimized version
+        #     if optimized_image.name != target_image.name:
+        #         bpy.data.images.remove(target_image)
+        #     return optimized_image
         
         return target_image
         
