@@ -1,4 +1,6 @@
 import traceback
+import os
+import re
 import bpy
 from bpy.props import StringProperty
 

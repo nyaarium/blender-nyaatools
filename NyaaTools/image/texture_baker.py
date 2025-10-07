@@ -2,7 +2,10 @@
 
 import bpy
 import os
+import traceback
 from typing import Optional, Tuple
+
+from .material_analyzer import find_principled_bsdf
 
 
 def safe_link(node_tree: bpy.types.NodeTree, from_socket, to_socket, *debug_parts):
@@ -164,8 +167,6 @@ def bake_socket(
     def debug_print(*msgs):
         print("      ", *msgs)
         return
-
-    from .material_analyzer import find_principled_bsdf
     
     if not material.use_nodes:
         return None
@@ -349,7 +350,6 @@ def bake_socket(
         
     except Exception as e:
         debug_print(f"ERROR: Failed to bake socket {socket_name}: {e}")
-        import traceback
         traceback.print_exc()
         return None
         
