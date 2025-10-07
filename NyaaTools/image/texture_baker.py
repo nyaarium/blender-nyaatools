@@ -224,54 +224,6 @@ def bake_socket(
     original_samples = scene.cycles.samples if hasattr(scene, 'cycles') else None
     original_film_transparent = scene.render.film_transparent
     
-    # Determine default color based on socket's actual default value
-    default_color = (0.5, 0.5, 0.5, 1.0)  # Generic fallback
-    
-    if not socket.is_linked and hasattr(socket, 'default_value'):
-        val = socket.default_value
-        if isinstance(val, (float, int)):
-            # Single value - use for all RGB channels
-            default_color = (val, val, val, 1.0)
-        elif hasattr(val, '__len__'):
-            if len(val) == 4:
-                # RGBA value
-                default_color = val
-            elif len(val) == 3:
-                # RGB value - add alpha
-                default_color = (*val, 1.0)
-            else:
-                # Fallback to hardcoded defaults
-                if socket_name == 'Base Color':
-                    default_color = (1.0, 1.0, 1.0, 1.0)
-                elif socket_name == 'Alpha':
-                    default_color = (1.0, 1.0, 1.0, 1.0)
-                elif socket_name == 'Metallic':
-                    default_color = (0.0, 0.0, 0.0, 1.0)
-                elif socket_name == 'Specular IOR Level':
-                    default_color = (0.5, 0.5, 0.5, 1.0)
-                elif socket_name == 'Roughness':
-                    default_color = (0.5, 0.5, 0.5, 1.0)
-                elif socket_name == 'Normal':
-                    default_color = (0.5, 0.5, 1.0, 1.0)
-                elif socket_name == 'Emission Color' or socket_name == 'Emission':
-                    default_color = (0.0, 0.0, 0.0, 1.0)
-    else:
-        # Socket is linked or has no default_value - use hardcoded defaults
-        if socket_name == 'Base Color':
-            default_color = (1.0, 1.0, 1.0, 1.0)
-        elif socket_name == 'Alpha':
-            default_color = (1.0, 1.0, 1.0, 1.0)
-        elif socket_name == 'Metallic':
-            default_color = (0.0, 0.0, 0.0, 1.0)
-        elif socket_name == 'Specular IOR Level':
-            default_color = (0.5, 0.5, 0.5, 1.0)
-        elif socket_name == 'Roughness':
-            default_color = (0.5, 0.5, 0.5, 1.0)
-        elif socket_name == 'Normal':
-            default_color = (0.5, 0.5, 1.0, 1.0)
-        elif socket_name == 'Emission Color' or socket_name == 'Emission':
-            default_color = (0.0, 0.0, 0.0, 1.0)
-
     try:
         # Determine if we need alpha channel (only for Base Color socket)
         # Alpha socket is baked as monochrome RGB, then packed into diffuse alpha channel
@@ -285,7 +237,6 @@ def bake_socket(
             alpha=needs_alpha,
             float_buffer=False
         )
-        
         
         # Create image texture node in ROOT tree (this is where Blender expects it)
         img_node = root_tree.nodes.new('ShaderNodeTexImage')
@@ -383,7 +334,16 @@ def bake_socket(
                 use_selected_to_active=False
             )
         
-        debug_print(f"Bake completed")
+        debug_print(f"Bake completed! Checking for optimization...")
+        
+        # Apply solid color optimization if applicable
+        optimized_image = scan_and_resize_solids(target_image, obj)
+        if optimized_image != target_image:
+            debug_print(f"🎨 Optimized to solid color texture")
+            # Clean up original if we created a new optimized version
+            if optimized_image.name != target_image.name:
+                bpy.data.images.remove(target_image)
+            return optimized_image
         
         return target_image
         
@@ -466,3 +426,257 @@ def bake_and_save_socket(
             bpy.data.images.remove(img)
         return False
 
+
+def iterate_36_15_uv_point(face_vertices, i):
+    """
+    Generate UV coordinates for 15 sampling points in a triangular pattern.
+    
+    Args:
+        face_vertices: List of 3 UV coordinates defining the triangle
+        i: Index from 0 to 14 for the sampling point
+    
+    Returns:
+        UV coordinate tuple (u, v) for the i-th sampling point
+    """
+    
+    if len(face_vertices) != 3:
+        raise ValueError("face_vertices must contain exactly 3 UV coordinates")
+    
+    if i < 0 or i > 14:
+        raise ValueError("i must be between 0 and 14")
+    
+    # 15 inner points from a 36-point triangular grid
+    # These points are mathematically derived to stay within UV tri bounds
+    #        .
+    #       . .
+    #      . x .
+    #     . x x .
+    #    . x x x .
+    #   . x x x x .
+    #  . x x x x x .
+    # . . . . . . . .
+    barycentric_points = [
+        (0.143, 0.143, 0.714),
+        (0.286, 0.143, 0.571),
+        (0.143, 0.286, 0.571),
+        (0.429, 0.143, 0.429),
+        (0.286, 0.286, 0.429),
+        (0.143, 0.429, 0.429),
+        (0.571, 0.143, 0.286),
+        (0.429, 0.286, 0.286),
+        (0.286, 0.429, 0.286),
+        (0.143, 0.571, 0.286),
+        (0.714, 0.143, 0.143),
+        (0.571, 0.286, 0.143),
+        (0.429, 0.429, 0.143),
+        (0.286, 0.571, 0.143),
+        (0.143, 0.714, 0.143)
+    ]
+    
+    u_bary, v_bary, w_bary = barycentric_points[i]
+    
+    # Interpolate using barycentric coordinates
+    v0, v1, v2 = face_vertices
+    
+    u = u_bary * v0[0] + v_bary * v1[0] + w_bary * v2[0]
+    v = u_bary * v0[1] + v_bary * v1[1] + w_bary * v2[1]
+    
+    return (u, v)
+
+
+def scan_uv_tile(face_vertices, target_image, threshold=0.01):
+    """
+    Analyze a single UV face for color consistency.
+    
+    Args:
+        face_vertices: List of 3 UV coordinates defining the triangle
+        target_image: The texture to sample from
+        threshold: Color variance threshold (default 0.01)
+    
+    Returns:
+        Tuple (is_solid, avg_color) where is_solid is bool and avg_color is (R,G,B,A)
+    """
+    def debug_print(*msgs):
+        print("        ", *msgs)
+        return
+    
+    if not target_image or not target_image.pixels:
+        return False, (0.0, 0.0, 0.0, 1.0)
+    
+    width, height = target_image.size
+    pixels = target_image.pixels
+    channels = 4 if target_image.channels == 4 else 3
+    
+    min_r = min_g = min_b = float('inf')
+    max_r = max_g = max_b = float('-inf')
+    total_r = total_g = total_b = 0.0
+    valid_samples = 0
+    
+    # Sample 15 points across the triangle
+    for i in range(15):
+        try:
+            u, v = iterate_36_15_uv_point(face_vertices, i)
+            
+            # Convert UV to pixel coordinates
+            x = int(u * width) % width
+            y = int(v * height) % height
+            
+            # Get pixel index
+            pixel_idx = (y * width + x) * channels
+            
+            # Sample RGB values
+            r = pixels[pixel_idx]
+            g = pixels[pixel_idx + 1] 
+            b = pixels[pixel_idx + 2]
+            
+            # Update min/max/total
+            min_r = min(min_r, r)
+            min_g = min(min_g, g)
+            min_b = min(min_b, b)
+            max_r = max(max_r, r)
+            max_g = max(max_g, g)
+            max_b = max(max_b, b)
+            
+            total_r += r
+            total_g += g
+            total_b += b
+            valid_samples += 1
+            
+        except Exception as e:
+            continue
+    
+    if valid_samples == 0:
+        debug_print("No valid samples collected")
+        return False, (0.0, 0.0, 0.0, 1.0)
+    
+    # Calculate variance
+    variance_r = max_r - min_r
+    variance_g = max_g - min_g
+    variance_b = max_b - min_b
+    max_variance = max(variance_r, variance_g, variance_b)
+    
+    # Check if variance exceeds threshold
+    is_solid = max_variance <= threshold
+    
+    if is_solid:
+        # Calculate average color
+        avg_r = total_r / valid_samples
+        avg_g = total_g / valid_samples
+        avg_b = total_b / valid_samples
+        avg_color = (avg_r, avg_g, avg_b, 1.0)
+    else:
+        avg_color = (0.0, 0.0, 0.0, 1.0)
+    
+    return is_solid, avg_color
+
+
+def scan_and_resize_solids(target_image, obj):
+    """
+    Scan UV faces and optimize solid color textures to 8x8 pixels.
+    Only works on triangulated meshes.
+    
+    Args:
+        target_image: The baked texture to analyze
+        obj: The object with UV mapping
+    
+    Returns:
+        Either target_image (if variance detected) or new 8x8 solid color image
+    """
+    def debug_print(*msgs):
+        print("      ", *msgs)
+        return
+    
+    if not target_image or not obj or obj.type != 'MESH':
+        debug_print("Invalid input for solid color optimization")
+        return target_image
+    
+    mesh = obj.data
+    if not mesh.uv_layers:
+        debug_print("No UV layers found")
+        return target_image
+    
+    uv_layer = mesh.uv_layers[0]
+    
+    solid_colors = []
+    
+    # Scan each UV face
+    for face_idx, face in enumerate(mesh.polygons):
+        if len(face.vertices) != 3:
+            continue
+        
+        # Get UV coordinates for this face
+        face_vertices = []
+        for vert_idx in face.vertices:
+            loop_idx = face.loop_start + list(face.vertices).index(vert_idx)
+            uv_co = uv_layer.data[loop_idx].uv
+            face_vertices.append((uv_co.x, uv_co.y))
+        
+        
+        # Scan this UV tile
+        is_solid, avg_color = scan_uv_tile(face_vertices, target_image)
+        
+        if not is_solid:
+            return target_image
+        
+        solid_colors.append(avg_color)
+    
+    if not solid_colors:
+        return target_image
+    
+    # Check if all faces have the same color
+    first_color = solid_colors[0]
+    for i, color in enumerate(solid_colors[1:], 1):
+        if abs(color[0] - first_color[0]) > 0.01 or \
+           abs(color[1] - first_color[1]) > 0.01 or \
+           abs(color[2] - first_color[2]) > 0.01:
+            debug_print(f"Different solid colors detected, keeping original texture")
+            return target_image
+    
+    # All faces are the same solid color - create optimized 8x8 texture
+    debug_print(f"All faces are solid color: {first_color}")
+    optimized_image = create_default_texture(8, 8, first_color)
+    optimized_image.name = f"optimized_{target_image.name}"
+    
+    return optimized_image
+
+
+def generate_barycentric_sample_points():
+    """
+    Generate barycentric coordinates for sampling a triangle.
+    Creates a 36-point triangular grid and returns the 15 inner points.
+    
+    The pattern looks like this:
+         .
+        . .
+       . x .
+      . x x .
+     . x x x .
+    . x x x x .
+   . x x x x x .
+  . . . . . . . .
+  
+  Where 'x' are the sampled inner points and '.' are edge points.
+  
+    Returns:
+        list: List of 15 (u, v, w) barycentric coordinate tuples
+    """
+    # Generate all 36 points in the triangular grid
+    all_points = []
+    for i in range(8):  # 8 rows
+        for j in range(i + 1):  # i+1 points in row i
+            # Convert to barycentric coordinates
+            u = j / 7.0  # Normalize to [0,1]
+            v = (i - j) / 7.0  # Normalize to [0,1] 
+            w = 1.0 - u - v  # Ensure u + v + w = 1
+            all_points.append((u, v, w))
+    
+    # Select the 15 inner points (skip edge points)
+    inner_points = []
+    for i in range(1, 7):  # Skip first and last rows (edges)
+        for j in range(1, i):  # Skip first and last points in each row (edges)
+            u = j / 7.0
+            v = (i - j) / 7.0
+            w = 1.0 - u - v
+            inner_points.append((u, v, w))
+    
+    return inner_points
