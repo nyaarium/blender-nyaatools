@@ -27,7 +27,7 @@ TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
 class NyaaToolsAvatarMergeExport(bpy.types.Operator):
-    """Merge and export for Voices of the Void. Configure the path to the printer directory: "...\\VotV\\Assets\\meshes\\printer\\\""""
+    """Merge and export tool. For Voices of the Void, configure the path to the printer directory: "...\\VotV\\Assets\\meshes\\printer\\\""""
 
     bl_idname = "nyaa.avatar_merge_export"
     bl_label = "Merge & Export"
