@@ -442,7 +442,12 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                         
                         debug_print(f"🔧 Baking {socket_name}: {resolution[0]}x{resolution[1]} (from {pack_name} pack)")
                         
-                        if not has_socket_input(socket) and hasattr(socket, 'default_value'):
+                        # Determine default value for this socket type
+                        default_val = None
+                        if is_normal:
+                            # Normal maps default to flat normal (0.5, 0.5, 1.0)
+                            default_val = (0.5, 0.5, 1.0)
+                        elif not has_socket_input(socket) and hasattr(socket, 'default_value'):
                             value = socket.default_value
                             if isinstance(value, (tuple, list)) and len(value) >= 3:
                                 debug_print(f"Value: RGB({value[0]:.3f}, {value[1]:.3f}, {value[2]:.3f})")
@@ -455,7 +460,8 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                             bake_obj,
                             socket_name,
                             resolution,
-                            is_normal
+                            is_normal,
+                            default_val
                         )
                         
                         if baked_img:
