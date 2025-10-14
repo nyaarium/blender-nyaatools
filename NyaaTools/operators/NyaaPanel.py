@@ -340,6 +340,14 @@ class NyaaPanel(bpy.types.Panel):
 
             row = box.row(align=True)
 
+            if len(selected_meshes) == 1:
+                box.label(text="Bake Material Slots", icon="IMAGE_DATA")
+                row = box.row(align=True)
+                
+                row.operator("nyaa.bake_material_slots", text="Bake PNG")
+            elif len(selected_meshes) > 1:
+                box.label(text="Select only 1 mesh")
+
             box.label(text="Image Pack/Unpack", icon="IMAGE_DATA")
             row = box.row(align=True)
 

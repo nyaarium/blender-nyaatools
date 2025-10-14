@@ -3,6 +3,7 @@ import bpy
 from .operators.NyaaPanel import NyaaPanel
 from .operators.NyaaToolsAddModifier import NyaaToolsAddModifier
 from .operators.NyaaToolsAvatarMergeExport import NyaaToolsAvatarMergeExport
+from .operators.NyaaToolsBakeMaterialSlots import NyaaToolsBakeMaterialSlots
 from .operators.NyaaToolsCheckImageFormats import NyaaToolsCheckImageFormats
 from .operators.NyaaToolsConfigureAvatarArmature import NyaaToolsConfigureAvatarArmature
 from .operators.NyaaToolsConfigureMeshesOnAvatar import NyaaToolsConfigureMeshesOnAvatar
@@ -29,8 +30,8 @@ from .operators.LinkButton import LinkButton
 bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
-    "blender": (4, 4, 1),
-    "version": (1, 9, 1),
+    "blender": (4, 5, 3),
+    "version": (1, 9, 2),
     "description": "Various Nyaarium tools to normalize & fast-export avatars",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -41,6 +42,7 @@ classes = [
     NyaaPanel,
     NyaaToolsAddModifier,
     NyaaToolsAvatarMergeExport,
+    NyaaToolsBakeMaterialSlots,
     NyaaToolsCheckImageFormats,
     NyaaToolsConfigureAvatarArmature,
     NyaaToolsConfigureMeshesOnAvatar,

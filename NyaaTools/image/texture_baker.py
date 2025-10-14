@@ -147,7 +147,8 @@ def bake_socket(
     obj: bpy.types.Object,
     socket_name: str,
     resolution: Tuple[int, int],
-    is_normal: bool = False
+    is_normal: bool = False,
+    default_value: Optional[Tuple] = None
 ) -> Optional[bpy.types.Image]:
     """
     Bake a specific socket from a material's Principled BSDF to a texture.
@@ -161,6 +162,7 @@ def bake_socket(
         socket_name: Name of the Principled BSDF input socket to bake
         resolution: Tuple of (width, height) for the output texture
         is_normal: True if baking a normal map socket
+        default_value: Default value to use if socket is not connected (e.g., (0.5, 0.5, 1.0) for normals)
     
     Returns:
         Baked image or None if baking failed
@@ -256,9 +258,9 @@ def bake_socket(
                 from_socket = socket.links[0].from_socket
                 safe_link(principled_tree, from_socket, bake_bsdf.inputs['Color'], socket_name, "bake BSDF Color")
             else:
-                # Use the socket's default value
-                if hasattr(socket, 'default_value'):
-                    val = socket.default_value
+                # Use the socket's default value or provided default
+                val = default_value if default_value is not None else (socket.default_value if hasattr(socket, 'default_value') else None)
+                if val is not None:
                     debug_print(f"Using value: {val}")
                     if isinstance(val, (float, int)):
                         bake_bsdf.inputs['Color'].default_value = (val, val, val, 1.0)
@@ -267,6 +269,15 @@ def bake_socket(
                             bake_bsdf.inputs['Color'].default_value = val
                         elif len(val) == 3:
                             bake_bsdf.inputs['Color'].default_value = (*val, 1.0)
+        else:
+            # For normal maps with no connection, use emission shader with default normal value
+            if not socket.is_linked:
+                val = default_value if default_value is not None else (0.5, 0.5, 1.0)
+                debug_print(f"Normal map not connected, using default: {val}")
+                
+                # Create emission shader for the default value
+                bake_bsdf = principled_tree.nodes.new('ShaderNodeEmission')
+                bake_bsdf.inputs['Color'].default_value = (*val, 1.0) if len(val) == 3 else val
         
         # Connect the bake BSDF to material output
         if principled_tree != root_tree:
@@ -288,8 +299,10 @@ def bake_socket(
             if group_node:
                 # Create temp group output and connect bake BSDF to it
                 temp_output_node = principled_tree.nodes.new('ShaderNodeOutputMaterial')
-                if not is_normal:
-                    safe_link(principled_tree, bake_bsdf.outputs['BSDF'], temp_output_node.inputs['Surface'], "bake BSDF", "temp output Surface")
+                if not is_normal or (is_normal and not socket.is_linked):
+                    # Connect emission/diffuse BSDF for non-normal or unconnected normal
+                    output_socket = bake_bsdf.outputs.get('BSDF') or bake_bsdf.outputs.get('Emission')
+                    safe_link(principled_tree, output_socket, temp_output_node.inputs['Surface'], "bake shader", "temp output Surface")
                 # Connect group output to root material output
                 if group_node.outputs and len(group_node.outputs) > 0:
                     safe_link(root_tree, group_node.outputs[0], root_output_node.inputs['Surface'], "group output", "root material output")
@@ -298,8 +311,10 @@ def bake_socket(
                 return None
         else:
             # Principled is in root, connect directly to root output
-            if not is_normal:
-                safe_link(root_tree, bake_bsdf.outputs['BSDF'], root_output_node.inputs['Surface'], "bake BSDF", "root material output")
+            if not is_normal or (is_normal and not socket.is_linked):
+                # Connect emission/diffuse BSDF for non-normal or unconnected normal
+                output_socket = bake_bsdf.outputs.get('BSDF') or bake_bsdf.outputs.get('Emission')
+                safe_link(root_tree, output_socket, root_output_node.inputs['Surface'], "bake shader", "root material output")
         
         # Setup render settings for baking
         scene.render.engine = 'CYCLES'
@@ -318,7 +333,8 @@ def bake_socket(
             bpy.ops.object.mode_set(mode='OBJECT')
         
         # Perform the bake
-        if is_normal:
+        if is_normal and socket.is_linked:
+            # Bake connected normal maps using NORMAL type
             bpy.ops.object.bake(
                 type='NORMAL',
                 margin=128,
@@ -326,7 +342,7 @@ def bake_socket(
                 normal_space='TANGENT'
             )
         else:
-            # Bake DIFFUSE instead of EMIT
+            # Bake DIFFUSE for everything else (including unconnected normals with emission shader)
             bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
@@ -381,7 +397,8 @@ def bake_and_save_socket(
     socket_name: str,
     resolution: Tuple[int, int],
     output_path: str,
-    is_normal: bool = False
+    is_normal: bool = False,
+    default_value: Optional[Tuple] = None
 ) -> bool:
     """
     Bake a socket and save directly to a PNG file.
@@ -393,6 +410,7 @@ def bake_and_save_socket(
         resolution: Output resolution (width, height)
         output_path: Path to save the PNG image
         is_normal: True if baking a normal map
+        default_value: Default value to use if socket is not connected
     
     Returns:
         True if successful, False otherwise
@@ -401,7 +419,7 @@ def bake_and_save_socket(
         print("      ", *msgs)
         return
 
-    img = bake_socket(material, obj, socket_name, resolution, is_normal)
+    img = bake_socket(material, obj, socket_name, resolution, is_normal, default_value)
     
     if not img:
         return False
