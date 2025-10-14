@@ -187,7 +187,7 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
     # Search material root tree for textures
     if material and material.node_tree:
         for node in material.node_tree.nodes:
-            if node.type == 'TEX_IMAGE' and node.image:
+            if node.type == 'TEX_IMAGE' and node.image and not node.mute:
                 width, height = node.image.size[0], node.image.size[1]
                 if max_resolution is None:
                     max_resolution = (width, height)
@@ -205,11 +205,15 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
             return
         visited_nodes[node_key] = True
         
+        # Skip muted nodes - they act as pass-through
+        if node.mute:
+            return
+        
         current_path = path + [node_key]
         
         debug_nodes.append(f"{'  ' * depth}{node.type} ({node.name})")
         
-        if node.type == 'TEX_IMAGE' and node.image:
+        if node.type == 'TEX_IMAGE' and node.image and not node.mute:
             width, height = node.image.size[0], node.image.size[1]
             debug_nodes.append(f"{'  ' * (depth+1)}✓ Found texture: {node.image.name} ({width}x{height})")
             if max_resolution is None:
@@ -227,7 +231,7 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
             if material and material.node_tree:
                 debug_nodes.append(f"{'  ' * (depth+1)}↑ Checking material root tree")
                 for root_node in material.node_tree.nodes:
-                    if root_node.type == 'TEX_IMAGE' and root_node.image:
+                    if root_node.type == 'TEX_IMAGE' and root_node.image and not root_node.mute:
                         width, height = root_node.image.size[0], root_node.image.size[1]
                         debug_nodes.append(f"{'  ' * (depth+2)}✓ Found root texture: {root_node.image.name} ({width}x{height})")
                         if max_resolution is None:
