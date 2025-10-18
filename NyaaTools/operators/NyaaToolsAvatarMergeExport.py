@@ -453,6 +453,28 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                                 debug_print(f"Value: RGB({value[0]:.3f}, {value[1]:.3f}, {value[2]:.3f})")
                             else:
                                 debug_print(f"Value: {value}")
+                            
+                            # Special case: Check for unused emission (strength <= 0)
+                            if socket_name == 'Emission Color':
+                                emission_strength_socket = principled.inputs.get('Emission Strength')
+                                
+                                # Check if emission strength is 0 or less (unused)
+                                is_unused_emission = False
+                                if emission_strength_socket:
+                                    has_strength_input = has_socket_input(emission_strength_socket)
+                                    
+                                    if not has_strength_input:
+                                        strength_value = emission_strength_socket.default_value
+                                        is_unused_emission = strength_value <= 0.0
+                                
+                                if is_unused_emission:
+                                    # Emission strength is 0 or less, treat as unused
+                                    default_val = (0.0, 0.0, 0.0)
+                                    debug_print(f"🔧 Emission strength <= 0, overriding to black (unused)")
+                                else:
+                                    default_val = value
+                            else:
+                                default_val = value
                         
                         # Bake to memory
                         baked_img = bake_socket(
