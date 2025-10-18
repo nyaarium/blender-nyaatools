@@ -1,6 +1,7 @@
 """Channel packing utilities for combining texture maps into multi-channel images."""
 
 import bpy
+import numpy as np
 import os
 from typing import Optional, Tuple
 
@@ -39,45 +40,44 @@ def pack_rgba(
         alpha=True
     )
     
-    # Get pixel data
-    num_pixels = width * height
-    pixels = [0.0] * (num_pixels * 4)
+    # Create output array (H, W, 4)
+    out_array = np.empty((height, width, 4), dtype=np.float32)
+    
+    # Determine if we should use batching for large images
+    use_batching = _should_use_batching(width, height)
     
     # Extract RGB data
     if rgb_image:
         if (rgb_image.size[0], rgb_image.size[1]) != (width, height):
-            # Need to resize - create a copy at target resolution
-            rgb_image = _resize_image(rgb_image, width, height)
+            # Need to resize - use NumPy version
+            rgb_array = _image_to_np(rgb_image)
+            rgb_array = _resize_np_nearest(rgb_array, width, height, use_batching)
+        else:
+            rgb_array = _image_to_np(rgb_image)
         
-        rgb_pixels = list(rgb_image.pixels)
-        for i in range(num_pixels):
-            pixels[i * 4 + 0] = rgb_pixels[i * 4 + 0]  # R
-            pixels[i * 4 + 1] = rgb_pixels[i * 4 + 1]  # G
-            pixels[i * 4 + 2] = rgb_pixels[i * 4 + 2]  # B
+        # Copy RGB channels (first 3 channels)
+        out_array[:, :, :3] = rgb_array[:, :, :3]
     else:
-        # Use default RGB
-        for i in range(num_pixels):
-            pixels[i * 4 + 0] = default_rgb[0]
-            pixels[i * 4 + 1] = default_rgb[1]
-            pixels[i * 4 + 2] = default_rgb[2]
+        # Use default RGB - broadcast to all pixels
+        out_array[:, :, :3] = np.array(default_rgb, dtype=np.float32)
     
     # Extract Alpha data
     if alpha_image:
         if (alpha_image.size[0], alpha_image.size[1]) != (width, height):
-            # Need to resize
-            alpha_image = _resize_image(alpha_image, width, height)
+            # Need to resize - use NumPy version
+            alpha_array = _image_to_np(alpha_image)
+            alpha_array = _resize_np_nearest(alpha_array, width, height, use_batching)
+        else:
+            alpha_array = _image_to_np(alpha_image)
         
-        alpha_pixels = list(alpha_image.pixels)
-        for i in range(num_pixels):
-            pixels[i * 4 + 3] = alpha_pixels[i * 4 + 0]  # Use R channel as alpha
+        # Use R channel as alpha
+        out_array[:, :, 3] = alpha_array[:, :, 0]
     else:
-        # Use default alpha
-        for i in range(num_pixels):
-            pixels[i * 4 + 3] = default_alpha
+        # Use default alpha - broadcast to all pixels
+        out_array[:, :, 3] = default_alpha
     
-    # Apply pixels to output
-    output.pixels[:] = pixels
-    output.update()
+    # Write to output image
+    _np_to_image_pixels(output, out_array)
     
     return output
 
@@ -128,50 +128,59 @@ def pack_pbr(
         alpha=False
     )
     
-    # Get pixel data
-    num_pixels = width * height
-    pixels = [0.0] * (num_pixels * 4)
+    # Create output array (H, W, 4)
+    out_array = np.empty((height, width, 4), dtype=np.float32)
+    
+    # Determine if we should use batching for large images
+    use_batching = _should_use_batching(width, height)
     
     # Pack Metallic (R channel)
     if metallic_image:
         if (metallic_image.size[0], metallic_image.size[1]) != (width, height):
-            metallic_image = _resize_image(metallic_image, width, height)
-        metallic_pixels = list(metallic_image.pixels)
-        for i in range(num_pixels):
-            pixels[i * 4 + 0] = metallic_pixels[i * 4 + 0]  # Use R channel
+            metallic_array = _image_to_np(metallic_image)
+            metallic_array = _resize_np_nearest(metallic_array, width, height, use_batching)
+        else:
+            metallic_array = _image_to_np(metallic_image)
+        
+        # Use R channel as metallic
+        out_array[:, :, 0] = metallic_array[:, :, 0]
     else:
-        for i in range(num_pixels):
-            pixels[i * 4 + 0] = default_metallic
+        # Use default metallic - broadcast to all pixels
+        out_array[:, :, 0] = default_metallic
     
     # Pack Specular (G channel)
     if specular_image:
         if (specular_image.size[0], specular_image.size[1]) != (width, height):
-            specular_image = _resize_image(specular_image, width, height)
-        specular_pixels = list(specular_image.pixels)
-        for i in range(num_pixels):
-            pixels[i * 4 + 1] = specular_pixels[i * 4 + 0]  # Use R channel
+            specular_array = _image_to_np(specular_image)
+            specular_array = _resize_np_nearest(specular_array, width, height, use_batching)
+        else:
+            specular_array = _image_to_np(specular_image)
+        
+        # Use R channel as specular
+        out_array[:, :, 1] = specular_array[:, :, 0]
     else:
-        for i in range(num_pixels):
-            pixels[i * 4 + 1] = default_specular
+        # Use default specular - broadcast to all pixels
+        out_array[:, :, 1] = default_specular
     
     # Pack Roughness (B channel)
     if roughness_image:
         if (roughness_image.size[0], roughness_image.size[1]) != (width, height):
-            roughness_image = _resize_image(roughness_image, width, height)
-        roughness_pixels = list(roughness_image.pixels)
-        for i in range(num_pixels):
-            pixels[i * 4 + 2] = roughness_pixels[i * 4 + 0]  # Use R channel
+            roughness_array = _image_to_np(roughness_image)
+            roughness_array = _resize_np_nearest(roughness_array, width, height, use_batching)
+        else:
+            roughness_array = _image_to_np(roughness_image)
+        
+        # Use R channel as roughness
+        out_array[:, :, 2] = roughness_array[:, :, 0]
     else:
-        for i in range(num_pixels):
-            pixels[i * 4 + 2] = default_roughness
+        # Use default roughness - broadcast to all pixels
+        out_array[:, :, 2] = default_roughness
     
     # Alpha channel (unused but needed for pixel buffer)
-    for i in range(num_pixels):
-        pixels[i * 4 + 3] = 1.0
+    out_array[:, :, 3] = 1.0
     
-    # Apply pixels to output
-    output.pixels[:] = pixels
-    output.update()
+    # Write to output image
+    _np_to_image_pixels(output, out_array)
     
     return output
 
@@ -210,48 +219,80 @@ def save_image_as_png(image: bpy.types.Image, output_path: str) -> bool:
         return False
 
 
-def _resize_image(source: bpy.types.Image, target_width: int, target_height: int) -> bpy.types.Image:
+def _image_to_np(img: bpy.types.Image) -> np.ndarray:
     """
-    Resize an image to target dimensions (creates a copy).
+    Convert Blender image to NumPy array (H, W, 4).
     
     Args:
-        source: Source image to resize
-        target_width: Target width
-        target_height: Target height
+        img: Blender image to convert
     
     Returns:
-        New resized image
+        NumPy array with shape (height, width, 4) containing RGBA data
     """
-    # Create new image at target resolution
-    resized = bpy.data.images.new(
-        name=f"{source.name}_resized",
-        width=target_width,
-        height=target_height,
-        alpha=True
-    )
+    w, h = img.size
+    arr = np.asarray(img.pixels, dtype=np.float32)
+    c = 4  # Blender stores 4 channels even if alpha is off
+    return arr.reshape(h, w, c)
+
+
+def _np_to_image_pixels(img: bpy.types.Image, arr: np.ndarray) -> None:
+    """
+    Write NumPy array to Blender image pixels.
     
-    # Simple nearest-neighbor sampling
-    source_pixels = list(source.pixels)
-    resized_pixels = [0.0] * (target_width * target_height * 4)
+    Args:
+        img: Blender image to write to
+        arr: NumPy array with shape (H, W, 4) containing RGBA data
+    """
+    img.pixels[:] = arr.reshape(-1)
+    img.update()
+
+
+def _should_use_batching(width: int, height: int, threshold: int = 8192) -> bool:
+    """
+    Determine if batching should be used for large images.
     
-    src_width, src_height = source.size[0], source.size[1]
+    Args:
+        width: Image width
+        height: Image height
+        threshold: Size threshold above which to use batching
     
-    for y in range(target_height):
-        for x in range(target_width):
-            # Map target coordinates to source coordinates
-            src_x = int((x / target_width) * src_width)
-            src_y = int((y / target_height) * src_height)
-            
-            # Clamp to valid range
-            src_x = max(0, min(src_x, src_width - 1))
-            src_y = max(0, min(src_y, src_height - 1))
-            
-            src_idx = (src_y * src_width + src_x) * 4
-            dst_idx = (y * target_width + x) * 4
-            
-            resized_pixels[dst_idx:dst_idx+4] = source_pixels[src_idx:src_idx+4]
+    Returns:
+        True if batching should be used
+    """
+    return width > threshold or height > threshold
+
+# Dev Note:
+# - We are mostly upscaling solid colors (8x8 -> 4K)
+# - Speed is critical
+# 
+# Discuss if we should use bilinear or something else
+def _resize_np_nearest(src: np.ndarray, tw: int, th: int, use_batching: bool = False, batch_size: int = 4096) -> np.ndarray:
+    """
+    Resize NumPy array using nearest-neighbor sampling.
     
-    resized.pixels[:] = resized_pixels
-    resized.update()
+    Args:
+        src: Source array with shape (H, W, C)
+        tw: Target width
+        th: Target height
+        use_batching: If True, process in chunks for very large images
+        batch_size: Number of rows to process at once when batching
     
-    return resized
+    Returns:
+        Resized array with shape (th, tw, C)
+    """
+    sh, sw = src.shape[:2]
+    x_idx = (np.linspace(0, sw - 1, tw)).astype(np.int32)
+    y_idx = (np.linspace(0, sh - 1, th)).astype(np.int32)
+    
+    # For very large images, process in chunks to reduce memory usage
+    if use_batching and th > batch_size:
+        result = np.empty((th, tw, src.shape[2]), dtype=src.dtype)
+        
+        for start_row in range(0, th, batch_size):
+            end_row = min(start_row + batch_size, th)
+            batch_y_idx = y_idx[start_row:end_row]
+            result[start_row:end_row] = src[batch_y_idx][:, x_idx]
+        
+        return result
+    else:
+        return src[y_idx][:, x_idx]
