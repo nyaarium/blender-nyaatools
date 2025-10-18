@@ -277,7 +277,10 @@ def bake_socket(
                 
                 # Create emission shader for the default value
                 bake_bsdf = principled_tree.nodes.new('ShaderNodeEmission')
-                bake_bsdf.inputs['Color'].default_value = (*val, 1.0) if len(val) == 3 else val
+                emission_color = (*val, 1.0) if len(val) == 3 else val
+
+                # Assign desired flat normal color
+                bake_bsdf.inputs['Color'].default_value = emission_color
         
         # Connect the bake BSDF to material output
         if principled_tree != root_tree:
@@ -333,16 +336,25 @@ def bake_socket(
             bpy.ops.object.mode_set(mode='OBJECT')
         
         # Perform the bake
-        if is_normal and socket.is_linked:
-            # Bake connected normal maps using NORMAL type
-            bpy.ops.object.bake(
-                type='NORMAL',
-                margin=128,
-                use_selected_to_active=False,
-                normal_space='TANGENT'
-            )
+        if is_normal:
+            if socket.is_linked:
+                # Connected normal maps: bake NORMAL
+                bpy.ops.object.bake(
+                    type='NORMAL',
+                    margin=128,
+                    use_selected_to_active=False,
+                    normal_space='TANGENT'
+                )
+            else:
+                # Unlinked normal maps: bake EMIT from the emission shader color
+                debug_print("Normal (unlinked): baking EMIT flat normal")
+                bpy.ops.object.bake(
+                    type='EMIT',
+                    margin=128,
+                    use_selected_to_active=False
+                )
         else:
-            # Bake DIFFUSE for everything else (including unconnected normals with emission shader)
+            # Other sockets: bake DIFFUSE color only
             bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
