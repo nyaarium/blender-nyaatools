@@ -507,13 +507,14 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                     baked_images.get('base_color'),
                     baked_images.get('alpha'),
                     default_rgb=(1.0, 1.0, 1.0),
-                    default_alpha=1.0
+                    default_alpha=1.0,
+                    obj=obj
                 )
-                diffuse_path = os.path.join(export_dir, f"{mat_name}.baked.rgba.png")
+                diffuse_path = os.path.join(export_dir, f"diffuse_{mat_name}.png")
                 if save_image_as_png(diffuse_img, diffuse_path):
-                    debug_print(f"        💾 Saved: {mat_name}.baked.rgba.png")
+                    debug_print(f"    💾 Saved: diffuse_{mat_name}.png")
                 else:
-                    debug_print(f"        ❌ Failed to save: {mat_name}.baked.rgba.png")
+                    debug_print(f"    ❌ Failed to save: diffuse_{mat_name}.png")
                 
                 # 2. PBR: R (Metallic) + G (Specular) + B (Roughness)
                 pbr_img = pack_pbr(
@@ -522,29 +523,30 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                     baked_images.get('roughness'),
                     default_metallic=0.0,
                     default_specular=0.5,
-                    default_roughness=0.5
+                    default_roughness=0.5,
+                    obj=obj
                 )
-                pbr_path = os.path.join(export_dir, f"{mat_name}.baked.me-sp-ro.png")
+                pbr_path = os.path.join(export_dir, f"pbr_{mat_name}.png")
                 if save_image_as_png(pbr_img, pbr_path):
-                    debug_print(f"        💾 Saved: {mat_name}.baked.me-sp-ro.png")
+                    debug_print(f"    💾 Saved: pbr_{mat_name}.png")
                 else:
-                    debug_print(f"        ❌ Failed to save: {mat_name}.baked.me-sp-ro.png")
+                    debug_print(f"    ❌ Failed to save: pbr_{mat_name}.png")
                 
                 # 3. Normal: RGB (Normal map)
                 if 'normal' in baked_images:
-                    normal_path = os.path.join(export_dir, f"{mat_name}.baked.normalgl.png")
+                    normal_path = os.path.join(export_dir, f"normal_{mat_name}.png")
                     if save_image_as_png(baked_images['normal'], normal_path):
-                        debug_print(f"        💾 Saved: {mat_name}.baked.normalgl.png")
+                        debug_print(f"    💾 Saved: normal_{mat_name}.png")
                     else:
-                        debug_print(f"        ❌ Failed to save: {mat_name}.baked.normalgl.png")
+                        debug_print(f"    ❌ Failed to save: normal_{mat_name}.png")
                 
                 # 4. Emissive: RGB (Emission Color)
                 if 'emission' in baked_images:
-                    emission_path = os.path.join(export_dir, f"{mat_name}.baked.emission.png")
+                    emission_path = os.path.join(export_dir, f"emissive_{mat_name}.png")
                     if save_image_as_png(baked_images['emission'], emission_path):
-                        debug_print(f"        💾 Saved: {mat_name}.baked.emission.png")
+                        debug_print(f"    💾 Saved: emissive_{mat_name}.png")
                     else:
-                        debug_print(f"        ❌ Failed to save: {mat_name}.baked.emission.png")
+                        debug_print(f"    ❌ Failed to save: emissive_{mat_name}.png")
 
                 pack_end_time = time.time()
                 pack_duration = int(pack_end_time - pack_start_time)

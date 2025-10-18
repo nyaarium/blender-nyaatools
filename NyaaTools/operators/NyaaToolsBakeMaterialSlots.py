@@ -161,7 +161,7 @@ def bake_material_slots(obj, export_dir, unrename_info):
         
         debug_print(f"")
         debug_print(f"Processing material: {mat.name}")
-        
+
         # Find Principled BSDF
         principled = find_principled_bsdf(mat)
         if not principled:
@@ -299,7 +299,8 @@ def bake_material_slots(obj, export_dir, unrename_info):
             baked_images.get('base_color'),
             baked_images.get('alpha'),
             default_rgb=(1.0, 1.0, 1.0),
-            default_alpha=1.0
+            default_alpha=1.0,
+            obj=obj
         )
         diffuse_path = os.path.join(export_dir, f"{mat_name}.baked.rgba.png")
         if save_image(diffuse_img, diffuse_path):
@@ -312,7 +313,8 @@ def bake_material_slots(obj, export_dir, unrename_info):
             baked_images.get('roughness'),
             default_metallic=0.0,
             default_specular=0.5,
-            default_roughness=0.5
+            default_roughness=0.5,
+            obj=obj
         )
         pbr_path = os.path.join(export_dir, f"{mat_name}.baked.me-sp-ro.png")
         if save_image(pbr_img, pbr_path):

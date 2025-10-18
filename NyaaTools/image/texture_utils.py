@@ -3,14 +3,18 @@
 import bpy
 import numpy as np
 import os
+import time
 from typing import Optional, Tuple
+
+from .uv.analyze_mip_stats import analyze_mip_stats
 
 
 def pack_rgba(
     rgb_image: Optional[bpy.types.Image],
     alpha_image: Optional[bpy.types.Image],
     default_rgb: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    default_alpha: float = 1.0
+    default_alpha: float = 1.0,
+    obj: Optional[bpy.types.Object] = None
 ) -> bpy.types.Image:
     """
     Pack RGB and Alpha channels into a single RGBA image.
@@ -20,9 +24,10 @@ def pack_rgba(
         alpha_image: Image containing Alpha data (uses R channel as alpha)
         default_rgb: Default RGB color if no image provided
         default_alpha: Default alpha value if no image provided
+        obj: Optional object for mipmap analysis optimization
     
     Returns:
-        New RGBA image with packed channels
+        New RGBA image with packed channels, optimized to minimum safe resolution if obj provided
     """
     # Determine resolution (use RGB if available, otherwise alpha, otherwise default)
     if rgb_image:
@@ -79,6 +84,27 @@ def pack_rgba(
     # Write to output image
     _np_to_image_pixels(output, out_array)
     
+    # Post-packing optimization: analyze for minimum safe resolution
+    if obj and obj.type == 'MESH':
+        try:
+            start_time = time.time()
+            mip_results = analyze_mip_stats(obj, output)
+            
+            if mip_results and mip_results['min_safe_resolution']:
+                optimal_size = mip_results['min_safe_resolution']
+                current_size = (output.size[0], output.size[1])
+                
+                if optimal_size != current_size:
+                    optimized_output = _resize_image_to_size(output, optimal_size[0], optimal_size[1])
+                    optimized_output.name = f"optimized_{output.name}"
+                    bpy.data.images.remove(output)
+                    output = optimized_output
+            
+            analysis_time = int(time.time() - start_time)
+            print(f"    🔍 Optimization analysis finished in {analysis_time} s")
+        except Exception as e:
+            print(f"    ⚠️ Packed RGBA optimization failed: {e}")
+    
     return output
 
 
@@ -88,7 +114,8 @@ def pack_pbr(
     roughness_image: Optional[bpy.types.Image],
     default_metallic: float = 0.0,
     default_specular: float = 0.5,
-    default_roughness: float = 0.5
+    default_roughness: float = 0.5,
+    obj: Optional[bpy.types.Object] = None
 ) -> bpy.types.Image:
     """
     Pack Metallic (R), Specular (G), and Roughness (B) into a single RGB image.
@@ -100,9 +127,10 @@ def pack_pbr(
         default_metallic: Default metallic value (0.0-1.0)
         default_specular: Default specular value (0.0-1.0)
         default_roughness: Default roughness value (0.0-1.0)
+        obj: Optional object for mipmap analysis optimization
     
     Returns:
-        New RGB image with packed PBR channels
+        New RGB image with packed PBR channels, optimized to minimum safe resolution if obj provided
     """
     # Determine resolution - use largest available texture
     images = [img for img in [metallic_image, specular_image, roughness_image] if img]
@@ -181,6 +209,27 @@ def pack_pbr(
     
     # Write to output image
     _np_to_image_pixels(output, out_array)
+    
+    # Post-packing optimization: analyze for minimum safe resolution
+    if obj and obj.type == 'MESH':
+        try:
+            start_time = time.time()
+            mip_results = analyze_mip_stats(obj, output)
+            
+            if mip_results and mip_results['min_safe_resolution']:
+                optimal_size = mip_results['min_safe_resolution']
+                current_size = (output.size[0], output.size[1])
+                
+                if optimal_size != current_size:
+                    optimized_output = _resize_image_to_size(output, optimal_size[0], optimal_size[1])
+                    optimized_output.name = f"optimized_{output.name}"
+                    bpy.data.images.remove(output)
+                    output = optimized_output
+            
+            analysis_time = int(time.time() - start_time)
+            print(f"    🔍 Optimization analysis finished in {analysis_time} s")
+        except Exception as e:
+            print(f"    ⚠️ Packed PBR optimization failed: {e}")
     
     return output
 
@@ -296,3 +345,35 @@ def _resize_np_nearest(src: np.ndarray, tw: int, th: int, use_batching: bool = F
         return result
     else:
         return src[y_idx][:, x_idx]
+
+
+def _resize_image_to_size(image: bpy.types.Image, target_width: int, target_height: int) -> bpy.types.Image:
+    """
+    Resize a Blender image to the specified dimensions using nearest-neighbor sampling.
+    
+    Args:
+        image: Source Blender image
+        target_width: Target width in pixels
+        target_height: Target height in pixels
+    
+    Returns:
+        New resized Blender image
+    """
+    # Convert to numpy array
+    src_array = _image_to_np(image)
+    
+    # Resize using nearest-neighbor
+    resized_array = _resize_np_nearest(src_array, target_width, target_height)
+    
+    # Create new image
+    resized_image = bpy.data.images.new(
+        name=f"resized_{image.name}",
+        width=target_width,
+        height=target_height,
+        alpha=image.channels == 4
+    )
+    
+    # Write resized data to new image
+    _np_to_image_pixels(resized_image, resized_array)
+    
+    return resized_image
