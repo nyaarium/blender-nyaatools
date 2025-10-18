@@ -3,6 +3,7 @@
 import bpy
 import numpy as np
 import os
+import time
 import traceback
 from typing import Optional, Tuple
 
@@ -336,6 +337,7 @@ def bake_socket(
             bpy.ops.object.mode_set(mode='OBJECT')
         
         # Perform the bake
+        bake_start_time = time.time()
         if is_normal:
             if socket.is_linked:
                 # Connected normal maps: bake NORMAL
@@ -361,6 +363,10 @@ def bake_socket(
                 margin=128,
                 use_selected_to_active=False
             )
+        
+        bake_end_time = time.time()
+        bake_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"🍞 Bake finished in {bake_duration} seconds")
         
         debug_print(f"Bake completed! Checking for optimization...")
         

@@ -1,6 +1,7 @@
 import traceback
 import os
 import re
+import time
 import bpy
 from bpy.props import StringProperty
 
@@ -224,6 +225,7 @@ def bake_material_slots(obj, export_dir, unrename_info):
                 debug_print(f"      {pack_name}: 8x8 (all defaults)")
         
         # Bake all sockets using pack resolution
+        bake_start_time = time.time()
         for pack_name, sockets in socket_groups.items():
             resolution = pack_resolutions[pack_name]
             
@@ -284,8 +286,13 @@ def bake_material_slots(obj, export_dir, unrename_info):
                 else:
                     debug_print(f"  ❌ Baking failed")
         
+        bake_end_time = time.time()
+        bake_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"  🍞 Bake finished in {bake_duration} seconds")
+        
         # Pack and save final textures
         debug_print(f"  📦 Packing channels:")
+        pack_start_time = time.time()
         
         # 1. Diffuse: RGB (Base Color) + Alpha (always PNG)
         diffuse_img = pack_rgba(
@@ -324,6 +331,10 @@ def bake_material_slots(obj, export_dir, unrename_info):
             emission_path = os.path.join(export_dir, f"{mat_name}.baked.emission.png")
             if save_image(emission_img, emission_path):
                 debug_print(f"    💾 Saved: {mat_name}.baked.emission.png")
+        
+        pack_end_time = time.time()
+        pack_duration = int(pack_end_time - pack_start_time)
+        debug_print(f"  📦 Pack finished in {pack_duration} seconds")
         
         debug_print(f"  ✅ Material {mat.name} completed")
 
