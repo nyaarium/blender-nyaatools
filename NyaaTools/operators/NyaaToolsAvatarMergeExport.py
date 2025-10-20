@@ -1,6 +1,7 @@
 import traceback
 import os
 import re
+import time
 import bpy
 from bpy.props import StringProperty
 
@@ -27,7 +28,7 @@ TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
 class NyaaToolsAvatarMergeExport(bpy.types.Operator):
-    """Merge and export for Voices of the Void. Configure the path to the printer directory: "...\\VotV\\Assets\\meshes\\printer\\\""""
+    """Merge and export tool. For Voices of the Void, configure the path to the printer directory: "...\\VotV\\Assets\\meshes\\printer\\\""""
 
     bl_idname = "nyaa.avatar_merge_export"
     bl_label = "Merge & Export"
@@ -432,6 +433,7 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                         debug_print(f"        {pack_name}: 8x8 (all defaults)")
                 
                 # Bake all sockets using pack resolution
+                bake_start_time = time.time()
                 for pack_name, sockets in socket_groups.items():
                     resolution = pack_resolutions[pack_name]
                     
@@ -453,6 +455,28 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                                 debug_print(f"Value: RGB({value[0]:.3f}, {value[1]:.3f}, {value[2]:.3f})")
                             else:
                                 debug_print(f"Value: {value}")
+                            
+                            # Special case: Check for unused emission (strength <= 0)
+                            if socket_name == 'Emission Color':
+                                emission_strength_socket = principled.inputs.get('Emission Strength')
+                                
+                                # Check if emission strength is 0 or less (unused)
+                                is_unused_emission = False
+                                if emission_strength_socket:
+                                    has_strength_input = has_socket_input(emission_strength_socket)
+                                    
+                                    if not has_strength_input:
+                                        strength_value = emission_strength_socket.default_value
+                                        is_unused_emission = strength_value <= 0.0
+                                
+                                if is_unused_emission:
+                                    # Emission strength is 0 or less, treat as unused
+                                    default_val = (0.0, 0.0, 0.0)
+                                    debug_print(f"🔧 Emission strength <= 0, overriding to black (unused)")
+                                else:
+                                    default_val = value
+                            else:
+                                default_val = value
                         
                         # Bake to memory
                         baked_img = bake_socket(
@@ -470,21 +494,27 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                         else:
                             debug_print(f"❌ Baking failed")
                 
+                bake_end_time = time.time()
+                bake_duration = int(bake_end_time - bake_start_time)
+                debug_print(f"🍞 Bake finished in {bake_duration} seconds")
+                
                 # Pack and save final textures
                 debug_print(f"📦 Packing channels:")
+                pack_start_time = time.time()
                 
                 # 1. Diffuse: RGB (Base Color) + Alpha
                 diffuse_img = pack_rgba(
                     baked_images.get('base_color'),
                     baked_images.get('alpha'),
                     default_rgb=(1.0, 1.0, 1.0),
-                    default_alpha=1.0
+                    default_alpha=1.0,
+                    obj=obj
                 )
                 diffuse_path = os.path.join(export_dir, f"diffuse_{mat_name}.png")
                 if save_image_as_png(diffuse_img, diffuse_path):
-                    debug_print(f"💾 Saved: diffuse_{mat_name}.png")
+                    debug_print(f"    💾 Saved: diffuse_{mat_name}.png")
                 else:
-                    debug_print(f"❌ Failed to save: diffuse_{mat_name}.png")
+                    debug_print(f"    ❌ Failed to save: diffuse_{mat_name}.png")
                 
                 # 2. PBR: R (Metallic) + G (Specular) + B (Roughness)
                 pbr_img = pack_pbr(
@@ -493,30 +523,35 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                     baked_images.get('roughness'),
                     default_metallic=0.0,
                     default_specular=0.5,
-                    default_roughness=0.5
+                    default_roughness=0.5,
+                    obj=obj
                 )
                 pbr_path = os.path.join(export_dir, f"pbr_{mat_name}.png")
                 if save_image_as_png(pbr_img, pbr_path):
-                    debug_print(f"💾 Saved: pbr_{mat_name}.png")
+                    debug_print(f"    💾 Saved: pbr_{mat_name}.png")
                 else:
-                    debug_print(f"❌ Failed to save: pbr_{mat_name}.png")
+                    debug_print(f"    ❌ Failed to save: pbr_{mat_name}.png")
                 
                 # 3. Normal: RGB (Normal map)
                 if 'normal' in baked_images:
                     normal_path = os.path.join(export_dir, f"normal_{mat_name}.png")
                     if save_image_as_png(baked_images['normal'], normal_path):
-                        debug_print(f"💾 Saved: normal_{mat_name}.png")
+                        debug_print(f"    💾 Saved: normal_{mat_name}.png")
                     else:
-                        debug_print(f"❌ Failed to save: normal_{mat_name}.png")
+                        debug_print(f"    ❌ Failed to save: normal_{mat_name}.png")
                 
                 # 4. Emissive: RGB (Emission Color)
                 if 'emission' in baked_images:
                     emission_path = os.path.join(export_dir, f"emissive_{mat_name}.png")
                     if save_image_as_png(baked_images['emission'], emission_path):
-                        debug_print(f"💾 Saved: emissive_{mat_name}.png")
+                        debug_print(f"    💾 Saved: emissive_{mat_name}.png")
                     else:
-                        debug_print(f"❌ Failed to save: emissive_{mat_name}.png")
+                        debug_print(f"    ❌ Failed to save: emissive_{mat_name}.png")
 
+                pack_end_time = time.time()
+                pack_duration = int(pack_end_time - pack_start_time)
+                debug_print(f"📦 Pack finished in {pack_duration} seconds")
+                
                 # Clean up any remaining baked images from memory
                 for key, img in baked_images.items():
                     if img:
@@ -530,6 +565,8 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                 
                 # Hide this object after baking and clear its material again
                 disable_render(bake_obj)
+                
+                debug_print(f"✅ Material {mat_name} completed")
 
             # Write properties.cfg file
             properties_cfg_path = os.path.join(export_dir, "properties.cfg")

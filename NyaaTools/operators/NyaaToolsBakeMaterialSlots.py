@@ -1,6 +1,7 @@
 import traceback
 import os
 import re
+import time
 import bpy
 from bpy.props import StringProperty
 
@@ -160,7 +161,7 @@ def bake_material_slots(obj, export_dir, unrename_info):
         
         debug_print(f"")
         debug_print(f"Processing material: {mat.name}")
-        
+
         # Find Principled BSDF
         principled = find_principled_bsdf(mat)
         if not principled:
@@ -224,6 +225,7 @@ def bake_material_slots(obj, export_dir, unrename_info):
                 debug_print(f"      {pack_name}: 8x8 (all defaults)")
         
         # Bake all sockets using pack resolution
+        bake_start_time = time.time()
         for pack_name, sockets in socket_groups.items():
             resolution = pack_resolutions[pack_name]
             
@@ -246,6 +248,28 @@ def bake_material_slots(obj, export_dir, unrename_info):
                     else:
                         debug_print(f"    Value: {value}")
                 
+                    # Special case: Check for unused emission (strength <= 0)
+                    if socket_name == 'Emission Color':
+                        emission_strength_socket = principled.inputs.get('Emission Strength')
+                        
+                        # Check if emission strength is 0 or less (unused)
+                        is_unused_emission = False
+                        if emission_strength_socket:
+                            has_strength_input = has_socket_input(emission_strength_socket)
+                            
+                            if not has_strength_input:
+                                strength_value = emission_strength_socket.default_value
+                                is_unused_emission = strength_value <= 0.0
+                        
+                        if is_unused_emission:
+                            # Emission strength is 0 or less, treat as unused
+                            default_val = (0.0, 0.0, 0.0)
+                            debug_print(f"    🔧 Emission strength <= 0, overriding to black (unused)")
+                        else:
+                            default_val = value
+                    else:
+                        default_val = value
+                
                 # Bake to memory
                 baked_img = bake_socket(
                     mat,
@@ -262,15 +286,21 @@ def bake_material_slots(obj, export_dir, unrename_info):
                 else:
                     debug_print(f"  ❌ Baking failed")
         
+        bake_end_time = time.time()
+        bake_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"  🍞 Bake finished in {bake_duration} seconds")
+        
         # Pack and save final textures
         debug_print(f"  📦 Packing channels:")
+        pack_start_time = time.time()
         
         # 1. Diffuse: RGB (Base Color) + Alpha (always PNG)
         diffuse_img = pack_rgba(
             baked_images.get('base_color'),
             baked_images.get('alpha'),
             default_rgb=(1.0, 1.0, 1.0),
-            default_alpha=1.0
+            default_alpha=1.0,
+            obj=obj
         )
         diffuse_path = os.path.join(export_dir, f"{mat_name}.baked.rgba.png")
         if save_image(diffuse_img, diffuse_path):
@@ -283,7 +313,8 @@ def bake_material_slots(obj, export_dir, unrename_info):
             baked_images.get('roughness'),
             default_metallic=0.0,
             default_specular=0.5,
-            default_roughness=0.5
+            default_roughness=0.5,
+            obj=obj
         )
         pbr_path = os.path.join(export_dir, f"{mat_name}.baked.me-sp-ro.png")
         if save_image(pbr_img, pbr_path):
@@ -302,6 +333,10 @@ def bake_material_slots(obj, export_dir, unrename_info):
             emission_path = os.path.join(export_dir, f"{mat_name}.baked.emission.png")
             if save_image(emission_img, emission_path):
                 debug_print(f"    💾 Saved: {mat_name}.baked.emission.png")
+        
+        pack_end_time = time.time()
+        pack_duration = int(pack_end_time - pack_start_time)
+        debug_print(f"  📦 Pack finished in {pack_duration} seconds")
         
         debug_print(f"  ✅ Material {mat.name} completed")
 

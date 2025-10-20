@@ -31,7 +31,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (4, 5, 3),
-    "version": (1, 9, 2),
+    "version": (1, 10, 1),
     "description": "Various Nyaarium tools to normalize & fast-export avatars",
     "location": "N-Panel > NyaaTools",
     "category": "Object",

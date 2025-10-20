@@ -3,6 +3,7 @@
 import bpy
 import numpy as np
 import os
+import time
 import traceback
 from typing import Optional, Tuple
 
@@ -277,7 +278,10 @@ def bake_socket(
                 
                 # Create emission shader for the default value
                 bake_bsdf = principled_tree.nodes.new('ShaderNodeEmission')
-                bake_bsdf.inputs['Color'].default_value = (*val, 1.0) if len(val) == 3 else val
+                emission_color = (*val, 1.0) if len(val) == 3 else val
+
+                # Assign desired flat normal color
+                bake_bsdf.inputs['Color'].default_value = emission_color
         
         # Connect the bake BSDF to material output
         if principled_tree != root_tree:
@@ -333,16 +337,26 @@ def bake_socket(
             bpy.ops.object.mode_set(mode='OBJECT')
         
         # Perform the bake
-        if is_normal and socket.is_linked:
-            # Bake connected normal maps using NORMAL type
-            bpy.ops.object.bake(
-                type='NORMAL',
-                margin=128,
-                use_selected_to_active=False,
-                normal_space='TANGENT'
-            )
+        bake_start_time = time.time()
+        if is_normal:
+            if socket.is_linked:
+                # Connected normal maps: bake NORMAL
+                bpy.ops.object.bake(
+                    type='NORMAL',
+                    margin=128,
+                    use_selected_to_active=False,
+                    normal_space='TANGENT'
+                )
+            else:
+                # Unlinked normal maps: bake EMIT from the emission shader color
+                debug_print("Normal (unlinked): baking EMIT flat normal")
+                bpy.ops.object.bake(
+                    type='EMIT',
+                    margin=128,
+                    use_selected_to_active=False
+                )
         else:
-            # Bake DIFFUSE for everything else (including unconnected normals with emission shader)
+            # Other sockets: bake DIFFUSE color only
             bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
@@ -350,16 +364,9 @@ def bake_socket(
                 use_selected_to_active=False
             )
         
-        debug_print(f"Bake completed! Checking for optimization...")
-        
-        # Apply solid color optimization if applicable
-        optimized_image = scan_and_resize_solids(target_image, obj)
-        if optimized_image != target_image:
-            debug_print(f"🎨 Optimized to solid color texture")
-            # Clean up original if we created a new optimized version
-            if optimized_image.name != target_image.name:
-                bpy.data.images.remove(target_image)
-            return optimized_image
+        bake_end_time = time.time()
+        bake_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"🍞 Bake finished in {bake_duration} seconds")
         
         return target_image
         
@@ -442,271 +449,3 @@ def bake_and_save_socket(
         if img and img.name in bpy.data.images:
             bpy.data.images.remove(img)
         return False
-
-
-def iterate_36_15_uv_point(face_vertices, i):
-    """
-    Generate UV coordinates for 15 sampling points in a triangular pattern.
-    
-    Args:
-        face_vertices: List of 3 UV coordinates defining the triangle
-        i: Index from 0 to 14 for the sampling point
-    
-    Returns:
-        UV coordinate tuple (u, v) for the i-th sampling point
-    """
-    
-    if len(face_vertices) != 3:
-        raise ValueError("face_vertices must contain exactly 3 UV coordinates")
-    
-    if i < 0 or i > 14:
-        raise ValueError("i must be between 0 and 14")
-    
-    # 15 inner points from a 36-point triangular grid
-    # These points are mathematically derived to stay within UV tri bounds
-    #        .
-    #       . .
-    #      . x .
-    #     . x x .
-    #    . x x x .
-    #   . x x x x .
-    #  . x x x x x .
-    # . . . . . . . .
-    barycentric_points = [
-        (0.143, 0.143, 0.714),
-        (0.286, 0.143, 0.571),
-        (0.143, 0.286, 0.571),
-        (0.429, 0.143, 0.429),
-        (0.286, 0.286, 0.429),
-        (0.143, 0.429, 0.429),
-        (0.571, 0.143, 0.286),
-        (0.429, 0.286, 0.286),
-        (0.286, 0.429, 0.286),
-        (0.143, 0.571, 0.286),
-        (0.714, 0.143, 0.143),
-        (0.571, 0.286, 0.143),
-        (0.429, 0.429, 0.143),
-        (0.286, 0.571, 0.143),
-        (0.143, 0.714, 0.143)
-    ]
-    
-    u_bary, v_bary, w_bary = barycentric_points[i]
-    
-    # Interpolate using barycentric coordinates
-    v0, v1, v2 = face_vertices
-    
-    u = u_bary * v0[0] + v_bary * v1[0] + w_bary * v2[0]
-    v = u_bary * v0[1] + v_bary * v1[1] + w_bary * v2[1]
-    
-    return (u, v)
-
-def scan_and_resize_solids(target_image, obj):
-    """
-    Scan UV faces and optimize solid color textures to 8x8 pixels.
-    Only works on triangulated meshes.
-    
-    Args:
-        target_image: The baked texture to analyze
-        obj: The object with UV mapping
-    
-    Returns:
-        Either target_image (if variance detected) or new 8x8 solid color image
-    """
-    def debug_print(*msgs):
-        print("      ", *msgs)
-        return
-    
-    if not target_image or not obj or obj.type != 'MESH':
-        debug_print("Invalid input for solid color optimization")
-        return target_image
-    
-    mesh = obj.data
-    if not mesh.uv_layers:
-        debug_print("No UV layers found")
-        return target_image
-    
-    # Get triangular faces first
-    triangular_faces = [face for face in mesh.polygons if len(face.vertices) == 3]
-    
-    if not triangular_faces:
-        debug_print("No triangular faces found")
-        return target_image
-    
-    uv_layer = mesh.uv_layers[0]
-    width, height = target_image.size
-    channels = 4 if target_image.channels == 4 else 3
-    
-    # Convert entire texture to NumPy once - one-time cost for massive speedup
-    debug_print(f"Converting {width}x{height} texture to NumPy array...")
-    pixels_np = np.array(target_image.pixels, dtype=np.float32).reshape(height, width, channels)
-    
-    # Pre-compute barycentric coordinates for 15 sample points - optimized
-    # Direct array creation is faster than loop + assignment
-    barycentric_coords = np.array([
-        [0.143, 0.143, 0.714],
-        [0.286, 0.143, 0.571],
-        [0.143, 0.286, 0.571],
-        [0.429, 0.143, 0.429],
-        [0.286, 0.286, 0.429],
-        [0.143, 0.429, 0.429],
-        [0.571, 0.143, 0.286],
-        [0.429, 0.286, 0.286],
-        [0.286, 0.429, 0.286],
-        [0.143, 0.571, 0.286],
-        [0.714, 0.143, 0.143],
-        [0.571, 0.286, 0.143],
-        [0.429, 0.429, 0.143],
-        [0.286, 0.571, 0.143],
-        [0.143, 0.714, 0.143]
-    ], dtype=np.float32)
-    
-    # Storage for the first color found
-    first_color = None
-    
-    # Batch processing function for UV faces
-    def process_face_batch(faces):
-        nonlocal first_color
-
-        # Maximum number of faces to process at once
-        batch_size = 1000
-        total_faces = len(faces)
-        
-        for batch_start in range(0, total_faces, batch_size):
-            batch_end = min(batch_start + batch_size, total_faces)
-            current_batch = faces[batch_start:batch_end]
-            batch_face_count = len(current_batch)
-            
-            # Pre-allocate arrays for all UV vertex coordinates in this batch
-            face_vertices = np.zeros((batch_face_count, 3, 2), dtype=np.float32)
-            
-            # Fill the UV vertices for all faces in batch
-            uv_data = uv_layer.data
-            for i, face in enumerate(current_batch):
-                loop_start = face.loop_start
-                for j in range(3):  # Triangular faces always have 3 vertices
-                    loop_idx = loop_start + j
-                    uv_co = uv_data[loop_idx].uv
-                    face_vertices[i, j, 0] = uv_co.x
-                    face_vertices[i, j, 1] = uv_co.y
-            
-            # Vectorized UV sample point calculation using NumPy broadcasting
-            # Reshape barycentric coordinates for broadcasting: (1, 15, 3)
-            bary_reshaped = barycentric_coords.reshape(1, 15, 3)
-            
-            # Reshape face vertices for broadcasting: (batch_face_count, 1, 3, 2)
-            vertices_reshaped = face_vertices.reshape(batch_face_count, 1, 3, 2)
-            
-            # Extract vertex coordinates: (batch_face_count, 1, 2) each
-            v0 = vertices_reshaped[:, :, 0, :]  # Shape: (batch_face_count, 1, 2)
-            v1 = vertices_reshaped[:, :, 1, :]  # Shape: (batch_face_count, 1, 2)
-            v2 = vertices_reshaped[:, :, 2, :]  # Shape: (batch_face_count, 1, 2)
-            
-            # Extract barycentric weights: (1, 15, 3)
-            u_bary = bary_reshaped[:, :, 0:1]  # Shape: (1, 15, 1)
-            v_bary = bary_reshaped[:, :, 1:2]  # Shape: (1, 15, 1)
-            w_bary = bary_reshaped[:, :, 2:3]  # Shape: (1, 15, 1)
-            
-            # Vectorized barycentric interpolation
-            # Broadcasting: (batch_face_count, 1, 2) * (1, 15, 1) = (batch_face_count, 15, 2)
-            all_uv_samples = (u_bary * v0 + v_bary * v1 + w_bary * v2)
-            
-            # Vectorized coordinate conversion
-            w, h = width, height
-            all_x_coords = (all_uv_samples[:, :, 0] * w).astype(np.int32) % w
-            all_y_coords = (all_uv_samples[:, :, 1] * h).astype(np.int32) % h
-            
-            # Extract all RGB values
-            rgb_samples = pixels_np[all_y_coords, all_x_coords, :3]
-            
-            # Calculate variance for each face in the batch
-            # Find min/max values for each color channel across the 15 samples for each face
-            min_values = np.min(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
-            max_values = np.max(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
-            variances = max_values - min_values     # Shape: (batch_face_count, 3)
-            max_variances = np.max(variances, axis=1)  # Shape: (batch_face_count)
-            
-            # Check which faces are solid (variance below threshold)
-            is_solid = max_variances <= 0.01
-            
-            # If any face is not solid, we're done
-            if not np.all(is_solid):
-                return False, None
-            
-            # Calculate average colors for each face
-            avg_colors = np.mean(rgb_samples, axis=1)  # Shape: (batch_face_count, 3)
-            
-            # Check if all faces have the same color
-            if batch_face_count > 0:
-                # If this is the first batch, store the first color
-                if first_color is None:
-                    first_color = avg_colors[0]
-                
-                # Vectorized color consistency check
-                # Calculate absolute differences for all faces at once
-                color_diffs = np.abs(avg_colors - first_color)
-                max_diffs = np.max(color_diffs, axis=1)
-                
-                # Check if any face has a difference > 0.01
-                if np.any(max_diffs > 0.01):
-                    return False, None
-        
-        # All faces processed successfully
-        return True, first_color
-    
-    # Process all faces directly
-    debug_print(f"Scanning {len(triangular_faces)} faces...")
-
-    success, color = process_face_batch(triangular_faces)
-    
-    if not success:
-        # Non-solid texture found. Return original image.
-        return target_image
-    
-    # All faces are the same solid color - create optimized 8x8 texture
-    debug_print(f"All faces are solid color: {tuple(color) + (1.0,)}")
-
-    optimized_image = create_default_texture(8, 8, (float(color[0]), float(color[1]), float(color[2]), 1.0))
-    optimized_image.name = f"optimized_{target_image.name}"
-    return optimized_image
-
-
-def generate_barycentric_sample_points():
-    """
-    Generate barycentric coordinates for sampling a triangle.
-    Creates a 36-point triangular grid and returns the 15 inner points.
-    
-    The pattern looks like this:
-         .
-        . .
-       . x .
-      . x x .
-     . x x x .
-    . x x x x .
-   . x x x x x .
-  . . . . . . . .
-  
-  Where 'x' are the sampled inner points and '.' are edge points.
-  
-    Returns:
-        list: List of 15 (u, v, w) barycentric coordinate tuples
-    """
-    # Generate all 36 points in the triangular grid
-    all_points = []
-    for i in range(8):  # 8 rows
-        for j in range(i + 1):  # i+1 points in row i
-            # Convert to barycentric coordinates
-            u = j / 7.0  # Normalize to [0,1]
-            v = (i - j) / 7.0  # Normalize to [0,1] 
-            w = 1.0 - u - v  # Ensure u + v + w = 1
-            all_points.append((u, v, w))
-    
-    # Select the 15 inner points (skip edge points)
-    inner_points = []
-    for i in range(1, 7):  # Skip first and last rows (edges)
-        for j in range(1, i):  # Skip first and last points in each row (edges)
-            u = j / 7.0
-            v = (i - j) / 7.0
-            w = 1.0 - u - v
-            inner_points.append((u, v, w))
-    
-    return inner_points
