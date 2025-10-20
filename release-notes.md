@@ -11,3 +11,7 @@ Improved the **Bake Material Slots** optimizer
 - Automatic downsizing: It uses the lowest resolution possible that wont harm the quality. Very safe.
 
 - Textures with fairly simple colored islands will see the best improvements. Metallic maps, smoothness/roughness, etc. If it's just a single color, you will see it downscale all the way down to 8x8.
+
+- Baking process optimized to use Blender **Combine RGB** nodes to pack in-shader.
+
+- Dynamic support for specifying any packing order you want.

@@ -1,11 +1,11 @@
 import bpy
 import traceback
 
-from ..image.nyaatoon import is_filename_nyaatoon_formatted
+from ..image.dtp_format import is_filename_dtp_formatted
 
 
 class NyaaToolsCheckImageFormats(bpy.types.Operator):
-    """Check if images in selected meshes follow the Nyaatoon naming convention"""
+    """Check if images in selected meshes follow Nyaarium's DTP naming convention"""
 
     bl_idname = "nyaa.check_image_formats"
     bl_label = "Check Names"
@@ -24,9 +24,9 @@ class NyaaToolsCheckImageFormats(bpy.types.Operator):
                 message += f"⚠️ {len(result['mismatched'])} need renaming:\n"
                 message += "\n".join(result["mismatched"]) + "\n\n"
 
-            if 0 < len(result["notnyaatoon"]):
-                message += f"❌ {len(result['notnyaatoon'])} not nyaatoon formatted:\n"
-                message += "\n".join(result["notnyaatoon"]) + "\n\n"
+            if 0 < len(result["not_dtp_formatted"]):
+                message += f"❌ {len(result['not_dtp_formatted'])} not DTP formatted:\n"
+                message += "\n".join(result["not_dtp_formatted"]) + "\n\n"
 
             if 0 < len(result["error"]):
                 message += f"❌ {len(result['error'])} errors:\n"
@@ -61,13 +61,13 @@ def perform(context):
         return {
             "valid": [],
             "mismatched": [],
-            "notnyaatoon": [],
+            "not_dtp_formatted": [],
             "error": ["No images found in selected meshes"],
         }
 
     results_valid = []
     results_mismatched = []
-    results_notnyaatoon = []
+    results_not_dtp_formatted = []
 
     wm = bpy.context.window_manager
     wm.progress_begin(0, len(used_images))
@@ -78,8 +78,8 @@ def perform(context):
         if image.name == "Render Result":
             continue
 
-        if not is_filename_nyaatoon_formatted(image.name):
-            results_notnyaatoon.append(image.name)
+        if not is_filename_dtp_formatted(image.name):
+            results_not_dtp_formatted.append(image.name)
             continue
 
         # Check if image name matches packed file path
@@ -100,6 +100,6 @@ def perform(context):
     return {
         "valid": results_valid,
         "mismatched": results_mismatched,
-        "notnyaatoon": results_notnyaatoon,
+        "not_dtp_formatted": results_not_dtp_formatted,
         "error": [],
     }

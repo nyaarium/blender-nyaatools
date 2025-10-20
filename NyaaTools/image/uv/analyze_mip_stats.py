@@ -12,10 +12,10 @@ from .build_coverage_pyramid import build_coverage_pyramid
 
 
 # Max color difference for entire texture to be considered uniform
-UNIFORMITY_THRESHOLD = 0.005 # (~1.3 color levels in 0-255)
+UNIFORMITY_THRESHOLD = 0.008 # (~2 color levels in 0-255)
 
 # Max detail loss allowed for 2x2 blocks when downsampling to 1 block
-DEGRADATION_THRESHOLD = 0.005 # (~1.3 color levels in 0-255)
+DEGRADATION_THRESHOLD = 0.004 # (~1 color level in 0-255)
 
 # Minimum ratio of safe blocks required for a level to be considered safe
 SAFETY_THRESHOLD = 0.95
@@ -35,18 +35,15 @@ def analyze_mip_stats(obj, image):
     # Get image dimensions
     W, H = image.size
     
-    # Create UV face map (placeholder - needs implementation)
-    start_time = time.time()
+    # Create UV face map
     uv_face_map = rasterize_uv_faces(obj, W, H)
     if uv_face_map is None:
         return None
     
     # Get image array
-    start_time = time.time()
     image_array = np.array(image.pixels, dtype=np.float32).reshape((H, W, 4))
     
     # Build coverage and image pyramids
-    start_time = time.time()
     coverage_pyramid, image_pyramid = build_coverage_pyramid(uv_face_map, image_array)
     max_levels = len(coverage_pyramid)
     
@@ -62,18 +59,15 @@ def analyze_mip_stats(obj, image):
         }
     
     # Check texture uniformness
-    start_time = time.time()
     is_uniform, avg_color = check_texture_uniformness(image_array, uv_face_map >= 0)
     
     # Process mipmapping for safety analysis only
-    start_time = time.time()
     for level in range(max_levels - 1, -1, -1):
         analyze_mipmap_safety(level, image_pyramid, coverage_pyramid, all_results)
 
     
     # Aggregate final results
-    start_time = time.time()
-    result = aggregate_safety_results(all_results, max_levels)
+    result = aggregate_safety_results(all_results, max_levels, W, H)
     
     # Add direct uniformness results
     result['is_uniform_color'] = is_uniform
@@ -93,7 +87,6 @@ def rasterize_uv_faces(obj, W, H):
     Returns:
         UV face map or None if no UV data
     """
-
     # Check if object has mesh data
     if not obj.data or obj.type != 'MESH':
         return None
@@ -130,7 +123,7 @@ def rasterize_uv_faces(obj, W, H):
             max_x = int(np.ceil(np.max(triangle_coords[:, 0])))
             min_y = int(np.floor(np.min(triangle_coords[:, 1])))
             max_y = int(np.ceil(np.max(triangle_coords[:, 1])))
-
+            
             # Clamp to image bounds
             if min_x > W - 1 or min_y > H - 1 or max_x < 0 or max_y < 0:
                 continue
@@ -253,7 +246,7 @@ def check_texture_uniformness(image_array, coverage_map):
     return is_uniform, avg_color
 
 
-def aggregate_safety_results(all_results, max_levels):
+def aggregate_safety_results(all_results, max_levels, W, H):
     """
     Aggregate results from all levels into final output structure.
     
@@ -278,9 +271,10 @@ def aggregate_safety_results(all_results, max_levels):
             avg_threshold = np.mean(level_results['avg_threshold'][coverage_mask])
             is_safe = safe_ratio >= SAFETY_THRESHOLD
         else:
-            safe_ratio = 1.0
+            # No blocks = 0% safe
+            safe_ratio = 0.0
             avg_threshold = 0.0
-            is_safe = True
+            is_safe = False
 
         mip_block_results.append({
             'level': level,
@@ -290,21 +284,17 @@ def aggregate_safety_results(all_results, max_levels):
         })
     
     # Find minimum safe resolution (last safe level)
-    min_safe_resolution = (1, 1)
-    for result in reversed(mip_block_results):  # Start from highest resolution
+    # Start with original resolution as default
+    original_resolution = (W, H)
+    min_safe_resolution = original_resolution
+    
+    for i, result in enumerate(reversed(mip_block_results)):
         if result['safe']:
             min_safe_resolution = result['resolution']
-            # Selected safe resolution determined
             break
     
     # Apply 8x8 minimum floor for game engine compatibility
-    original_resolution = min_safe_resolution
     min_safe_resolution = (max(8, min_safe_resolution[0]), max(8, min_safe_resolution[1]))
-    if original_resolution != min_safe_resolution:
-        # Applied 8x8 minimum floor for compatibility
-        pass
-    
-    # Format results nicely
     result = {
         'min_safe_resolution': min_safe_resolution,
         # 'mip_block_results': []

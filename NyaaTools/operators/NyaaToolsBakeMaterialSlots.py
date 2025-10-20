@@ -2,6 +2,8 @@ import traceback
 import os
 import re
 import time
+import json
+import numpy as np
 import bpy
 from bpy.props import StringProperty
 
@@ -9,9 +11,8 @@ from ..consts import PROP_AVATAR_EXPORT_PATH
 from ..common.get_prop import get_prop
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
-from ..image.material_analyzer import find_principled_bsdf, has_socket_input, find_largest_texture_resolution
-from ..image.texture_baker import bake_socket
-from ..image.texture_utils import pack_rgba, pack_pbr
+from ..image.material_analyzer import find_principled_bsdf
+from ..image.texture_baker import bake_packed_texture
 
 
 TEMP_SCENE_NAME = "Temp Bake Material Slots"
@@ -171,172 +172,36 @@ def bake_material_slots(obj, export_dir, unrename_info):
         # Sanitize material name for file output
         mat_name = sanitize_name(mat.name)
         
-        # Dictionary to hold baked images in memory
-        baked_images = {}
+        # DEBUG: Extract UV data and original material image BEFORE baking and bail out early
+        # debug_data = extract_uv_and_image_data(obj, mat, mat_name)
+        # if save_debug_data(debug_data, export_dir, mat_name):
+        #     debug_print(f"  🚀 Debug extraction complete - bailing out early")
+        #     return  # Early exit for debugging
         
-        # Define socket groups for resolution detection
-        socket_groups = {
-            'diffuse': [
-                ('Base Color', 'base_color', False),
-                ('Alpha', 'alpha', False)
-            ],
-            'pbr': [
-                ('Metallic', 'metallic', False),
-                ('Specular IOR Level', 'specular', False),
-                ('Roughness', 'roughness', False)
-            ],
-            'normal': [
-                ('Normal', 'normal', True)
-            ],
-            'emission': [
-                ('Emission Color', 'emission', False)
-            ]
-        }
+        # Define pack configurations with format strings
+        pack_configs = [
+            ('rgba', 'baked.rgba.png'),
+            ('me-sp-ro', 'baked.me-sp-ro.png'),
+            ('normalgl', 'baked.normalgl.png'),
+            ('emission', 'baked.emission.png'),
+        ]
         
-        # Determine resolution per pack
-        debug_print(f"  Sockets:")
-        pack_resolutions = {}
-        
-        for pack_name, sockets in socket_groups.items():
-            max_resolution = None
-            any_has_input = False
-            
-            for socket_name, key, is_normal in sockets:
-                socket = principled.inputs.get(socket_name)
-                if not socket:
-                    continue
-                
-                if has_socket_input(socket):
-                    any_has_input = True
-                    res = find_largest_texture_resolution(socket, mat)
-                    if res:
-                        if max_resolution is None or (res[0] * res[1] > max_resolution[0] * max_resolution[1]):
-                            max_resolution = res
-            
-            if any_has_input:
-                if max_resolution:
-                    pack_resolutions[pack_name] = max_resolution
-                    debug_print(f"      {pack_name}: {max_resolution[0]}x{max_resolution[1]} (detected)")
-                else:
-                    pack_resolutions[pack_name] = (512, 512)
-                    debug_print(f"      {pack_name}: 512x512 (default - has input but no textures)")
-            else:
-                pack_resolutions[pack_name] = (8, 8)
-                debug_print(f"      {pack_name}: 8x8 (all defaults)")
-        
-        # Bake all sockets using pack resolution
+        # Bake and save packed textures
         bake_start_time = time.time()
-        for pack_name, sockets in socket_groups.items():
-            resolution = pack_resolutions[pack_name]
-            
-            for socket_name, key, is_normal in sockets:
-                socket = principled.inputs.get(socket_name)
-                if not socket:
-                    continue
-                
-                debug_print(f"  🔧 Baking {socket_name}: {resolution[0]}x{resolution[1]} (from {pack_name} pack)")
-                
-                # Determine default value for this socket type
-                default_val = None
-                if is_normal:
-                    # Normal maps default to flat normal (0.5, 0.5, 1.0)
-                    default_val = (0.5, 0.5, 1.0)
-                elif not has_socket_input(socket) and hasattr(socket, 'default_value'):
-                    value = socket.default_value
-                    if isinstance(value, (tuple, list)) and len(value) >= 3:
-                        debug_print(f"    Value: RGB({value[0]:.3f}, {value[1]:.3f}, {value[2]:.3f})")
-                    else:
-                        debug_print(f"    Value: {value}")
-                
-                    # Special case: Check for unused emission (strength <= 0)
-                    if socket_name == 'Emission Color':
-                        emission_strength_socket = principled.inputs.get('Emission Strength')
-                        
-                        # Check if emission strength is 0 or less (unused)
-                        is_unused_emission = False
-                        if emission_strength_socket:
-                            has_strength_input = has_socket_input(emission_strength_socket)
-                            
-                            if not has_strength_input:
-                                strength_value = emission_strength_socket.default_value
-                                is_unused_emission = strength_value <= 0.0
-                        
-                        if is_unused_emission:
-                            # Emission strength is 0 or less, treat as unused
-                            default_val = (0.0, 0.0, 0.0)
-                            debug_print(f"    🔧 Emission strength <= 0, overriding to black (unused)")
-                        else:
-                            default_val = value
-                    else:
-                        default_val = value
-                
-                # Bake to memory
-                baked_img = bake_socket(
-                    mat,
-                    obj,
-                    socket_name,
-                    resolution,
-                    is_normal,
-                    default_val
-                )
-                
-                if baked_img:
-                    baked_images[key] = baked_img
-                    debug_print(f"  🍞 Baked successfully")
+        for format_string, filename in pack_configs:
+            packed_img = bake_packed_texture(mat, obj, format_string)
+            if packed_img:
+                save_path = os.path.join(export_dir, f"{mat_name}.{filename}")
+                if save_image(packed_img, save_path):
+                    debug_print(f"    💾 Saved: {mat_name}.{filename}")
                 else:
-                    debug_print(f"  ❌ Baking failed")
+                    debug_print(f"    ❌ Failed to save: {mat_name}.{filename}")
+            else:
+                debug_print(f"    ❌ Baking failed for {format_string}")
         
         bake_end_time = time.time()
         bake_duration = int(bake_end_time - bake_start_time)
         debug_print(f"  🍞 Bake finished in {bake_duration} seconds")
-        
-        # Pack and save final textures
-        debug_print(f"  📦 Packing channels:")
-        pack_start_time = time.time()
-        
-        # 1. Diffuse: RGB (Base Color) + Alpha (always PNG)
-        diffuse_img = pack_rgba(
-            baked_images.get('base_color'),
-            baked_images.get('alpha'),
-            default_rgb=(1.0, 1.0, 1.0),
-            default_alpha=1.0,
-            obj=obj
-        )
-        diffuse_path = os.path.join(export_dir, f"{mat_name}.baked.rgba.png")
-        if save_image(diffuse_img, diffuse_path):
-            debug_print(f"    💾 Saved: {mat_name}.baked.rgba.png")
-        
-        # 2. PBR: Metallic + Specular IOR Level + Roughness (user-specified format)
-        pbr_img = pack_pbr(
-            baked_images.get('metallic'),
-            baked_images.get('specular'),
-            baked_images.get('roughness'),
-            default_metallic=0.0,
-            default_specular=0.5,
-            default_roughness=0.5,
-            obj=obj
-        )
-        pbr_path = os.path.join(export_dir, f"{mat_name}.baked.me-sp-ro.png")
-        if save_image(pbr_img, pbr_path):
-            debug_print(f"    💾 Saved: {mat_name}.baked.me-sp-ro.png")
-        
-        # 3. Normal
-        if 'normal' in baked_images:
-            normal_img = baked_images['normal']
-            normal_path = os.path.join(export_dir, f"{mat_name}.baked.normalgl.png")
-            if save_image(normal_img, normal_path):
-                debug_print(f"    💾 Saved: {mat_name}.baked.normalgl.png")
-        
-        # 4. Emission
-        if 'emission' in baked_images:
-            emission_img = baked_images['emission']
-            emission_path = os.path.join(export_dir, f"{mat_name}.baked.emission.png")
-            if save_image(emission_img, emission_path):
-                debug_print(f"    💾 Saved: {mat_name}.baked.emission.png")
-        
-        pack_end_time = time.time()
-        pack_duration = int(pack_end_time - pack_start_time)
-        debug_print(f"  📦 Pack finished in {pack_duration} seconds")
         
         debug_print(f"  ✅ Material {mat.name} completed")
 
@@ -379,4 +244,126 @@ def sanitize_name(name):
     """Sanitize filename to be Windows-safe, replacing forbidden characters with underscore."""
     # Windows forbidden characters: < > : " / \ | ? *
     return re.sub(r'[<>:"/\\|?*]', '_', name)
+
+
+def extract_uv_and_image_data(obj, material, material_name):
+    """
+    Extract UV triangle data and original material image pixels for debugging/testing purposes.
+    This extracts UV data and finds the first connected image texture from the material.
+    
+    Args:
+        obj: Blender object with UV data
+        material: The material to extract image from
+        material_name: Name of the material for file naming
+        
+    Returns:
+        Dictionary with uv_faces and image_pixels data from original material
+        
+    Example output format (matching mock-texture.json):
+    {
+        "uv_faces": [
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
+        ],
+        "image_pixels": [
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+            ...
+        ],
+        "image_dimensions": [256, 256]
+    }
+    """
+    def debug_print(*msgs):
+        print("      ", *msgs)
+        return
+    
+    debug_print(f"🔍 Extracting UV data and original image for {material_name}")
+    
+    # Initialize result structure to match mock-texture.json format
+    result = {
+        "uv_faces": [],
+        "image_pixels": [],
+        "image_dimensions": []
+    }
+    
+    # Extract UV triangle data
+    if obj.data and obj.type == 'MESH' and obj.data.uv_layers:
+        mesh = obj.data
+        uv_layer = mesh.uv_layers[0]
+        
+        for face_idx, face in enumerate(mesh.polygons):
+            # Collect UVs for this face
+            uv_coords = []
+            for loop_idx in face.loop_indices:
+                uv_coord = uv_layer.data[loop_idx].uv
+                uv_coords.append([float(uv_coord.x), float(uv_coord.y)])
+            
+            if len(uv_coords) >= 3:
+                # Store UV coordinates as list of [u, v] pairs (matching mock format)
+                result["uv_faces"].append(uv_coords)
+        
+        debug_print(f"  📐 Extracted {len(result['uv_faces'])} UV faces")
+    else:
+        debug_print(f"  ⚠️ No UV data found for object {obj.name}")
+    
+    # Find first connected image texture in the material
+    if material and material.use_nodes and material.node_tree:
+        image_texture_node = None
+        
+        # Search for Image Texture nodes
+        for node in material.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image:
+                image_texture_node = node
+                break
+        
+        if image_texture_node and image_texture_node.image:
+            image = image_texture_node.image
+            debug_print(f"  🖼️ Found connected image: {image.name}")
+            
+            # Extract image pixel data
+            if image.pixels:
+                W, H = image.size
+                result["image_dimensions"] = [int(W), int(H)]
+                
+                # Convert pixels to flat list format (matching mock format)
+                pixels = np.array(image.pixels, dtype=np.float32).reshape((H, W, -1))
+                
+                # Flatten to list of [r, g, b, a] arrays (matching mock format)
+                result["image_pixels"] = pixels.reshape(-1, pixels.shape[2]).tolist()
+                
+                debug_print(f"  🖼️ Extracted {W}x{H} image with {pixels.shape[2]} channels")
+            else:
+                debug_print(f"  ⚠️ Image {image.name} has no pixel data")
+        else:
+            debug_print(f"  ⚠️ No connected image texture found in material")
+    else:
+        debug_print(f"  ⚠️ Material has no node tree or nodes")
+    
+    return result
+
+
+def save_debug_data(debug_data, export_dir, material_name):
+    """
+    Save debug data to test-image.json file.
+    
+    Args:
+        debug_data: Dictionary with uv_faces data
+        export_dir: Export directory path
+        material_name: Material name for file naming
+    """
+    def debug_print(*msgs):
+        print("      ", *msgs)
+        return
+    
+    # Sanitize material name for filename
+    sanitized_name = sanitize_name(material_name)
+    debug_file_path = os.path.join(export_dir, f"{sanitized_name}.test-image.json")
+    
+    try:
+        with open(debug_file_path, 'w') as f:
+            json.dump(debug_data, f, indent=2)
+        debug_print(f"  💾 Saved debug data: {sanitized_name}.test-image.json")
+        return True
+    except Exception as e:
+        debug_print(f"  ❌ Failed to save debug data: {e}")
+        return False
 
