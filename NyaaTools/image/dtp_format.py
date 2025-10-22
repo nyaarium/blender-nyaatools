@@ -1,7 +1,3 @@
-import os
-import bpy
-
-
 # Texture channel flags
 supported_flags = {
     "00": True,  # Unused channel
@@ -15,6 +11,7 @@ supported_flags = {
     "nx": True,  # Normal X
     "ng": True,  # Normal +Y (OpenGL)
     "nd": True,  # Normal -Y (DirectX)
+    # Normal Z should auto calculated from X and Y
     "he": True,  # Height
     "me": True,  # Metallic
     "sp": True,  # Specular
@@ -42,16 +39,19 @@ color_aliases = {
     "emission": True,
 }
 
-# Supported aliases
-supported_aliases = {
-    "rgb": True,
-    "rgba": True,
-    "linear": True,
-    "lineara": True,
-    "emission": True,
-    "normalgl": True,
-    "normaldx": True,
+# Alias expansions - maps aliases to their channel components
+alias_channels = {
+    "rgb": ["cr", "cg", "cb"],
+    "rgba": ["cr", "cg", "cb", "al"],
+    "linear": ["lr", "lg", "lb"],
+    "lineara": ["lr", "lg", "lb", "al"],
+    "emission": ["er", "eg", "eb"],
+    "normalgl": ["nx", "ng"],
+    "normaldx": ["nx", "nd"],
 }
+
+# Supported aliases - simple key check
+supported_aliases = alias_channels
 
 # Supported image formats
 supported_image_types = {
@@ -84,8 +84,18 @@ def is_flag_supported(flags: str) -> bool:
     return True
 
 
-def is_filename_nyaatoon_formatted(filename: str) -> bool:
-    """Check if a filename follows the nyaatoon texture naming convention."""
+def expand_alias(alias: str) -> list:
+    """Expand an alias to its component channels."""
+    return alias_channels.get(alias, [alias])
+
+
+def is_alias(alias: str) -> bool:
+    """Check if a string is a supported alias."""
+    return alias in alias_channels
+
+
+def is_filename_dtp_formatted(filename: str) -> bool:
+    """Check if a filename follows the DTP (Dynamic Texture Packing) naming convention."""
     # Grab filename without path
     filename = filename.split("/")[-1].split("\\")[-1]
 

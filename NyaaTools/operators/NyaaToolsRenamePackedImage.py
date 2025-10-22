@@ -16,7 +16,7 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
             message_unchanged = ""
             message_renamed = ""
             message_notpacked = ""
-            message_notnyaatoon = ""
+            message_not_dtp_formatted = ""
             message_error = ""
 
             result = perform(context)
@@ -39,11 +39,11 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
                 )
                 message_notpacked += "\n".join(result["notpacked"]) + "\n\n"
 
-            if 0 < len(result["notnyaatoon"]):
-                message_notnyaatoon += (
-                    f"❌ {len(result['notnyaatoon'])} images not nyaatoon formatted:\n"
+            if 0 < len(result["not_dtp_formatted"]):
+                message_not_dtp_formatted += (
+                    f"❌ {len(result['not_dtp_formatted'])} images not DTP formatted:\n"
                 )
-                message_notnyaatoon += "\n".join(result["notnyaatoon"]) + "\n\n"
+                message_not_dtp_formatted += "\n".join(result["not_dtp_formatted"]) + "\n\n"
 
             if 0 < len(result["error"]):
                 message_error += f"❌ {len(result['error'])} images could not be renamed. Double check:\n"
@@ -53,7 +53,7 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
                 message_renamed
                 + message_unchanged
                 + message_notpacked
-                + message_notnyaatoon
+                + message_not_dtp_formatted
                 + message_error
             )
 
@@ -87,14 +87,14 @@ def perform(context):
             "unchanged": [],
             "renamed": [],
             "notpacked": [],
-            "notnyaatoon": [],
+            "not_dtp_formatted": [],
             "error": ["No images found in selected meshes"],
         }
 
     results_unchanged = []
     results_renamed = []
     results_notpacked = []
-    results_notnyaatoon = []
+    results_not_dtp_formatted = []
     results_error = []
 
     wm = bpy.context.window_manager
@@ -115,8 +115,8 @@ def perform(context):
                 results_renamed.append(result["name"])
             case "notpacked":
                 results_notpacked.append(result["name"])
-            case "notnyaatoon":
-                results_notnyaatoon.append(result["name"])
+            case "not_dtp_formatted":
+                results_not_dtp_formatted.append(result["name"])
             case "error":
                 results_error.append(result["name"])
 
@@ -126,6 +126,6 @@ def perform(context):
         "unchanged": results_unchanged,
         "renamed": results_renamed,
         "notpacked": results_notpacked,
-        "notnyaatoon": results_notnyaatoon,
+        "not_dtp_formatted": results_not_dtp_formatted,
         "error": results_error,
     }

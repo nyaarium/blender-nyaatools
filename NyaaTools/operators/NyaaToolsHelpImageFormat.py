@@ -2,7 +2,7 @@ import bpy
 import traceback
 
 
-help_text = """--==[ Image Naming Guide ]==--
+help_text = """--==[ DTP Format Guide ]==--
 
 EXAMPLES:
 Color RGB:   image.rgb.jpg
@@ -51,7 +51,7 @@ es = Emission Strength"""
 
 
 class NyaaToolsHelpImageFormat(bpy.types.Operator):
-    """Display help about nyaatoon image format naming convention"""
+    """Display help about DTP image format naming convention"""
 
     bl_idname = "nyaa.help_image_formats"
     bl_label = "Help: Image Formats"
