@@ -15,3 +15,5 @@ Improved the **Bake Material Slots** optimizer
 - Baking process optimized to use Blender **Combine RGB** nodes to pack in-shader.
 
 - Dynamic support for specifying any packing order you want.
+
+- Impovements to the algorithm
