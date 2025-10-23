@@ -13,51 +13,6 @@ from .build_coverage_pyramid import build_coverage_pyramid
 from ..save_numpy_image import save_numpy_as_raw
 
 
-def save_debug_preview(mask, minmax_array, level, export_dir, prefix="debug"):
-    """Save debug preview data as raw binary files for external conversion"""
-    try:
-        # Create debug directory
-        debug_dir = os.path.join(export_dir, "debug_previews")
-        os.makedirs(debug_dir, exist_ok=True)
-        
-        # Save coverage mask as raw binary
-        # Format: 2 int32 (width, height), then uint8 values (0 or 255)
-        mask_binary = (mask * 255).astype(np.uint8)
-        mask_path = os.path.join(debug_dir, f"{prefix}_mask_l{level}.raw")
-        
-        with open(mask_path, 'wb') as f:
-            # Write dimensions as int32
-            f.write(np.array([mask.shape[1], mask.shape[0]], dtype=np.int32).tobytes())
-            # Write mask data as uint8
-            f.write(mask_binary.tobytes())
-        
-        print(f"        DEBUG Save: mask shape {mask.shape}, min/max: {np.min(mask):.6f}, {np.max(mask):.6f}")
-        
-        # Save min/max visualization as raw binary
-        if minmax_array.shape[2] >= 8:  # min_r, min_g, min_b, min_a, max_r, max_g, max_b, max_a
-            # Use max values for RGB channels
-            max_rgb = minmax_array[:, :, 4:7]  # max_r, max_g, max_b
-            max_rgb_uint8 = (max_rgb * 255).astype(np.uint8)
-            
-            minmax_path = os.path.join(debug_dir, f"{prefix}_minmax_l{level}.raw")
-            
-            with open(minmax_path, 'wb') as f:
-                # Write dimensions as int32
-                f.write(np.array([minmax_array.shape[1], minmax_array.shape[0]], dtype=np.int32).tobytes())
-                # Write RGBA data as uint8 (R, G, B, A)
-                rgba_data = np.zeros((minmax_array.shape[0], minmax_array.shape[1], 4), dtype=np.uint8)
-                rgba_data[:, :, :3] = max_rgb_uint8
-                rgba_data[:, :, 3] = 255  # Full alpha
-                f.write(rgba_data.tobytes())
-            
-            print(f"        DEBUG Save: minmax shape {minmax_array.shape}, max_rgb min/max: {np.min(max_rgb):.6f}, {np.max(max_rgb):.6f}")
-        
-        print(f"      📸 Debug raw data saved: {prefix}_mask_l{level}.raw, {prefix}_minmax_l{level}.raw")
-        
-    except Exception as e:
-        print(f"      ⚠️ Failed to save debug preview: {e}")
-
-
 # Max color difference for entire texture to be considered uniform
 UNIFORMITY_THRESHOLD = 0.008 # (~2 color levels in 0-255)
 
@@ -543,3 +498,48 @@ def debug_extract_for_testing(obj, image):
         
     except Exception as e:
         debug_print(f"❌ DEBUG extraction failed: {e}")
+
+
+def save_debug_preview(mask, minmax_array, level, export_dir, prefix="debug"):
+    """Save debug preview data as raw binary files for external conversion"""
+    try:
+        # Create debug directory
+        debug_dir = os.path.join(export_dir, "debug_previews")
+        os.makedirs(debug_dir, exist_ok=True)
+        
+        # Save coverage mask as raw binary
+        # Format: 2 int32 (width, height), then uint8 values (0 or 255)
+        mask_binary = (mask * 255).astype(np.uint8)
+        mask_path = os.path.join(debug_dir, f"{prefix}_mask_l{level}.raw")
+        
+        with open(mask_path, 'wb') as f:
+            # Write dimensions as int32
+            f.write(np.array([mask.shape[1], mask.shape[0]], dtype=np.int32).tobytes())
+            # Write mask data as uint8
+            f.write(mask_binary.tobytes())
+        
+        print(f"        DEBUG Save: mask shape {mask.shape}, min/max: {np.min(mask):.6f}, {np.max(mask):.6f}")
+        
+        # Save min/max visualization as raw binary
+        if minmax_array.shape[2] >= 8:  # min_r, min_g, min_b, min_a, max_r, max_g, max_b, max_a
+            # Use max values for RGB channels
+            max_rgb = minmax_array[:, :, 4:7]  # max_r, max_g, max_b
+            max_rgb_uint8 = (max_rgb * 255).astype(np.uint8)
+            
+            minmax_path = os.path.join(debug_dir, f"{prefix}_minmax_l{level}.raw")
+            
+            with open(minmax_path, 'wb') as f:
+                # Write dimensions as int32
+                f.write(np.array([minmax_array.shape[1], minmax_array.shape[0]], dtype=np.int32).tobytes())
+                # Write RGBA data as uint8 (R, G, B, A)
+                rgba_data = np.zeros((minmax_array.shape[0], minmax_array.shape[1], 4), dtype=np.uint8)
+                rgba_data[:, :, :3] = max_rgb_uint8
+                rgba_data[:, :, 3] = 255  # Full alpha
+                f.write(rgba_data.tobytes())
+            
+            print(f"        DEBUG Save: minmax shape {minmax_array.shape}, max_rgb min/max: {np.min(max_rgb):.6f}, {np.max(max_rgb):.6f}")
+        
+        print(f"      📸 Debug raw data saved: {prefix}_mask_l{level}.raw, {prefix}_minmax_l{level}.raw")
+        
+    except Exception as e:
+        print(f"      ⚠️ Failed to save debug preview: {e}")
