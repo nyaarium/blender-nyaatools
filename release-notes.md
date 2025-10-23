@@ -17,3 +17,6 @@ Improved the **Bake Material Slots** optimizer
 - Dynamic support for specifying any packing order you want.
 
 - Impovements to the algorithm
+
+- Shouldnt freak out anymore when a mesh has multiple material slots
+	- it copys to a temp scene and splits by material

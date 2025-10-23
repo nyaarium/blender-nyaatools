@@ -20,7 +20,7 @@ from ..avatar.get_avatar_layers import get_avatar_layers
 from ..avatar.get_avatar_meshes import get_avatar_meshes
 from ..avatar.merge_onto_avatar_layer import merge_onto_avatar_layer
 from ..image.material_analyzer import find_principled_bsdf
-from ..image.texture_baker import bake_packed_texture
+from ..image.texture_baker import bake_dtp_texture
 from ..image.texture_utils import save_image_as_png
 
 
@@ -371,13 +371,14 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                 debug_print("\n")
                 debug_print(f"📦 Material: {mat_name}")
                 
-                principled = find_principled_bsdf(mat)
+                principled_result = find_principled_bsdf(mat)
                 
-                if not principled:
+                if not principled_result:
                     debug_print("❌ No Principled BSDF found")
-                    continue
+                    raise Exception("No Principled BSDF found")
                 
-                debug_print(f"🔍 Found Principled BSDF: {principled.name}")
+                principled_bsdf = principled_result['principled_bsdf']
+                debug_print(f"🔍 Found Principled BSDF: {principled_bsdf.name}")
                 
                 # Define pack configurations with format strings
                 pack_configs = [
@@ -395,7 +396,7 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                     else:
                         max_resolution = (2048, 2048)
                     
-                    packed_img = bake_packed_texture(mat, bake_obj, format_string, max_resolution=max_resolution)
+                    packed_img = bake_dtp_texture(format_string, bake_obj, mat, max_resolution=max_resolution)
                     if packed_img:
                         filename = filename_template.format(mat_name=mat_name)
                         save_path = os.path.join(export_dir, filename)

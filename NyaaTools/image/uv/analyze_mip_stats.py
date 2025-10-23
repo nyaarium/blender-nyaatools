@@ -8,19 +8,18 @@ and color uniformity using an iterative, numpy-based approach.
 import numpy as np
 import json
 import os
+import time
 
 from .build_coverage_pyramid import build_coverage_pyramid
-from ..save_numpy_image import save_numpy_as_raw
+from ..save_numpy_image import save_numpy_as_image, save_numpy_as_raw
 
 
 # Max color difference for entire texture to be considered uniform
 UNIFORMITY_THRESHOLD = 0.008 # (~2 color levels in 0-255)
 
 # Max detail loss allowed for 2x2 blocks when downsampling to 1 block
-DEGRADATION_THRESHOLD = 0.004 # (~1 color level in 0-255)
-
-# Minimum ratio of safe blocks required for a level to be considered safe
-SAFETY_THRESHOLD = 0.95
+DEGRADATION_THRESHOLD = 0.05
+DEBUG_THRESHOLD_HEATMAP = False  # Generate magnitude heatmap visualizations
 
 
 def analyze_mip_stats(obj, image):
@@ -34,8 +33,6 @@ def analyze_mip_stats(obj, image):
     Returns:
         Final output structure with mipmap safety results
     """
-    # debug_extract_for_testing(obj, image)
-    
     # Get image dimensions
     W, H = image.size
     
@@ -44,14 +41,52 @@ def analyze_mip_stats(obj, image):
     if uv_face_map is None:
         return None
     
+    coverage_start_time = time.time()
+
     # Get image array
     image_array = np.array(image.pixels, dtype=np.float32).reshape((H, W, 4))
+
+    # Flip vertically to view better in the console
+    # image_array = np.flipud(image_array)
     
     # Build coverage and image pyramids
     coverage_pyramid, image_pyramid = build_coverage_pyramid(uv_face_map, image_array)
+    pyramid_end_time = time.time()
+    pyramid_duration = round((pyramid_end_time - coverage_start_time), 3)  # Convert to seconds
+    
+    
+    # DEBUG: Extract UV data and original material image pixels
+    # debug_extract_for_testing(obj, image)
+    
+    # DEBUG: ASCII art dump of pyramid levels
+    target_level = None
     max_levels = len(coverage_pyramid)
+    for level in range(max_levels):
+        h, w = coverage_pyramid[level].shape
+        if w <= 32 and h <= 32:  # Find a level that's 64x64 or smaller
+            target_level = level
+            break
     
+    if target_level is not None:
+        coverage_data = coverage_pyramid[target_level]
+        h, w = coverage_data.shape
+        print(f"📊 Coverage Level {target_level} ({w}x{h}):")
+        
+        # ASCII coverage map (flipped vertically to match UV coordinates)
+        for y in range(h-1, -1, -1):  # Start from top, go to bottom
+            row = ""
+            for x in range(w):
+                val = coverage_data[y, x]
+                if val > 0.5:
+                    row += "█"  # White/covered
+                else:
+                    row += "░"  # Black/uncovered
+            print(f"  {row}")
+    else:
+        print("  No suitable level found for ASCII dump")
     
+
+    print(f"         ⏱️ Build coverage and image pyramids: {pyramid_duration} seconds")
     
     # Initialize all level results (for safety mipmapping)
     all_results = {}
@@ -66,63 +101,18 @@ def analyze_mip_stats(obj, image):
     
     # Check texture uniformness
     is_uniform, avg_color = check_texture_uniformness(image_array, uv_face_map >= 0)
-    
-    # # DEBUG: ASCII art dump of pyramid levels
-    # print(f"🔍 ASCII DUMP OF PYRAMID LEVELS:")
-    
-    # target_level = None
-    # for level in range(max_levels):
-    #     h, w = coverage_pyramid[level].shape
-    #     if w <= 64 and h <= 64:  # Find a level that's 64x64 or smaller
-    #         target_level = level
-    #         break
-    
-    # if target_level is not None:
-    #     coverage_data = coverage_pyramid[target_level]
-    #     h, w = coverage_data.shape
-    #     print(f"📊 Coverage Level {target_level} ({w}x{h}):")
-        
-    #     # ASCII coverage map
-    #     for y in range(h):
-    #         row = ""
-    #         for x in range(w):
-    #             val = coverage_data[y, x]
-    #             if val > 0.5:
-    #                 row += "█"  # White/covered
-    #             else:
-    #                 row += "░"  # Black/uncovered
-    #         print(f"  {row}")
-        
-    #     # ASCII image data if available
-    #     if image_pyramid and target_level < len(image_pyramid):
-    #         image_data = image_pyramid[target_level]
-    #         if image_data is not None:
-    #             img_h, img_w, channels = image_data.shape
-    #             print(f"🖼️ Image Level {target_level} ({img_w}x{img_h}):")
-                
-    #             # Use the first channel (R) for ASCII art
-    #             for y in range(img_h):
-    #                 row = ""
-    #                 for x in range(img_w):
-    #                     val = image_data[y, x, 0]  # Red channel
-    #                     if val > 0.8:
-    #                         row += "█"  # Bright
-    #                     elif val > 0.6:
-    #                         row += "▓"  # Medium-bright
-    #                     elif val > 0.4:
-    #                         row += "▒"  # Medium
-    #                     else:
-    #                         row += "░"  # Dark/black
-    #                 print(f"  {row}")
-    # else:
-    #     print("  No suitable level found for ASCII dump")
 
     # Process mipmapping for safety analysis only
-    for level in range(max_levels - 1, -1, -1):
+    mipmap_start_time = time.time()
+    for level in range(0, max_levels):
         analyze_mipmap_safety(level, image_pyramid, coverage_pyramid, all_results)
     
     # Aggregate final results
     result = aggregate_safety_results(all_results, max_levels, W, H)
+    mipmap_end_time = time.time()
+    
+    mipmap_duration = round((mipmap_end_time - mipmap_start_time), 3)  # Convert to seconds
+    print(f"        ⏱️ Safety analysis: {mipmap_duration} seconds")
     
     # Add direct uniformness results
     result['is_uniform_color'] = is_uniform
@@ -223,6 +213,20 @@ def analyze_mipmap_safety(level, image_pyramid, coverage_pyramid, all_results):
         image_pyramid: Downsampled image data for each level
         coverage_pyramid: Coverage maps for each level
         all_results: Results storage for all levels
+
+    📐 Image pyramid dimensions:
+    Level 0: 4096x4096 (assuming we started at a 4K image)
+    Level 1: 2048x2048
+    Level 2: 1024x1024
+    Level 3: 512x512
+    Level 4: 256x256
+    Level 5: 128x128
+    Level 6: 64x64
+    Level 7: 32x32
+    Level 8: 16x16
+    Level 9: 8x8
+    Level 10: 4x4
+    Level 11: 2x2
     """
     h, w = coverage_pyramid[level].shape
     current_image = image_pyramid[level]
@@ -248,48 +252,93 @@ def analyze_mipmap_safety(level, image_pyramid, coverage_pyramid, all_results):
     # Shape: (img_h, img_w, 4) -> (actual_h, 2, actual_w, 2, 4) -> (actual_h, actual_w, 2, 2, 4)
     image_subset = current_image[:actual_h*2, :actual_w*2]
     
-    
     blocks = image_subset.reshape(actual_h, 2, actual_w, 2, 4).transpose(0, 2, 1, 3, 4)
     
     # Flatten each 2x2 block to (4, 4) - 4 pixels, 4 channels
-    blocks_flat = blocks.reshape(actual_h, actual_w, 4, 4)  # (y, x, pixel, channel)
+    blocks_flat = blocks.reshape(actual_h, actual_w, 4, 4)  # (y, x, pixels, channels)
     
     # Use the NEXT level's coverage, which is already downsampled to match our block resolution
     # When we analyze 2x2 blocks from level N, we're creating level N+1 resolution
     coverage_for_blocks = coverage_pyramid[level + 1] if level + 1 < len(coverage_pyramid) else coverage_pyramid[level]
     coverage_mask = coverage_for_blocks[:actual_h, :actual_w] > 0
     
-    # Use image data to determine coverage instead of relying on coverage map
-    # Check if blocks have actual image data (not all zeros)
-    block_has_data = np.any(blocks_flat > 0, axis=(2, 3))  # (actual_h, actual_w)
-    
-    coverage_mask = coverage_mask & block_has_data
-    
-    # Calculate per-channel min/max for each 2x2 block
-    block_mins = np.min(blocks_flat, axis=2)  # (y, x, channel)
-    block_maxs = np.max(blocks_flat, axis=2)  # (y, x, channel)
+    # Calculate min/max for ALL blocks
+    block_mins = np.min(blocks_flat, axis=2)  # (y, x, channels)
+    block_maxs = np.max(blocks_flat, axis=2)  # (y, x, channels)
     
     # Calculate degradation per channel
     channel_degradations = block_maxs - block_mins
     
-    # Check safety per channel
-    channel_safe = channel_degradations < DEGRADATION_THRESHOLD
+    # Calculate magnitude based on cumulative detail loss
+    if level > 0:  # Skip original level - no detail loss to measure
+        previous_level = all_results[level - 1]
+        if 'magnitude' in previous_level:
+            # Get previous level's cumulative magnitude
+            
+            previous_magnitude = previous_level['magnitude']
+            
+            # Downsample previous_magnitude to match current level's shape
+            # Use max to preserve worst-case detail loss
+            prev_h, prev_w = previous_magnitude.shape
+            if prev_h >= 2 and prev_w >= 2:
+                # Take 2x2 blocks and get max of each block
+                target_h = prev_h // 2
+                target_w = prev_w // 2
+                prev_reshaped = previous_magnitude[:target_h*2, :target_w*2].reshape(target_h, 2, target_w, 2)
+                downsampled_magnitude = np.max(prev_reshaped, axis=(1, 3))  # (target_h, target_w)
+            else:
+                # Too small to downsample, use as-is or zero
+                downsampled_magnitude = np.zeros((actual_h, actual_w), dtype=np.float32)
+        else:
+            # Fallback to zero if previous level doesn't have magnitude
+            downsampled_magnitude = np.zeros((actual_h, actual_w), dtype=np.float32)
+        
+        # Current level's local variation (proxy for detail loss)
+        current_magnitude = np.sum(channel_degradations, axis=2)
+        
+        # Cumulative detail loss: previous + current (additive stacking)
+        magnitude = downsampled_magnitude + current_magnitude
+    else:
+        # Original level - no detail loss, magnitude = 0
+        magnitude = np.zeros((actual_h, actual_w), dtype=np.float32)
     
-    # Block is safe only if ALL channels are safe
-    block_safe = np.all(channel_safe, axis=2)  # (actual_h, actual_w)
+    if DEBUG_THRESHOLD_HEATMAP:
+        # Blue channel shows normalized magnitude when under threshold
+        # Red channel shows when threshold is exceeded
+        threshold_heatmap = np.zeros((actual_h, actual_w, 4), dtype=np.float32)
+        
+        # Normalize magnitude to threshold (0-1 scale)
+        normalized_magnitude = np.clip(magnitude / DEGRADATION_THRESHOLD, 0, 1)
+        
+        # Blue channel: normalized magnitude when under threshold
+        under_threshold = magnitude < DEGRADATION_THRESHOLD
+        threshold_heatmap[under_threshold, 2] = normalized_magnitude[under_threshold]  # Blue = normalized magnitude
+        threshold_heatmap[under_threshold, 3] = 1.0  # Alpha = opaque for covered
+    
+        # Red channel: 1.0 when threshold is exceeded
+        over_threshold = magnitude >= DEGRADATION_THRESHOLD
+        threshold_heatmap[over_threshold, 0] = 1.0  # Red = threshold exceeded
+        threshold_heatmap[over_threshold, 3] = 1.0  # Alpha = opaque for covered
+        
+        # Only show covered blocks
+        threshold_heatmap[~coverage_mask] = 0.0  # Uncovered areas = transparent
+        
+        # Save using our utility function
+        heatmap_flat = threshold_heatmap.reshape(actual_h, actual_w, 4)
+        save_numpy_as_image(f'threshold-{level}', (actual_w, actual_h), heatmap_flat, "debug", mode='RGBA')
+    
+    # Check safety using magnitude (total detail loss from original)
+    block_safe = magnitude < DEGRADATION_THRESHOLD  # (actual_h, actual_w)
     
     # Coverage masking (coverage_mask already calculated above)
     safe_mask = block_safe & coverage_mask
     
-    all_results[level]['safe_ratio'][:actual_h, :actual_w][coverage_mask] = safe_mask[coverage_mask].astype(np.float32)
-    all_results[level]['total_blocks'][:actual_h, :actual_w][coverage_mask] = 1.0
+    # Direct assignment without double indexing
+    all_results[level]['safe_ratio'][:actual_h, :actual_w] = safe_mask.astype(np.float32)
+    all_results[level]['total_blocks'][:actual_h, :actual_w] = coverage_mask.astype(np.float32)
     
-    # Store channel stats as 8-element array [min_r, min_g, min_b, min_a, max_r, max_g, max_b, max_a]
-    channel_stats = np.zeros((actual_h, actual_w, 8), dtype=np.float32)
-    channel_stats[:, :, :4] = block_mins  # min_r, min_g, min_b, min_a
-    channel_stats[:, :, 4:] = block_maxs  # max_r, max_g, max_b, max_a
-    
-    all_results[level]['channel_stats'][:actual_h, :actual_w][coverage_mask] = channel_stats[coverage_mask]
+    # Store cumulative magnitude instead of min/max arrays
+    all_results[level]['magnitude'] = magnitude
 
 
 def check_texture_uniformness(image_array, coverage_map):
@@ -344,37 +393,36 @@ def aggregate_safety_results(all_results, max_levels, W, H):
         # Calculate safe ratio for this level
         coverage_mask = level_results['total_blocks'] > 0
         if np.any(coverage_mask):
-            safe_ratio = np.mean(level_results['safe_ratio'][coverage_mask])
+            # Use cumulative magnitude for safety analysis
+            magnitude = level_results['magnitude']
+            # Ensure shapes match
+            if magnitude.shape == coverage_mask.shape:
+                covered_magnitude = magnitude[coverage_mask]
+            else:
+                # Fallback to safe_ratio if shapes don't match
+                covered_magnitude = level_results['safe_ratio'][coverage_mask]
             
-            channel_stats = level_results['channel_stats'][coverage_mask]  # (N, 8)
+            # Calculate magnitude statistics
+            max_magnitude = np.max(covered_magnitude)
+            avg_magnitude = np.mean(covered_magnitude)
             
-            # Extract min/max for each channel
-            mins = channel_stats[:, :4]  # (N, 4) - min_r, min_g, min_b, min_a
-            maxs = channel_stats[:, 4:]  # (N, 4) - max_r, max_g, max_b, max_a
+            # Safety based on cumulative detail loss: ALL blocks must be safe
+            is_safe = np.all(level_results['safe_ratio'][coverage_mask] >= 1.0)
             
-            divergences = maxs - mins  # (N, 4) - divergence per channel
-            
-            max_divergence = np.max(divergences, axis=1)  # (N,) - worst channel per block
-            avg_max_divergence = np.mean(max_divergence)  # Average worst divergence
-            
-            # Safety based on worst channel (no threshold - use channel-aware approach)
-            is_safe = safe_ratio >= SAFETY_THRESHOLD
-            
-            # Store per-channel averages for debugging
-            channel_divergences = np.mean(divergences, axis=0)  # Per-channel averages
+            # Store magnitude statistics for debugging
+            magnitude_stats = {
+                'max_magnitude': max_magnitude,
+                'avg_magnitude': avg_magnitude
+            }
         else:
             # No blocks = 0% safe
-            safe_ratio = 0.0
-            avg_max_divergence = 0.0
-            channel_divergences = np.array([0.0, 0.0, 0.0, 0.0])
             is_safe = False
 
         mip_block_results.append({
             'level': level,
             'resolution': (w, h),
             'safe': is_safe,
-            'avg_divergence': avg_max_divergence,
-            'channel_divergences': channel_divergences
+            'magnitude_stats': magnitude_stats if 'magnitude_stats' in locals() else None
         })
     
     
@@ -394,17 +442,7 @@ def aggregate_safety_results(all_results, max_levels, W, H):
     
     result = {
         'min_safe_resolution': min_safe_resolution,
-        # 'mip_block_results': []
     }
-    
-    # Format mip block results
-    # for mip_result in mip_block_results:
-    #     result['mip_block_results'].append({
-    #         'level': mip_result['level'],
-    #         'resolution': f"{mip_result['resolution'][0]}x{mip_result['resolution'][1]}",
-    #         'safe': mip_result['safe'],
-    #         'threshold': round(mip_result['threshold'], 6)
-    #     })
     
     return result
 
@@ -415,7 +453,7 @@ def debug_extract_for_testing(obj, image):
     Uses the actual obj and image parameters passed to analyze_mip_stats.
     """
     def debug_print(*msgs):
-        print("      ", *msgs)
+        print("        ", *msgs)
         return
     
     try:
@@ -467,11 +505,42 @@ def debug_extract_for_testing(obj, image):
             
             # Convert pixels to flat list format
             pixels = np.array(image.pixels, dtype=np.float32).reshape((H, W, -1))
+
+            # Flip vertically to view better in the console
+            # pixels = np.flipud(pixels)
             
-            # Flatten to list of [r, g, b, a] arrays
-            debug_data["image_pixels"] = pixels.reshape(-1, pixels.shape[2]).tolist()
+            # Convert RGBA arrays to packed integers for maximum compression
+            # Convert float [0,1] to uint8 [0,255] then pack into single integer
+            pixels_uint8 = (pixels * 255).astype(np.uint8)
+            pixels_flat = pixels_uint8.reshape(-1, pixels.shape[2])
+            
+            # Pack each pixel into a single integer (RGBA = 32-bit)
+            packed_pixels = []
+            for pixel in pixels_flat:
+                if len(pixel) == 4:  # RGBA
+                    # Pack as: R << 24 | G << 16 | B << 8 | A
+                    packed = (pixel[0] << 24) | (pixel[1] << 16) | (pixel[2] << 8) | pixel[3]
+                elif len(pixel) == 3:  # RGB
+                    # Pack as: R << 24 | G << 16 | B << 8 | 255 (full alpha)
+                    packed = (pixel[0] << 24) | (pixel[1] << 16) | (pixel[2] << 8) | 255
+                else:
+                    # Single channel, duplicate for RGB
+                    packed = (pixel[0] << 24) | (pixel[0] << 16) | (pixel[0] << 8) | 255
+                packed_pixels.append(int(packed))
+            
+            debug_data["image_pixels"] = packed_pixels
             
             debug_print(f"  🖼️ Extracted {W}x{H} image with {pixels.shape[2]} channels")
+            
+            # Save raw numpy data for debugging
+            try:
+                raw_filename = f"{image_name}.raw"
+                debug_previews_dir = os.path.join(export_dir, "debug_previews")
+                os.makedirs(debug_previews_dir, exist_ok=True)
+                save_numpy_as_raw(image_name, (image.size[0], image.size[1]), pixels, debug_previews_dir)
+                debug_print(f"  💾 Raw numpy data saved: {raw_filename}")
+            except Exception as e:
+                debug_print(f"  ⚠️ Failed to save raw numpy data: {e}")
         else:
             debug_print(f"  ⚠️ Image {image.name} has no pixel data")
         
