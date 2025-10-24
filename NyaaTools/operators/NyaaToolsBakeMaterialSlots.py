@@ -2,17 +2,14 @@ import traceback
 import os
 import re
 import time
-import json
-import numpy as np
 import bpy
-from bpy.props import StringProperty
 
 from ..consts import PROP_AVATAR_EXPORT_PATH
 from ..common.get_prop import get_prop
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
 from ..image.material_analyzer import find_principled_bsdf
-from ..image.texture_baker import bake_packed_texture
+from ..image.texture_baker import bake_dtp_texture
 
 
 TEMP_SCENE_NAME = "Temp Bake Material Slots"
@@ -153,21 +150,72 @@ def bake_material_slots(obj, export_dir, unrename_info):
     # Ensure export directory exists
     os.makedirs(export_dir, exist_ok=True)
     
-    # Iterate through material slots
-    for slot_idx, slot in enumerate(obj.material_slots):
-        mat = slot.material
-        if not mat:
-            debug_print(f"Slot {slot_idx}: No material, skipping")
-            continue
+    # Separate mesh by materials using built-in operator
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    
+    # Enter edit mode, select all, and separate by material
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.separate(type='MATERIAL')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    
+    # Get all remaining mesh objects (these are our separated single-material objects)
+    bake_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
+    
+    # Helper functions to manage object visibility and materials
+    def disable_render(obj):
+        """Disable rendering for a single object"""
+        obj.hide_viewport = True
+        obj.hide_render = True
         
+        # Clear materials to prevent node conflicts
+        for slot in obj.material_slots:
+            slot.material = None
+    
+    def enable_render(obj, original_material):
+        """Restore a single object to its original state"""
+        # Restore material (only one slot since we separated by material)
+        if len(obj.material_slots) > 0:
+            obj.material_slots[0].material = original_material
+        
+        # Restore visibility
+        obj.hide_viewport = False
+        obj.hide_render = False
+
+    object_states = {}  # Track original material per object name
+    for obj in bake_objects:
+        # Store original material (only one since we separated by material)
+        object_states[obj.name] = obj.material_slots[0].material if len(obj.material_slots) > 0 else None
+        # Disable render
+        disable_render(obj)
+    
+    # Process each separated mesh object (each has exactly one material)
+    for bake_obj in bake_objects:
+        # Get material from stored state
+        mat = object_states[bake_obj.name]
+        if not mat:
+            debug_print(f"Object {bake_obj.name}: No material, skipping")
+            continue
+            
+        mat_name = mat.name
+        
+        # Show only this object for baking and restore its material
+        if bake_obj.name in object_states:
+            original_material = object_states[bake_obj.name]
+            enable_render(bake_obj, original_material)
+
         debug_print(f"")
-        debug_print(f"Processing material: {mat.name}")
+        debug_print(f"📦 Material: {mat_name}")
 
         # Find Principled BSDF
         principled = find_principled_bsdf(mat)
         if not principled:
-            debug_print(f"  No Principled BSDF found, skipping")
-            continue
+            debug_print("❌ No Principled BSDF found")
+            # Hide this object after baking and clear its material again
+            disable_render(bake_obj)
+            raise Exception("No Principled BSDF found")
         
         # Sanitize material name for file output
         mat_name = sanitize_name(mat.name)
@@ -183,7 +231,7 @@ def bake_material_slots(obj, export_dir, unrename_info):
         # Bake and save packed textures
         bake_start_time = time.time()
         for format_string, filename in pack_configs:
-            packed_img = bake_packed_texture(mat, obj, format_string)
+            packed_img = bake_dtp_texture(format_string, bake_obj, mat)
             if packed_img:
                 save_path = os.path.join(export_dir, f"{mat_name}.{filename}")
                 if save_image(packed_img, save_path):
@@ -195,9 +243,12 @@ def bake_material_slots(obj, export_dir, unrename_info):
         
         bake_end_time = time.time()
         bake_duration = int(bake_end_time - bake_start_time)
-        debug_print(f"  🍞 Bake finished in {bake_duration} seconds")
+        debug_print(f"🍞 Bake finished in {bake_duration} seconds")
         
-        debug_print(f"  ✅ Material {mat.name} completed")
+        # Hide this object after baking and clear its material again
+        disable_render(bake_obj)
+        
+        debug_print(f"✅ Material {mat_name} completed")
 
 
 def save_image(image, output_path):

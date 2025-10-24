@@ -55,8 +55,8 @@ class NodeGraphState:
                 link.to_socket.name
             ))
         
-        # Remove all connections to this socket
-        socket.id_data.links.remove(link)
+            # Remove all connections to this socket
+            socket.id_data.links.remove(link)
     
     def connect_sockets(self, node_tree: bpy.types.NodeTree, from_node: bpy.types.Node, 
                        from_socket_name: str, to_node: bpy.types.Node, to_socket_name: str, 
@@ -73,28 +73,49 @@ class NodeGraphState:
             to_socket_name: Name of target socket
             *debug_parts: Optional debug message parts for logging
         """
-        def debug_print(*msgs):
-            print("          ", *msgs)
+        # Validate node references are still valid
+        if not from_node or not to_node:
+            print(f"Warning: Invalid node references in connect_sockets")
             return
-
-        # Handle debug logging based on number of parts provided
-        if len(debug_parts) == 1:
-            debug_print(f"🧦 {debug_parts[0]}")
-        elif len(debug_parts) >= 2:
-            arrow_parts = [str(part) for part in debug_parts]
-            debug_print(f"🧦 {' -> '.join(arrow_parts)}")
-
-        from_socket = from_node.outputs.get(from_socket_name)
-        to_socket = to_node.inputs.get(to_socket_name)
+            
+        # Get fresh node references to ensure they're still valid
+        from_node_fresh = node_tree.nodes.get(from_node.name)
+        to_node_fresh = node_tree.nodes.get(to_node.name)
+        
+        if not from_node_fresh or not to_node_fresh:
+            print(f"Warning: Nodes not found in tree: {from_node.name if from_node else 'None'}, {to_node.name if to_node else 'None'}")
+            return
+        
+        from_socket = from_node_fresh.outputs.get(from_socket_name)
+        to_socket = to_node_fresh.inputs.get(to_socket_name)
         
         if not from_socket or not to_socket:
             return
         
-        # Detach any existing connections to the target socket
-        self.detach_socket(to_socket)
+        # Check if either node is temporary - if so, don't track for restoration
+        from_is_temp = any(node_ref == from_node for _, node_ref in self.temp_nodes)
+        to_is_temp = any(node_ref == to_node for _, node_ref in self.temp_nodes)
         
-        # Create the new connection
-        node_tree.links.new(from_socket, to_socket)
+        if not from_is_temp and not to_is_temp:
+            # Both permanent - detach and track
+            self.detach_socket(to_socket)
+        elif from_is_temp and to_is_temp:
+            # Both temporary - just remove existing connections without tracking
+            for link in list(to_socket.links):
+                node_tree.links.remove(link)
+        elif to_is_temp:
+            # Target is temporary - just remove existing connections without tracking
+            for link in list(to_socket.links):
+                node_tree.links.remove(link)
+        elif from_is_temp:
+            # Source is temporary - still need to detach target socket
+            self.detach_socket(to_socket)
+        
+        # Create the new connection using fresh node references
+        try:
+            node_tree.links.new(from_socket, to_socket)
+        except Exception as e:
+            print(f"Warning: Failed to create connection {from_node_fresh.name}.{from_socket_name} -> {to_node_fresh.name}.{to_socket_name}: {e}")
     
     def add_node(self, node_tree: bpy.types.NodeTree, node_type: str) -> bpy.types.Node:
         """
@@ -119,25 +140,73 @@ class NodeGraphState:
         1. Deletes all temporary nodes (with try-catch for already-deleted nodes)
         2. Restores all original socket connections
         """
+
+        # Disconnect all temporary node connections
+        for node_tree, node_ref in self.temp_nodes:
+            try:
+                if not node_ref:
+                    continue
+                    
+                # Get fresh node reference to ensure it's still valid
+                node_ref_fresh = node_tree.nodes.get(node_ref.name)
+                if not node_ref_fresh:
+                    continue
+                    
+                # Disconnect all inputs and outputs of the temporary node
+                for input_socket in node_ref_fresh.inputs:
+                    if input_socket.is_linked:
+                        for link in list(input_socket.links):
+                            node_tree.links.remove(link)
+                for output_socket in node_ref_fresh.outputs:
+                    if output_socket.is_linked:
+                        for link in list(output_socket.links):
+                            node_tree.links.remove(link)
+            except Exception as e:
+                # Node already deleted or invalid - don't care
+                print(f"Warning: Failed to disconnect temp node {node_ref.name if node_ref else 'None'}: {e}")
+                pass
+        
         # Delete temporary nodes
         for node_tree, node_ref in self.temp_nodes:
             try:
-                if node_ref and node_ref.name in node_tree.nodes:
-                    node_tree.nodes.remove(node_ref)
-            except:
+                if not node_ref:
+                    continue
+                    
+                # Get fresh node reference to ensure it's still valid
+                node_ref_fresh = node_tree.nodes.get(node_ref.name)
+                if node_ref_fresh:
+                    node_tree.nodes.remove(node_ref_fresh)
+            except Exception as e:
                 # Node already deleted or invalid - don't care
+                print(f"Warning: Failed to remove temp node {node_ref.name if node_ref else 'None'}: {e}")
                 pass
         
         # Restore original connections
         for node_tree, from_node, from_socket_name, to_node, to_socket_name in self.detached_links:
             try:
-                from_socket = from_node.outputs.get(from_socket_name)
-                to_socket = to_node.inputs.get(to_socket_name)
+                # Validate that nodes still exist and are valid
+                if not from_node or not to_node:
+                    continue
                 
+                # Check if nodes are still in their respective trees
+                if from_node.name not in node_tree.nodes or to_node.name not in node_tree.nodes:
+                    continue
+                
+                # Get fresh node references to ensure they're still valid
+                from_node_ref = node_tree.nodes.get(from_node.name)
+                to_node_ref = node_tree.nodes.get(to_node.name)
+                
+                if not from_node_ref or not to_node_ref:
+                    continue
+                
+                from_socket = from_node_ref.outputs.get(from_socket_name)
+                to_socket = to_node_ref.inputs.get(to_socket_name)
+
                 if from_socket and to_socket:
                     node_tree.links.new(from_socket, to_socket)
-            except:
+            except Exception as e:
                 # Connection already exists or nodes invalid - don't care
+                print(f"Warning: Failed to restore connection {from_node.name if from_node else 'None'}.{from_socket_name} -> {to_node.name if to_node else 'None'}.{to_socket_name}: {e}")
                 pass
         
         # Clear tracking data

@@ -1,10 +1,11 @@
 """Material analysis utilities for extracting texture information from Blender materials."""
 
 import bpy
+import math
 from typing import Optional, Tuple, Dict, Set
 
 
-def find_principled_bsdf(material: bpy.types.Material) -> Optional[bpy.types.ShaderNode]:
+def find_principled_bsdf(material: bpy.types.Material) -> Optional[Dict]:
     """
     Find the Principled BSDF node connected to the material output.
     
@@ -12,7 +13,7 @@ def find_principled_bsdf(material: bpy.types.Material) -> Optional[bpy.types.Sha
         material: The Blender material to search
         
     Returns:
-        The Principled BSDF node if found, None otherwise
+        Dict with 'material_output' (Material Output node), 'principled_bsdf' (Principled BSDF), 'tree_stack' (list of trees), or None
     """
     if not material.use_nodes:
         return None
@@ -24,7 +25,7 @@ def find_principled_bsdf(material: bpy.types.Material) -> Optional[bpy.types.Sha
     return _find_principled_bsdf_in_tree(node_tree)
 
 
-def _find_principled_bsdf_in_tree(node_tree: bpy.types.NodeTree) -> Optional[bpy.types.ShaderNode]:
+def _find_principled_bsdf_in_tree(node_tree: bpy.types.NodeTree) -> Optional[Dict]:
     """
     Find the Principled BSDF node connected to the material output.
     
@@ -32,10 +33,10 @@ def _find_principled_bsdf_in_tree(node_tree: bpy.types.NodeTree) -> Optional[bpy
         node_tree: The node tree to search
         
     Returns:
-        The Principled BSDF node if found, None otherwise
+        Dict with 'material_output' (Material Output node), 'principled_bsdf' (Principled BSDF), 'tree_stack' (list of trees), or None
     """
     def debug_print(*msgs):
-        print("      ", *msgs)
+        print("        ", *msgs)
         return
     
     if not node_tree:
@@ -65,22 +66,31 @@ def _find_principled_bsdf_in_tree(node_tree: bpy.types.NodeTree) -> Optional[bpy
         return None
     
     visited_nodes = set()
-    return _trace_to_principled_bsdf(surface_input.links[0].from_node, visited_nodes)
+    tree_stack = [node_tree]  # Start with root tree
+    result = _trace_to_principled_bsdf(surface_input.links[0].from_node, visited_nodes, tree_stack)
+    if result:
+        return {
+            'material_output': output_node,
+            'principled_bsdf': result,
+            'tree_stack': tree_stack
+        }
+    return None
 
 
-def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set) -> Optional[bpy.types.ShaderNode]:
+def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set, tree_stack: list) -> Optional[bpy.types.ShaderNode]:
     """
     Trace through the node tree to find a Principled BSDF node.
     
     Args:
         node: Current node to examine
         visited_nodes: Set of already visited nodes to prevent infinite loops
+        tree_stack: List of trees we've traversed through
         
     Returns:
         Principled BSDF node if found, None otherwise
     """
     def debug_print(*msgs):
-        print("      ", *msgs)
+        print("        ", *msgs)
         return
     
     # Prevent infinite loops
@@ -95,6 +105,9 @@ def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set) -> Optio
     if node.type == 'GROUP':
         if not node.node_tree:
             return None
+            
+        # Add this group's tree to the stack
+        tree_stack.append(node.node_tree)
             
         # Find group output node
         group_output = None
@@ -116,7 +129,7 @@ def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set) -> Optio
         for input_socket in group_output.inputs:
             if input_socket.is_linked:
                 for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes)
+                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes, tree_stack)
                     if result:
                         return result
     
@@ -125,7 +138,7 @@ def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set) -> Optio
         for input_socket in node.inputs:
             if input_socket.is_linked:
                 for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes)
+                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes, tree_stack)
                     if result:
                         return result
     
@@ -134,7 +147,7 @@ def _trace_to_principled_bsdf(node: bpy.types.Node, visited_nodes: set) -> Optio
         for input_socket in node.inputs:
             if input_socket.is_linked:
                 for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes)
+                    result = _trace_to_principled_bsdf(link.from_node, visited_nodes, tree_stack)
                     if result:
                         return result
     
@@ -154,28 +167,27 @@ def has_socket_input(socket: bpy.types.NodeSocket) -> bool:
     return socket.is_linked if socket else False
 
 
-def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.types.Material = None) -> Optional[Tuple[int, int]]:
+def old_detect_best_resolution(socket: bpy.types.NodeSocket, material: bpy.types.Material = None) -> Tuple[int, int]:
     """
-    Find the largest texture resolution in the node tree connected to a socket.
+    Detect the best resolution for baking by analyzing connected textures.
     
     Args:
         socket: The input socket to search from
         material: The material (needed to find group instances in parent tree)
         
     Returns:
-        Tuple of (width, height) for the largest texture found, or None if no textures found
+        Tuple of (width, height) for the best resolution, defaults to 512x512 if no textures found
     """
     def debug_print(*msgs):
-        print("      ", *msgs)
+        print("        ", *msgs)
         return
     
     if not socket or not socket.is_linked:
-        return None
+        return (8, 8)
     
     visited_nodes = {}
     visited_groups = {}
     visited_sockets = {}
-    debug_nodes = []
     
     max_resolution = None
     
@@ -183,16 +195,6 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
     group_instances: Dict = {}
     if material and material.node_tree:
         _build_group_instance_map(material.node_tree, group_instances)
-    
-    # Search material root tree for textures
-    if material and material.node_tree:
-        for node in material.node_tree.nodes:
-            if node.type == 'TEX_IMAGE' and node.image and not node.mute:
-                width, height = node.image.size[0], node.image.size[1]
-                if max_resolution is None:
-                    max_resolution = (width, height)
-                elif width * height > max_resolution[0] * max_resolution[1]:
-                    max_resolution = (width, height)
     
     def search_node(node, node_tree, depth=0, path=None):
         nonlocal max_resolution
@@ -211,11 +213,8 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
         
         current_path = path + [node_key]
         
-        debug_nodes.append(f"{'  ' * depth}{node.type} ({node.name})")
-        
         if node.type == 'TEX_IMAGE' and node.image and not node.mute:
             width, height = node.image.size[0], node.image.size[1]
-            debug_nodes.append(f"{'  ' * (depth+1)}✓ Found texture: {node.image.name} ({width}x{height})")
             if max_resolution is None:
                 max_resolution = (width, height)
             else:
@@ -224,20 +223,7 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
         
         elif node.type == 'GROUP_INPUT' and node_tree in group_instances:
             # Handle group input - traverse back through group boundary
-            debug_nodes.append(f"{'  ' * (depth+1)}↑ Crossing group boundary...")
             group_nodes = group_instances[node_tree]
-            
-            # Search material root tree for textures
-            if material and material.node_tree:
-                debug_nodes.append(f"{'  ' * (depth+1)}↑ Checking material root tree")
-                for root_node in material.node_tree.nodes:
-                    if root_node.type == 'TEX_IMAGE' and root_node.image and not root_node.mute:
-                        width, height = root_node.image.size[0], root_node.image.size[1]
-                        debug_nodes.append(f"{'  ' * (depth+2)}✓ Found root texture: {root_node.image.name} ({width}x{height})")
-                        if max_resolution is None:
-                            max_resolution = (width, height)
-                        elif width * height > max_resolution[0] * max_resolution[1]:
-                            max_resolution = (width, height)
             
             # Traverse through group instances
             for group_node, parent_tree in group_nodes:
@@ -245,8 +231,6 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
                 if group_key in visited_groups:
                     continue
                 visited_groups[group_key] = True
-                
-                debug_nodes.append(f"{'  ' * (depth+1)}↑ To parent via group: {group_node.name}")
                 
                 for i, group_input_socket in enumerate(group_node.inputs):
                     if group_input_socket.is_linked:
@@ -263,7 +247,6 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
         
         elif node.type == 'GROUP' and node.node_tree is not None:
             # Recursively search node group internals
-            debug_nodes.append(f"{'  ' * (depth+1)}↓ Entering group: {node.node_tree.name}")
             for group_node in node.node_tree.nodes:
                 group_node_key = f"{group_node.name}_{id(group_node)}"
                 if group_node_key not in current_path:
@@ -292,14 +275,38 @@ def find_largest_texture_resolution(socket: bpy.types.NodeSocket, material: bpy.
         for link in socket.links:
             search_node(link.from_node, start_node_tree, 0)
     
-    if not max_resolution and debug_nodes:
-        debug_print(f"Debug - No textures found, visited {len(visited_nodes.keys())} nodes:")
-        for node_info in debug_nodes[:15]:
-            debug_print(f"{node_info}")
-        if len(debug_nodes) > 15:
-            debug_print(f"... and {len(debug_nodes) - 15} more")
+    # Round to nearest power of 2 for optimal texture performance
+    if max_resolution:
+        width, height = max_resolution
+        return (_round_to_power_of_2(width), _round_to_power_of_2(height))
     
-    return max_resolution
+    # Default to 512x512 if no textures found
+    return (512, 512)
+
+
+def _round_to_power_of_2(value: int) -> int:
+    """
+    Round a value to the nearest power of 2.
+    
+    Args:
+        value: The value to round
+        
+    Returns:
+        The nearest power of 2 (e.g., 1000 -> 1024, 500 -> 512)
+    """
+    if value <= 0:
+        return 1
+    
+    # Find the nearest power of 2
+    power = math.log2(value)
+    lower_power = 2 ** int(power)
+    upper_power = 2 ** (int(power) + 1)
+    
+    # Return the closer one
+    if value - lower_power < upper_power - value:
+        return lower_power
+    else:
+        return upper_power
 
 
 def _build_group_instance_map(node_tree, group_map, parent_tree=None):
@@ -333,4 +340,115 @@ def _find_node_tree_for_node(node, material_tree):
                 return result
     
     return None
+
+
+def detect_best_resolution(socket: bpy.types.NodeSocket, tree_stack: list) -> Tuple[int, int]:
+    """
+    Detect the best resolution for baking by analyzing connected textures.
+    
+    Args:
+        socket: The input socket to search from
+        tree_stack: List of trees that are part of the active material path
+        
+    Returns:
+        Tuple of (width, height) for the highest resolution texture found
+    """
+    if not socket or not socket.is_linked:
+        return (512, 512)
+    
+    visited_nodes = set()
+    max_dimensions = [0, 0]  # [width, height] - mutable container
+    
+    # Start from the socket's tree
+    current_tree = socket.id_data
+    
+    # Follow the first link backwards
+    for link in socket.links:
+        from_node = link.from_node
+        _detect_best_resolution_recursion(from_node, current_tree, tree_stack, visited_nodes, max_dimensions)
+    
+    # Round to nearest power of 2 for optimal texture performance
+    if max_dimensions[0] > 0 and max_dimensions[1] > 0:
+        final_width = _round_to_power_of_2(max_dimensions[0])
+        final_height = _round_to_power_of_2(max_dimensions[1])
+        return (final_width, final_height)
+    
+    # Default to 512x512 if no textures found
+    return (512, 512)
+
+
+def _detect_best_resolution_recursion(node: bpy.types.Node, current_tree: bpy.types.NodeTree, 
+                                     tree_stack: list, visited_nodes: set, 
+                                     max_dimensions: list) -> None:
+    """
+    Recursively search for texture nodes within the tree stack constraint.
+    
+    Args:
+        node: Current node to examine
+        current_tree: Tree we're currently searching in
+        tree_stack: List of valid trees to search in
+        visited_nodes: Set of (node_id, tree_id) tuples to prevent infinite loops
+        max_dimensions: [max_width, max_height] - mutable list to track maximum dimensions
+    """
+    # Material Tree (Shader Nodetree)
+    # ├── Image Texture (8192x8192) ← TARGET TEXTURE
+    # └── "Scene Shader" Group
+    #     ├── Group Input ← Multiple inputs connected to same texture
+    #     ├── Group Input ← Multiple inputs connected to same texture  
+    #     ├── Group Input ← Multiple inputs connected to same texture
+    #     └── "NyaaPBRToon" Group
+    #         ├── Group Input ← Normal Map input
+    #         └── Normal Map ← ORIGIN (where we started)
+
+    # Create unique key for this node in this tree context
+    node_key = (f"{node.name}_{id(node)}", id(current_tree))
+    if node_key in visited_nodes:
+        return
+    visited_nodes.add(node_key)
+    
+    # Check if this is a texture node
+    if node.type == 'TEX_IMAGE' and node.image and not node.mute:
+        width, height = node.image.size[0], node.image.size[1]
+        if width > max_dimensions[0]:
+            max_dimensions[0] = width
+        if height > max_dimensions[1]:
+            max_dimensions[1] = height
+    
+    # Handle GROUP nodes - only enter if the group's tree is in our tree_stack
+    elif node.type == 'GROUP' and node.node_tree and node.node_tree in tree_stack:
+        # Enter the group
+        new_tree = node.node_tree
+        for group_node in new_tree.nodes:
+            if group_node.type == 'GROUP_OUTPUT':
+                # Search from group output inputs
+                for input_socket in group_node.inputs:
+                    if input_socket.is_linked:
+                        for link in input_socket.links:
+                            _detect_best_resolution_recursion(link.from_node, new_tree, tree_stack, visited_nodes, max_dimensions)
+                break
+    
+    # Handle GROUP_INPUT nodes - exit to parent tree
+    elif node.type == 'GROUP_INPUT' and current_tree in tree_stack:
+        # Find our position in tree_stack
+        try:
+            current_index = tree_stack.index(current_tree)
+            if current_index > 0:
+                parent_tree = tree_stack[current_index - 1]
+                # Find all GROUP nodes in parent tree that use current_tree
+                for group_node in parent_tree.nodes:
+                    if group_node.type == 'GROUP' and group_node.node_tree == current_tree:
+                        # Follow all input sockets of this group node
+                        for input_socket in group_node.inputs:
+                            if input_socket.is_linked:
+                                for link in input_socket.links:
+                                    _detect_best_resolution_recursion(link.from_node, parent_tree, tree_stack, visited_nodes, max_dimensions)
+        except ValueError:
+            pass  # current_tree not in tree_stack, skip
+    
+    # For all other nodes, follow input sockets backwards
+    else:
+        for input_socket in node.inputs:
+            if input_socket.is_linked:
+                for link in input_socket.links:
+                    _detect_best_resolution_recursion(link.from_node, current_tree, tree_stack, visited_nodes, max_dimensions)
 
