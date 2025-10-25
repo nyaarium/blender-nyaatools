@@ -83,6 +83,68 @@ def perform_merge_export(avatar_name, export_format):
     # Get all layers on the avatar in this scene
     avatar_meshes_layers = find_scene_avatars(avatar_name)
 
+    # Camera icon rendering for VOTV export
+    if export_format == "votv":
+        # Get export path early to know where to save icon.png
+        avatar_armature = get_avatar_armature(avatar_name)
+        if avatar_armature:
+            export_path = get_prop(avatar_armature, PROP_AVATAR_EXPORT_PATH)
+            if export_path:
+                # Find first camera in the scene
+                camera = None
+                for obj in bpy.context.scene.objects:
+                    if obj.type == 'CAMERA':
+                        camera = obj
+                        break
+                
+                if camera:
+                    # Store original render settings
+                    original_scene = bpy.context.scene
+                    original_resolution_x = original_scene.render.resolution_x
+                    original_resolution_y = original_scene.render.resolution_y
+                    
+                    # Check if resolution is square and warn if not
+                    if original_resolution_x != original_resolution_y:
+                        debug_print(f"⚠️ Render resolution is not square ({original_resolution_x}x{original_resolution_y}). Should be set to 128x128. Resolution will be adjusted to 128x128.")
+                    
+                    # Hide UCX_ collision objects from rendering
+                    ucx_objects = [obj for obj in bpy.context.scene.objects if obj.name.lower().startswith("ucx_")]
+                    for ucx_obj in ucx_objects:
+                        ucx_obj.hide_render = True
+                    
+                    # Set camera as active and render
+                    bpy.context.view_layer.objects.active = camera
+                    bpy.context.scene.camera = camera
+                    
+                    # Temporarily set render resolution to 128x128
+                    original_scene.render.resolution_x = 128
+                    original_scene.render.resolution_y = 128
+                    
+                    # Render the current frame
+                    bpy.ops.render.render()
+                    
+                    # Save the rendered image as icon.png
+                    render_result = bpy.data.images['Render Result']
+                    if render_result:
+                        # Get the export directory path
+                        clean_avatar_name = sanitize_name(avatar_name)
+                        if export_path.endswith(clean_avatar_name):
+                            avatar_export_dir = export_path
+                        else:
+                            avatar_export_dir = os.path.join(export_path, clean_avatar_name)
+                        
+                        # Ensure the export directory exists
+                        os.makedirs(avatar_export_dir, exist_ok=True)
+                        
+                        # Save icon.png
+                        icon_path = os.path.join(avatar_export_dir, "icon.png")
+                        render_result.save_render(icon_path)
+                        debug_print(f"Saved camera icon: {icon_path}")
+                    
+                    # Restore original resolution
+                    original_scene.render.resolution_x = original_resolution_x
+                    original_scene.render.resolution_y = original_resolution_y
+
     # Create a temporary scene for operations
     temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
     if temp_scene:

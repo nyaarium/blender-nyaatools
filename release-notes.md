@@ -4,19 +4,9 @@
 
 ### Release Notes
 
-Improved the **Bake Material Slots** optimizer
+Now renders the preview `icon.png`. To do this:
 
-- Now analyzes your texture for variance in details and tries another optimization.
-
-- Automatic downsizing: It uses the lowest resolution possible that wont harm the quality. Very safe.
-
-- Textures with fairly simple colored islands will see the best improvements. Metallic maps, smoothness/roughness, etc. If it's just a single color, you will see it downscale all the way down to 8x8.
-
-- Baking process optimized to use Blender **Combine RGB** nodes to pack in-shader.
-
-- Dynamic support for specifying any packing order you want.
-
-- Impovements to the algorithm
-
-- Shouldnt freak out anymore when a mesh has multiple material slots
-	- it copys to a temp scene and splits by material
+1. Set your scene output to 128x128
+2. Place a camera down and position it
+3. Pretty up your scene
+4. Press the Voices of the Void export button

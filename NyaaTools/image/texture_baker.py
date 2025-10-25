@@ -725,8 +725,6 @@ def _optimize_baked_image(
                 bpy.data.images.remove(image)
                 image = optimized_output
                 debug_print(f"✅ Optimization complete")
-            else:
-                debug_print(f"🔍 No optimization needed (already optimal)")
         
         analysis_time = int(time.time() - start_time)
         debug_print(f"🔍 Optimization analysis finished in {analysis_time} s")
