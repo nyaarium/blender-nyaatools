@@ -382,9 +382,9 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                 bake_start_time = time.time()
                 for format_string, filename_template in pack_configs:
                     if format_string == 'rgba':
-                        max_resolution = (4096, 4096)
-                    else:
                         max_resolution = (2048, 2048)
+                    else:
+                        max_resolution = (1024, 1024)
                     
                     packed_img = bake_dtp_texture(format_string, bake_obj, mat, max_resolution=max_resolution)
                     if packed_img:
