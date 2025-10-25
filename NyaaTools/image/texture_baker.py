@@ -537,7 +537,18 @@ def _make_shader_nodes(
             socket_name, channel_index = socket_mapping
             socket = principled_bsdf.inputs.get(socket_name)
             
-            if socket and socket.is_linked:
+            # Special case: Check for unused emission (strength <= 0)
+            is_unused_emission = False
+            if socket_name == 'Emission Color':
+                emission_strength_socket = principled_bsdf.inputs.get('Emission Strength')
+                if emission_strength_socket:
+                    if not emission_strength_socket.is_linked:
+                        strength_value = emission_strength_socket.default_value
+                        is_unused_emission = strength_value <= 0.0
+                        if is_unused_emission:
+                            debug_print(f"🔧 Emission strength <= 0, overriding to black (unused)")
+            
+            if socket and socket.is_linked and not is_unused_emission:
                 # Connect from separate
                 separate_rgb = separate_nodes[socket_name]
                 channel_names = ['Red', 'Green', 'Blue']
@@ -551,7 +562,10 @@ def _make_shader_nodes(
                     shader_state.connect_sockets(principled_tree, separate_rgb, channel_names[channel_index], target_node, input_name, f"channel {channel} to {input_name}")
             else:
                 # Not socketed, copy value directly
-                if hasattr(socket, 'default_value') and hasattr(socket.default_value, '__getitem__'):
+                if is_unused_emission:
+                    # Override to black for unused emission
+                    target_node.inputs[input_name].default_value = 0.0
+                elif hasattr(socket, 'default_value') and hasattr(socket.default_value, '__getitem__'):
                     # It's a color array, extract the specific channel
                     if scalar:
                         # For scalar, this shouldn't happen - scalar channels are not color-based
@@ -570,6 +584,7 @@ def _make_shader_nodes(
                         target_node.inputs[input_name].default_value = socket.default_value
         else:
             # Not color based (me, sp, ro, al, etc.)
+            
             socket_name = socket_mapping
             socket = principled_bsdf.inputs.get(socket_name)
             
