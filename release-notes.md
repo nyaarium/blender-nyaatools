@@ -20,3 +20,5 @@ Improved the **Bake Material Slots** optimizer
 
 - Shouldnt freak out anymore when a mesh has multiple material slots
 	- it copys to a temp scene and splits by material
+
+- Special Case: Having unsocketed `0` on an emission strength will always render black

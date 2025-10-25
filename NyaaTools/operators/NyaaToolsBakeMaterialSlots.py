@@ -8,7 +8,6 @@ from ..consts import PROP_AVATAR_EXPORT_PATH
 from ..common.get_prop import get_prop
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
-from ..image.material_analyzer import find_principled_bsdf
 from ..image.texture_baker import bake_dtp_texture
 
 
@@ -208,14 +207,6 @@ def bake_material_slots(obj, export_dir, unrename_info):
 
         debug_print(f"")
         debug_print(f"📦 Material: {mat_name}")
-
-        # Find Principled BSDF
-        principled = find_principled_bsdf(mat)
-        if not principled:
-            debug_print("❌ No Principled BSDF found")
-            # Hide this object after baking and clear its material again
-            disable_render(bake_obj)
-            raise Exception("No Principled BSDF found")
         
         # Sanitize material name for file output
         mat_name = sanitize_name(mat.name)

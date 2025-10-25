@@ -19,7 +19,6 @@ from ..avatar.get_avatar_armature import get_avatar_armature
 from ..avatar.get_avatar_layers import get_avatar_layers
 from ..avatar.get_avatar_meshes import get_avatar_meshes
 from ..avatar.merge_onto_avatar_layer import merge_onto_avatar_layer
-from ..image.material_analyzer import find_principled_bsdf
 from ..image.texture_baker import bake_dtp_texture
 from ..image.texture_utils import save_image_as_png
 
@@ -371,15 +370,6 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                 debug_print("\n")
                 debug_print(f"📦 Material: {mat_name}")
                 
-                principled_result = find_principled_bsdf(mat)
-                
-                if not principled_result:
-                    debug_print("❌ No Principled BSDF found")
-                    raise Exception("No Principled BSDF found")
-                
-                principled_bsdf = principled_result['principled_bsdf']
-                debug_print(f"🔍 Found Principled BSDF: {principled_bsdf.name}")
-                
                 # Define pack configurations with format strings
                 pack_configs = [
                     ('rgba', 'diffuse_{mat_name}.png'),
@@ -392,9 +382,9 @@ def finalize_and_export(avatar_name, armature, export_path, export_format, unren
                 bake_start_time = time.time()
                 for format_string, filename_template in pack_configs:
                     if format_string == 'rgba':
-                        max_resolution = (4096, 4096)
-                    else:
                         max_resolution = (2048, 2048)
+                    else:
+                        max_resolution = (1024, 1024)
                     
                     packed_img = bake_dtp_texture(format_string, bake_obj, mat, max_resolution=max_resolution)
                     if packed_img:
