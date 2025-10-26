@@ -102,6 +102,9 @@ def perform_merge_export(avatar_name, export_format):
                     original_scene = bpy.context.scene
                     original_resolution_x = original_scene.render.resolution_x
                     original_resolution_y = original_scene.render.resolution_y
+                    original_file_format = original_scene.render.image_settings.file_format
+                    original_color_mode = original_scene.render.image_settings.color_mode
+                    original_color_depth = original_scene.render.image_settings.color_depth
                     
                     # Check if resolution is square and warn if not
                     if original_resolution_x != original_resolution_y:
@@ -119,6 +122,11 @@ def perform_merge_export(avatar_name, export_format):
                     # Temporarily set render resolution to 128x128
                     original_scene.render.resolution_x = 128
                     original_scene.render.resolution_y = 128
+                    
+                    # Set render format to 8-bit PNG for maximum compatibility
+                    original_scene.render.image_settings.file_format = 'PNG'
+                    original_scene.render.image_settings.color_mode = 'RGB'
+                    original_scene.render.image_settings.color_depth = '8'
                     
                     # Render the current frame
                     bpy.ops.render.render()
@@ -141,9 +149,12 @@ def perform_merge_export(avatar_name, export_format):
                         render_result.save_render(icon_path)
                         debug_print(f"Saved camera icon: {icon_path}")
                     
-                    # Restore original resolution
+                    # Restore original render settings
                     original_scene.render.resolution_x = original_resolution_x
                     original_scene.render.resolution_y = original_resolution_y
+                    original_scene.render.image_settings.file_format = original_file_format
+                    original_scene.render.image_settings.color_mode = original_color_mode
+                    original_scene.render.image_settings.color_depth = original_color_depth
 
     # Create a temporary scene for operations
     temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
