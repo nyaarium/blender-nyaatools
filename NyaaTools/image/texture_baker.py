@@ -537,6 +537,26 @@ def _make_shader_nodes(
             socket_name, channel_index = socket_mapping
             socket = principled_bsdf.inputs.get(socket_name)
             
+            # Special handling for emission channels - check emission strength
+            # This check is here because Principled BSDF default emission to white.
+            # Try to guess if it's unused, and set it to black.
+            if socket_name == 'Emission Color':
+                # Get emission strength socket
+                emission_strength_socket = principled_bsdf.inputs.get('Emission Strength')
+                if emission_strength_socket and not emission_strength_socket.is_linked:
+                    strength_value = emission_strength_socket.default_value
+                    if strength_value <= 0.0:
+                        # Emission is unused, set black value directly on Combine Color
+                        debug_print(f"🔧 Emission strength <= 0, using black for channel {channel}")
+                        # Set black value directly to target node
+                        if scalar:
+                            # For scalar, convert to RGB color
+                            target_node.inputs[input_name].default_value = (0.0, 0.0, 0.0, 1.0)
+                        else:
+                            # For RGB, use single value
+                            target_node.inputs[input_name].default_value = 0.0
+                        continue
+            
             if socket and socket.is_linked:
                 # Connect from separate
                 separate_rgb = separate_nodes[socket_name]
