@@ -86,8 +86,22 @@ def bake_dtp_texture(
     # Create state tracker for safe node manipulation
     shader_state = NodeGraphState(material, material.node_tree, principled_tree)
     
-    # Detach the original Material Output to prevent conflicts
-    shader_state.detach_socket(original_material_output.inputs['Surface'])
+    # Blender 5.0+: Must fully remove Material Output, not just detach
+    # Store info to recreate it later
+    root_tree = material.node_tree
+    original_output_location = (
+        original_material_output.location.x,
+        original_material_output.location.y,
+    )
+    original_output_surface_link = None
+    surface_input = original_material_output.inputs.get("Surface")
+    if surface_input and surface_input.is_linked:
+        link = surface_input.links[0]
+        original_output_surface_link = (link.from_node.name, link.from_socket.name)
+
+    # Delete the original Material Output (required for Blender 5.0+ baking)
+    root_tree.nodes.remove(original_material_output)
+    original_material_output = None  # Mark as deleted
     
     # Ensure UV map exists
     if not _ensure_uv_map(obj):
@@ -204,9 +218,19 @@ def bake_dtp_texture(
         # Restore shader state (clean up temporary nodes and connections)
         shader_state.restore()
         
-        # Restore original Material Output as active
-        if 'original_material_output' in locals():
-            original_material_output.is_active_output = True
+        # Recreate the original Material Output that we deleted
+        restored_output = root_tree.nodes.new("ShaderNodeOutputMaterial")
+        restored_output.location = original_output_location
+        restored_output.is_active_output = True
+
+        # Restore the Surface connection if there was one
+        if original_output_surface_link:
+            from_node_name, from_socket_name = original_output_surface_link
+            from_node = root_tree.nodes.get(from_node_name)
+            if from_node:
+                from_socket = from_node.outputs.get(from_socket_name)
+                if from_socket:
+                    root_tree.links.new(from_socket, restored_output.inputs["Surface"])
         
         # Restore render settings
         scene.render.engine = original_engine
@@ -400,8 +424,11 @@ def _bake_emission_output(
     debug_print,
 ) -> Optional[bpy.types.Image]:
     # Create temporary Material Output node in the same tree as the emission node
-    principled_tree = rgb_output_node.id_data
-    temp_material_output = shader_state.add_node(principled_tree, 'ShaderNodeOutputMaterial')
+    emission_tree = rgb_output_node.id_data
+
+    temp_material_output = shader_state.add_node(
+        emission_tree, "ShaderNodeOutputMaterial"
+    )
     temp_material_output.is_active_output = True
     
     # Determine if we're baking RGBA or just RGB
@@ -425,7 +452,14 @@ def _bake_emission_output(
     root_tree.nodes.active = img_node
     
     # Connect RGB emission to Material Output
-    shader_state.connect_sockets(principled_tree, rgb_output_node, 'Emission', temp_material_output, 'Surface', "RGB emission to material output")
+    shader_state.connect_sockets(
+        emission_tree,
+        rgb_output_node,
+        "Emission",
+        temp_material_output,
+        "Surface",
+        "RGB emission to material output",
+    )
 
     # Perform RGB bake
     bake_start_time = time.time()
@@ -451,8 +485,15 @@ def _bake_emission_output(
     img_node.image = alpha_image
     
     # Connect Alpha emission to Material Output
-    shader_state.detach_socket(temp_material_output.inputs['Surface'])
-    shader_state.connect_sockets(principled_tree, alpha_output_node, 'Emission', temp_material_output, 'Surface', "Alpha emission to material output")
+    shader_state.detach_socket(temp_material_output.inputs["Surface"])
+    shader_state.connect_sockets(
+        emission_tree,
+        alpha_output_node,
+        "Emission",
+        temp_material_output,
+        "Surface",
+        "Alpha emission to material output",
+    )
 
     # Perform Alpha bake
     bake_start_time = time.time()
