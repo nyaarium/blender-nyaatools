@@ -43,7 +43,9 @@ class NyaaToolsRenamePackedImage(bpy.types.Operator):
                 message_not_dtp_formatted += (
                     f"❌ {len(result['not_dtp_formatted'])} images not DTP formatted:\n"
                 )
-                message_not_dtp_formatted += "\n".join(result["not_dtp_formatted"]) + "\n\n"
+                message_not_dtp_formatted += (
+                    "\n".join(result["not_dtp_formatted"]) + "\n\n"
+                )
 
             if 0 < len(result["error"]):
                 message_error += f"❌ {len(result['error'])} images could not be renamed. Double check:\n"

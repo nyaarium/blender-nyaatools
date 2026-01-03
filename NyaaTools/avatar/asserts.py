@@ -2,14 +2,15 @@ import bpy
 
 
 def assert_uv_match(obj1, obj2):
-    if (obj1 == None):
+    if obj1 == None:
         raise Exception("assertUVMatch() :: Expected an object, got: None")
-    if (obj2 == None):
+    if obj2 == None:
         raise Exception("assertUVMatch() :: Expected an object, got: None")
 
-    if (len(obj1.data.uv_layers) != len(obj2.data.uv_layers)):
+    if len(obj1.data.uv_layers) != len(obj2.data.uv_layers):
         raise Exception(
-            "Objects have mismatched UV sets: [" + obj1.name + "] [" + obj2.name + "]")
+            "Objects have mismatched UV sets: [" + obj1.name + "] [" + obj2.name + "]"
+        )
 
 
 def assert_exists(name):

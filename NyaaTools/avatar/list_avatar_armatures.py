@@ -1,14 +1,11 @@
 import bpy
 
-from ..common.get_prop import get_prop
-from ..consts import PROP_AVATAR_NAME
-
 
 def list_avatar_armatures():
+    """List all avatar armature names using PropertyGroup system."""
     armatures = []
     for obj in bpy.data.objects:
-        if (obj.type == "ARMATURE"):
-            key = get_prop(obj, PROP_AVATAR_NAME)
-            if (key != None and key not in armatures):
+        if obj.type == "ARMATURE" and obj.nyaa_avatar.is_avatar:
+            if obj.name not in armatures:
                 armatures.append(obj.name)
     return armatures

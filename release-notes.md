@@ -1,18 +1,36 @@
-### Important Notes
+## 🎊 Happy New Year! v2.0 🎊
 
-> Be sure to **restart Blender** after updating this addon.
+Finally, a fix to hot-reload of the addon when you update. (#10)
 
-### Release Notes
+⚠️ **This will be the final time** you need to **restart Blender** after updating. In the future, you will only need to disable/enable the addon to reload the changes.
 
-Now renders the preview `icon.png`. To do this:
+---
 
-1. Set your scene output to 128x128
-2. Place a camera down and position it
-3. Pretty up your scene
-4. Press the Voices of the Void export button
+### Full Rewrite
 
-*(it will automatically ignore UCX colliders)*
+This is a full rewrite for a new UI experience and new Asset management system. (#13, #14, #43, #44, #70)
 
-Fixed:
+Thanks Claude Opus!
 
-- Oopsie, accidently left my code about treating **Emission Strength** `0` textures as black. Now it's back in.
+---
+
+### **New UI**
+
+New panels, modals, tables/lists, selection boxes, etc. The experience will be a lot cleaner.
+
+
+### **Assets**
+
+**Avatars** are now known as **Assets** *(with a humanoid armature)*.
+
+More generically, **Assets** may or may not have an armature. Meaning you can now use this to configure static props, or props with a non-humanoid armature.
+
+Assets can now define multiple export profiles, so you can quickly switch between exporting to your Unity avi project, or somewhere else (like straight to Voices of the Void game).
+
+This is a one-way upgrade from NyaaTools 1. There will be a migrate button when you click on an old avatar.
+
+### **Baking**
+
+Baking now features profiles as well, so you can custom define what maps you want exported. Presets for **PBR (MRS)**, **Poiyomi**, **Voices of the Void** are included.
+
+It now also shows a progress window, so you can see where it's at.

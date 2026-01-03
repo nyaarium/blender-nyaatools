@@ -2,7 +2,6 @@ import traceback
 import bpy
 from bpy.props import BoolProperty, StringProperty
 
-
 from ..armature.estimate_is_normalized import estimate_is_normalized
 from ..armature.find_meshes_affected_by_armature_modifier import (
     find_meshes_affected_by_armature_modifier,

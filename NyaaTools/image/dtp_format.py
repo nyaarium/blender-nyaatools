@@ -1,6 +1,8 @@
 # Texture channel flags
 supported_flags = {
-    "00": True,  # Unused channel
+    "0": True,  # Constant 0.0 (black)
+    "1": True,  # Constant 1.0 (white)
+    "xx": True,  # Unused channel (only valid for alpha position)
     "cr": True,  # sRGB Color (red)
     "cg": True,  # sRGB Color (green)
     "cb": True,  # sRGB Color (blue)

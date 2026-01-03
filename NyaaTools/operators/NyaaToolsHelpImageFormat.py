@@ -1,7 +1,6 @@
 import bpy
 import traceback
 
-
 help_text = """--==[ DTP Format Guide ]==--
 
 EXAMPLES:
