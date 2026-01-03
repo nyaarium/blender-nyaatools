@@ -262,7 +262,7 @@ def _stage_normal_node(
             final_resolution = detect_best_resolution(normal_socket, tree_stack)
         else:
             # Unconnected normal socket - use default
-            final_resolution = (512, 512)
+            final_resolution = (1024, 1024)
     
     # Apply max_resolution cap
     if max_resolution and final_resolution:
