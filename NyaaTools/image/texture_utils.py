@@ -3,10 +3,6 @@
 import bpy
 import numpy as np
 import os
-import time
-from typing import Optional, Tuple
-
-from .uv.analyze_mip_stats import analyze_mip_stats
 
 
 # pack_rgba() and pack_pbr() functions removed - replaced by bake_packed_texture() in texture_baker.py
@@ -74,33 +70,12 @@ def _np_to_image_pixels(img: bpy.types.Image, arr: np.ndarray) -> None:
     img.update()
 
 
-def _should_use_batching(width: int, height: int, threshold: int = 8192) -> bool:
-    """
-    Determine if batching should be used for large images.
-
-    Args:
-        width: Image width
-        height: Image height
-        threshold: Size threshold above which to use batching
-
-    Returns:
-        True if batching should be used
-    """
-    return width > threshold or height > threshold
-
-
 # Dev Note:
 # - We are mostly upscaling solid colors (8x8 -> 4K)
 # - Speed is critical
 #
 # Discuss if we should use bilinear or something else
-def _resize_np_nearest(
-    src: np.ndarray,
-    tw: int,
-    th: int,
-    use_batching: bool = False,
-    batch_size: int = 4096,
-) -> np.ndarray:
+def _resize_np_nearest(src: np.ndarray, tw: int, th: int) -> np.ndarray:
     """
     Resize NumPy array using nearest-neighbor sampling.
 
@@ -108,8 +83,6 @@ def _resize_np_nearest(
         src: Source array with shape (H, W, C)
         tw: Target width
         th: Target height
-        use_batching: If True, process in chunks for very large images
-        batch_size: Number of rows to process at once when batching
 
     Returns:
         Resized array with shape (th, tw, C)
@@ -118,18 +91,7 @@ def _resize_np_nearest(
     x_idx = (np.linspace(0, sw - 1, tw)).astype(np.int32)
     y_idx = (np.linspace(0, sh - 1, th)).astype(np.int32)
 
-    # For very large images, process in chunks to reduce memory usage
-    if use_batching and th > batch_size:
-        result = np.empty((th, tw, src.shape[2]), dtype=src.dtype)
-
-        for start_row in range(0, th, batch_size):
-            end_row = min(start_row + batch_size, th)
-            batch_y_idx = y_idx[start_row:end_row]
-            result[start_row:end_row] = src[batch_y_idx][:, x_idx]
-
-        return result
-    else:
-        return src[y_idx][:, x_idx]
+    return src[y_idx][:, x_idx]
 
 
 def resize_image_to_size(

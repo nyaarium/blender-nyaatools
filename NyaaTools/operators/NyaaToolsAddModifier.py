@@ -2,10 +2,7 @@ import traceback
 import bpy
 from bpy.props import StringProperty
 
-from ..avatar.get_avatar_armature import get_avatar_armature
-from ..common.get_prop import get_prop
 from ..common.selection_get_meshes import selection_get_meshes
-from ..consts import PROP_AVATAR_LAYERS
 
 
 class NyaaToolsAddModifier(bpy.types.Operator):
@@ -40,13 +37,13 @@ def perform_add_modifier(meshes, which_modifier):
             bpy.ops.object.modifier_move_up(modifier=modifier.name)
 
     def search_for_avatar_armature(mesh):
-        key = get_prop(mesh, PROP_AVATAR_LAYERS)
-        if key != None:
-            keySplit = key.split(",") if key != "" else []
-            for path in keySplit:
-                pathParts = path.split("/") if path != "" else []
-                targetAvatarName = pathParts[0].strip()
-                return get_avatar_armature(targetAvatarName)
+        """Find the avatar armature that owns this mesh using PropertyGroup system."""
+        for obj in bpy.data.objects:
+            if obj.type != "ARMATURE" or not obj.nyaa_avatar.is_avatar:
+                continue
+            for entry in obj.nyaa_avatar.meshes:
+                if entry.mesh_object == mesh:
+                    return obj
         return None
 
     # Only returns an armature if there is only 1 armature in the scene

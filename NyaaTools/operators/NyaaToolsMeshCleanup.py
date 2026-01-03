@@ -6,6 +6,7 @@ from ..common.selection_get_meshes import selection_get_meshes
 from ..mesh.remove_unused_materials import remove_unused_materials
 from ..mesh.remove_unused_shape_keys import remove_unused_shape_keys
 from ..mesh.remove_unused_vertex_groups import remove_unused_vertex_groups
+from ..asset.merge_layers import sort_mesh_elements_by_material
 
 
 class NyaaToolsMeshCleanup(bpy.types.Operator):
@@ -44,3 +45,6 @@ def perform_cleanup(meshes, vg, sk, mat):
             remove_unused_shape_keys(mesh)
         if mat:
             remove_unused_materials(mesh)
+
+            # Sort mesh elements by material for better game engine compatibility
+            sort_mesh_elements_by_material(mesh)

@@ -1,5 +1,26 @@
 import os
+import re
 from pathlib import Path
+
+
+def sanitize_name(name, strict=False):
+    """
+    Sanitize a name for safe file system usage.
+
+    Args:
+        name: The name to sanitize
+        strict: If True, only allow alphanumeric, dash, underscore (for VotV).
+                If False, only remove Windows-unsafe characters (default).
+
+    Returns:
+        Sanitized name string
+    """
+    if strict:
+        # Strict mode: only alphanumeric, dash, underscore
+        return re.sub(r"[^a-zA-Z0-9\-_]", "_", name)
+    else:
+        # Windows-safe mode: remove < > : " / \ | ? *
+        return re.sub(r'[<>:"/\\|?*]', "_", name)
 
 
 def deleteFile(os_path: str):
