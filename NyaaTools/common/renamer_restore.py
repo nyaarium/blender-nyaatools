@@ -11,7 +11,7 @@ def renamer_restore(unrename_info):
             return bpy.data.materials[name]
         else:
             return None
-    
+
     for info in unrename_info:
         which = info[0]
         if which == "object":

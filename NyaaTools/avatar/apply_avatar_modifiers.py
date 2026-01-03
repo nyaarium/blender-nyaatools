@@ -15,9 +15,7 @@ def apply_avatar_modifiers(obj):
     avatar_names = list_avatar_armatures()
 
     for modifier in obj.modifiers:
-        if (
-            modifier.name.startswith("--")
-        ):
+        if modifier.name.startswith("--"):
             # Anything with a name starting with "--" is for internal use only and should be removed
 
             bpy.ops.object.modifier_remove(modifier=modifier.name)
@@ -38,17 +36,9 @@ def apply_avatar_modifiers(obj):
             if armature.name in avatar_names:
                 bpy.ops.object.modifier_remove(modifier=modifier.name)
             else:
-                applyModifierForObjectWithShapeKeys(
-                    bpy.context,
-                    [modifier.name],
-                    False
-                )
+                applyModifierForObjectWithShapeKeys(bpy.context, [modifier.name], False)
         else:
-            applyModifierForObjectWithShapeKeys(
-                bpy.context,
-                [modifier.name],
-                False
-            )
+            applyModifierForObjectWithShapeKeys(bpy.context, [modifier.name], False)
 
     try:
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)

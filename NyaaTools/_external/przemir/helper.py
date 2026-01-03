@@ -35,11 +35,21 @@ from bpy.utils import register_class
 from bpy.props import *
 
 
-def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_armatures, callback_progress_tick=None):
+def applyModifierForObjectWithShapeKeys(
+    context, selectedModifiers, disable_armatures, callback_progress_tick=None
+):
 
     list_properties = []
-    properties = ["interpolation", "mute", "name", "relative_key",
-                  "slider_max", "slider_min", "value", "vertex_group"]
+    properties = [
+        "interpolation",
+        "mute",
+        "name",
+        "relative_key",
+        "slider_max",
+        "slider_min",
+        "value",
+        "vertex_group",
+    ]
     shapesCount = 0
     vertCount = -1
     startTime = time.time()
@@ -47,26 +57,55 @@ def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_arma
     disabled_armature_modifiers = []
     if disable_armatures:
         for modifier in context.object.modifiers:
-            if modifier.name not in selectedModifiers and modifier.type == 'ARMATURE' and modifier.show_viewport == True:
+            if (
+                modifier.name not in selectedModifiers
+                and modifier.type == "ARMATURE"
+                and modifier.show_viewport == True
+            ):
                 disabled_armature_modifiers.append(modifier)
                 modifier.show_viewport = False
 
     if context.object.data.shape_keys:
         shapesCount = len(context.object.data.shape_keys.key_blocks)
 
-    if (shapesCount == 0):
+    if shapesCount == 0:
         for modifierName in selectedModifiers:
             bpy.ops.object.modifier_apply(modifier=modifierName)
         return (True, None)
 
     # We want to preserve original object, so all shapes will be joined to it.
     originalObject = context.view_layer.objects.active
-    bpy.ops.object.select_all(action='DESELECT')
+    bpy.ops.object.select_all(action="DESELECT")
     originalObject.select_set(True)
 
     # Copy object which will holds all shape keys.
-    bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked": False, "mode": 'TRANSLATION'}, TRANSFORM_OT_translate={"value": (0, 0, 0), "orient_type": 'GLOBAL', "orient_matrix": ((1, 0, 0), (0, 1, 0), (0, 0, 1)), "orient_matrix_type": 'GLOBAL', "constraint_axis": (False, False, False), "mirror": True, "use_proportional_edit": False, "proportional_edit_falloff": 'SMOOTH',
-                                  "proportional_size": 1, "use_proportional_connected": False, "use_proportional_projected": False, "snap": False, "snap_target": 'CLOSEST', "snap_point": (0, 0, 0), "snap_align": False, "snap_normal": (0, 0, 0), "gpencil_strokes": False, "cursor_transform": False, "texture_space": False, "remove_on_cancel": False, "release_confirm": False, "use_accurate": False})
+    bpy.ops.object.duplicate_move(
+        OBJECT_OT_duplicate={"linked": False, "mode": "TRANSLATION"},
+        TRANSFORM_OT_translate={
+            "value": (0, 0, 0),
+            "orient_type": "GLOBAL",
+            "orient_matrix": ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+            "orient_matrix_type": "GLOBAL",
+            "constraint_axis": (False, False, False),
+            "mirror": True,
+            "use_proportional_edit": False,
+            "proportional_edit_falloff": "SMOOTH",
+            "proportional_size": 1,
+            "use_proportional_connected": False,
+            "use_proportional_projected": False,
+            "snap": False,
+            "snap_target": "CLOSEST",
+            "snap_point": (0, 0, 0),
+            "snap_align": False,
+            "snap_normal": (0, 0, 0),
+            "gpencil_strokes": False,
+            "cursor_transform": False,
+            "texture_space": False,
+            "remove_on_cancel": False,
+            "release_confirm": False,
+            "use_accurate": False,
+        },
+    )
     copyObject = context.view_layer.objects.active
     copyObject.select_set(False)
 
@@ -110,14 +149,41 @@ def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_arma
         currTime = time.time()
         elapsedTime = currTime - startTime
 
-        print("applyModifierForObjectWithShapeKeys: Applying shape key %d/%d ('%s', %0.2f seconds since start)" %
-              (i+1, shapesCount, list_properties[i]["name"], elapsedTime))
+        print(
+            "applyModifierForObjectWithShapeKeys: Applying shape key %d/%d ('%s', %0.2f seconds since start)"
+            % (i + 1, shapesCount, list_properties[i]["name"], elapsedTime)
+        )
         context.view_layer.objects.active = copyObject
         copyObject.select_set(True)
 
         # Copy temp object.
-        bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked": False, "mode": 'TRANSLATION'}, TRANSFORM_OT_translate={"value": (0, 0, 0), "orient_type": 'GLOBAL', "orient_matrix": ((1, 0, 0), (0, 1, 0), (0, 0, 1)), "orient_matrix_type": 'GLOBAL', "constraint_axis": (False, False, False), "mirror": True, "use_proportional_edit": False, "proportional_edit_falloff": 'SMOOTH',
-                                      "proportional_size": 1, "use_proportional_connected": False, "use_proportional_projected": False, "snap": False, "snap_target": 'CLOSEST', "snap_point": (0, 0, 0), "snap_align": False, "snap_normal": (0, 0, 0), "gpencil_strokes": False, "cursor_transform": False, "texture_space": False, "remove_on_cancel": False, "release_confirm": False, "use_accurate": False})
+        bpy.ops.object.duplicate_move(
+            OBJECT_OT_duplicate={"linked": False, "mode": "TRANSLATION"},
+            TRANSFORM_OT_translate={
+                "value": (0, 0, 0),
+                "orient_type": "GLOBAL",
+                "orient_matrix": ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                "orient_matrix_type": "GLOBAL",
+                "constraint_axis": (False, False, False),
+                "mirror": True,
+                "use_proportional_edit": False,
+                "proportional_edit_falloff": "SMOOTH",
+                "proportional_size": 1,
+                "use_proportional_connected": False,
+                "use_proportional_projected": False,
+                "snap": False,
+                "snap_target": "CLOSEST",
+                "snap_point": (0, 0, 0),
+                "snap_align": False,
+                "snap_normal": (0, 0, 0),
+                "gpencil_strokes": False,
+                "cursor_transform": False,
+                "texture_space": False,
+                "remove_on_cancel": False,
+                "release_confirm": False,
+                "use_accurate": False,
+            },
+        )
         tmpObject = context.view_layer.objects.active
         bpy.ops.object.shape_key_remove(all=True)
         copyObject.select_set(True)
@@ -135,9 +201,11 @@ def applyModifierForObjectWithShapeKeys(context, selectedModifiers, disable_arma
 
         # Verify number of vertices.
         if vertCount != len(tmpObject.data.vertices):
-            errorInfo = ("Shape keys ended up with different number of vertices!\n"
-                         "All shape keys needs to have the same number of vertices after modifier is applied.\n"
-                         "Otherwise joining such shape keys will fail!")
+            errorInfo = (
+                "Shape keys ended up with different number of vertices!\n"
+                "All shape keys needs to have the same number of vertices after modifier is applied.\n"
+                "Otherwise joining such shape keys will fail!"
+            )
             return (False, errorInfo)
 
         # Join with originalObject

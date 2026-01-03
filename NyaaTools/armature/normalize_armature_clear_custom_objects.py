@@ -1,10 +1,10 @@
 import bpy
 
+
 def normalize_armature_clear_custom_objects(armature: bpy.types.Armature):
     def debug_print(*msgs):
         print("   ", *msgs)
         return
-
 
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.context.view_layer.objects.active = armature

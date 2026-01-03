@@ -10,8 +10,7 @@ def similarity_to_common_names(bone_name: str, bone_desc_name: str) -> float:
     if common_names:
         # Return largest string_similarity value
         return max(
-            string_similarity(bone_name, common_name)
-            for common_name in common_names
+            string_similarity(bone_name, common_name) for common_name in common_names
         )
     else:
         return string_similarity(bone_name, bone_desc_name)

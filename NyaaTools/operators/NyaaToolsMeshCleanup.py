@@ -10,6 +10,7 @@ from ..mesh.remove_unused_vertex_groups import remove_unused_vertex_groups
 
 class NyaaToolsMeshCleanup(bpy.types.Operator):
     """Removes unused vertex groups, shape keys, and materials from a mesh object"""
+
     bl_idname = "nyaa.mesh_cleanup"
     bl_label = "Mesh Cleanup"
     bl_options = {"REGISTER", "UNDO"}

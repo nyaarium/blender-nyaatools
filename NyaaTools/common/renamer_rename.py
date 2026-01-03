@@ -38,7 +38,7 @@ def rename_object(obj, new_name):
                 # There is a conflict, rename the original data and supply an unrename
                 conflict_data = data_col[new_name]
                 temp_name = "____" + conflict_data.name
-                
+
                 unrename_info.append((obj.type.lower(), temp_name, conflict_data.name))
 
                 conflict_data.name = temp_name
@@ -64,7 +64,7 @@ def rename_material(material, new_name):
             # There is a conflict, rename the original material and supply an unrename
             conflict_material = bpy.data.materials[new_name]
             temp_name = "____" + conflict_material.name
-            
+
             unrename_info.append(("material", temp_name, conflict_material.name))
 
             conflict_material.name = temp_name
@@ -75,5 +75,5 @@ def rename_material(material, new_name):
         unrename_info.append(("material", new_name, original_name))
 
         material.name = new_name
-    
+
     return unrename_info

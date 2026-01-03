@@ -24,8 +24,7 @@ def remove_unused_materials(obj):
             mat_name = obj.material_slots[i].name
             if mat_name != "":
                 mat_name = " (" + mat_name + ")"
-            debug_print("Removing material slot: ", obj.name,
-                        " -> ", i, mat_name)
+            debug_print("Removing material slot: ", obj.name, " -> ", i, mat_name)
 
             selection_add(obj)
             obj.active_material_index = i

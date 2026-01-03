@@ -1,4 +1,3 @@
-
 import bpy
 
 from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
@@ -32,10 +31,7 @@ def apply_pose(armature, mesh_modifier_pairs, callback_progress_tick=None):
         # If shape keys exist (note that shape_keys may be None)
         if mesh.data.shape_keys != None:
             applyModifierForObjectWithShapeKeys(
-                bpy.context,
-                [modifier_copy.name],
-                True,
-                callback_progress_tick
+                bpy.context, [modifier_copy.name], True, callback_progress_tick
             )
 
         else:

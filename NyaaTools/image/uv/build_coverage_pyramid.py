@@ -7,7 +7,6 @@ This module provides utilities for building coverage pyramids for texture analys
 import numpy as np
 
 
-
 def build_coverage_pyramid(uv_face_map, image_array=None, max_levels=16):
     """
     Build coverage and image pyramids by downsampling both the UV face map and image.
@@ -73,5 +72,3 @@ def build_coverage_pyramid(uv_face_map, image_array=None, max_levels=16):
             current_image = np.mean(image_trimmed.reshape(next_h, 2, next_w, 2, channels), axis=(1, 3))
     
     return coverage_pyramid, image_pyramid
-
-

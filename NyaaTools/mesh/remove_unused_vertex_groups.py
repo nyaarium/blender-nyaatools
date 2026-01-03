@@ -1,5 +1,5 @@
-
 import re
+
 from ..consts import VERTEX_GROUP_TOLERANCE
 
 
@@ -25,10 +25,16 @@ def remove_unused_vertex_groups(obj):
             if VERTEX_GROUP_TOLERANCE < g.weight:
                 vgroup_used[g.group] = True
                 # Mirror vertex group handling
-                armatch = re.search(r'((.R|.L)(.(\d){1,}){0,1})(?!.)', vgroup_names[g.group])
+                armatch = re.search(
+                    r"((.R|.L)(.(\d){1,}){0,1})(?!.)", vgroup_names[g.group]
+                )
                 if armatch:
                     tag = armatch.group()
-                    mirror_tag = tag.replace(".R", ".L") if ".R" in tag else tag.replace(".L", ".R")
+                    mirror_tag = (
+                        tag.replace(".R", ".L")
+                        if ".R" in tag
+                        else tag.replace(".L", ".R")
+                    )
                     mirror_vgname = vgroup_names[g.group].replace(tag, mirror_tag)
                     # Ensure mirror group is marked used
                     for idx, name in vgroup_names.items():

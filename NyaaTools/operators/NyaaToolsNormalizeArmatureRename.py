@@ -2,7 +2,6 @@ import traceback
 import bpy
 from bpy.props import BoolProperty, StringProperty
 
-
 from ..armature.normalize_armature_rename_bones import normalize_armature_rename_bones
 from ..common.selection_get_armature import selection_get_armature
 
@@ -40,6 +39,5 @@ def perform_normalize_rename(armature):
     normalize_armature_rename_bones(armature, False)
 
     bpy.ops.object.mode_set(mode="OBJECT")
-
 
     print("Done!")

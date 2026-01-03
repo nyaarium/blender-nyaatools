@@ -1,5 +1,6 @@
 import bpy
 import numpy
+
 from ..consts import SHAPE_KEY_TOLERANCE
 
 
