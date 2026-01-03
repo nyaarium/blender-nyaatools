@@ -4,6 +4,10 @@
 debug.log
 node_modules/
 volumes/
+.env
+__pycache__/
+*.pyc
+*.pyo
 
 #### OS
 Thumbs.db

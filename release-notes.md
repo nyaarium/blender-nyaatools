@@ -1,18 +1,5 @@
-### Important Notes
+# Happy New Year! 🎊
 
-> Be sure to **restart Blender** after updating this addon.
+There is a new system in-place to hot-reload the addon when you update. (#10)
 
-### Release Notes
-
-Now renders the preview `icon.png`. To do this:
-
-1. Set your scene output to 128x128
-2. Place a camera down and position it
-3. Pretty up your scene
-4. Press the Voices of the Void export button
-
-*(it will automatically ignore UCX colliders)*
-
-Fixed:
-
-- Oopsie, accidently left my code about treating **Emission Strength** `0` textures as black. Now it's back in.
+This will be the final time you need to **restart Blender** after updating. In the future, you will only need to disable/enable the addon to reload the changes.
