@@ -619,6 +619,9 @@ class NYAATOOLS_OT_RunBake(Operator):
         self._export_dir = pending_ctx["export_dir"]
         self._on_cleanup = pending_ctx.get("on_cleanup")
 
+        # Filter out UCX_ collision meshes (safety check)
+        meshes = [m for m in meshes if not m.name.upper().startswith("UCX_")]
+
         print(f"[RunBake] Baking {len(meshes)} meshes")
 
         if not meshes:

@@ -91,6 +91,11 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
     )
+    include_ue_colliders: BoolProperty(
+        name="Include UE Colliders",
+        default=False,
+        description="Include Unreal Engine convex-collision meshes (UCX_) in export",
+    )
 
     @classmethod
     def poll(cls, context):
@@ -100,6 +105,7 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
     def invoke(self, context, event):
         if not self.path:
             self.path = "./"
+        self.include_ue_colliders = False
         return context.window_manager.invoke_props_dialog(self, width=400)
 
     def draw(self, context):
@@ -129,6 +135,18 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
 
         # Bake option
         layout.prop(self, "bake_after_export")
+
+        # Meta Objects section
+        layout.separator()
+        box = layout.box()
+        box.label(text="Meta Objects", icon="PHYSICS")
+        row = box.row()
+        row.prop(self, "include_ue_colliders")
+
+        # VotV forces colliders on
+        if self.format == "votv":
+            row.enabled = False
+            box.label(text="VotV requires UCX_ colliders", icon="INFO")
 
         # Validation
         is_valid, error = validate_export_profile(
@@ -172,12 +190,16 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
             self.report({"ERROR"}, error)
             return {"CANCELLED"}
 
+        # VotV forces colliders on
+        include_colliders = self.include_ue_colliders or self.format == "votv"
+
         profile = cfg.export_profiles.add()
         profile.target_type = self.target_type
         profile.path = self.path
         profile.format = self.format
         profile.export_static = self.export_static
         profile.bake_after_export = self.bake_after_export
+        profile.include_ue_colliders = include_colliders
         cfg.active_export_index = len(cfg.export_profiles) - 1
 
         tag_view3d_redraw(context)
@@ -231,6 +253,11 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
     )
+    include_ue_colliders: BoolProperty(
+        name="Include UE Colliders",
+        default=False,
+        description="Include Unreal Engine convex-collision meshes (UCX_) in export",
+    )
 
     @classmethod
     def poll(cls, context):
@@ -248,6 +275,7 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         self.format = profile.format
         self.export_static = profile.export_static
         self.bake_after_export = profile.bake_after_export
+        self.include_ue_colliders = profile.include_ue_colliders
         return context.window_manager.invoke_props_dialog(self, width=400)
 
     def draw(self, context):
@@ -277,6 +305,18 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
 
         # Bake option
         layout.prop(self, "bake_after_export")
+
+        # Meta Objects section
+        layout.separator()
+        box = layout.box()
+        box.label(text="Meta Objects", icon="PHYSICS")
+        row = box.row()
+        row.prop(self, "include_ue_colliders")
+
+        # VotV forces colliders on
+        if self.format == "votv":
+            row.enabled = False
+            box.label(text="VotV requires UCX_ colliders", icon="INFO")
 
         # Validation
         is_valid, error = validate_export_profile(
@@ -320,12 +360,16 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
             self.report({"ERROR"}, error)
             return {"CANCELLED"}
 
+        # VotV forces colliders on
+        include_colliders = self.include_ue_colliders or self.format == "votv"
+
         profile = cfg.export_profiles[cfg.active_export_index]
         profile.target_type = self.target_type
         profile.path = self.path
         profile.format = self.format
         profile.export_static = self.export_static
         profile.bake_after_export = self.bake_after_export
+        profile.include_ue_colliders = include_colliders
 
         tag_view3d_redraw(context)
         self.report({"INFO"}, "Updated export profile")
@@ -400,12 +444,16 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
         cfg = sel.asset.nyaa_asset
         profile = cfg.export_profiles[cfg.active_export_index]
 
+        # VotV forces colliders on
+        include_colliders = profile.include_ue_colliders or profile.format == "votv"
+
         return bpy.ops.nyaa.avatar_merge_export(
             avatar_name=cfg.asset_name,
             export_format=profile.format,
             target_type=profile.target_type,
             export_static=profile.export_static,
             bake_after_export=profile.bake_after_export,
+            include_ue_colliders=include_colliders,
         )
 
 

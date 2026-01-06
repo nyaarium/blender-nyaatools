@@ -4,7 +4,61 @@ Asset management operators for NyaaTools panel.
 
 import bpy
 from bpy.types import Operator
-from bpy.props import EnumProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, StringProperty
+
+
+def _any_mesh_is_ucx(meshes):
+    """Check if any mesh in the list has a UCX_ name."""
+    return any(m.name.upper().startswith("UCX_") for m in meshes)
+
+
+def _validate_layer_name_ucx(layer_name, is_ue_collider):
+    """
+    Validate layer name vs collider flag.
+    Returns (is_valid, error_message).
+    """
+    if layer_name.upper().startswith("UCX") and not is_ue_collider:
+        return (
+            False,
+            "Layer names starting with 'UCX' are reserved. Use the UE Collider option instead.",
+        )
+    return True, ""
+
+
+def _sort_asset_meshes(meshes_collection):
+    """
+    Sort meshes collection: non-colliders first (by layer, then name),
+    then colliders last (by name).
+    """
+    # Build list of (index, entry) tuples
+    entries = [(i, entry) for i, entry in enumerate(meshes_collection)]
+
+    # Sort with colliders last
+    def sort_key(item):
+        _, entry = item
+        if entry.is_ue_collider:
+            # Colliders: sort last, by mesh name
+            return (1, "", entry.mesh_object.name if entry.mesh_object else "")
+        else:
+            # Non-colliders: sort by layer name, then mesh name
+            return (
+                0,
+                entry.layer_name,
+                entry.mesh_object.name if entry.mesh_object else "",
+            )
+
+    entries.sort(key=sort_key)
+
+    # Reorder collection using .move()
+    for new_index, (old_index, _) in enumerate(entries):
+        if old_index != new_index:
+            # Find current position (may have changed due to previous moves)
+            current_index = old_index
+            for prev_new, (prev_old, _) in enumerate(entries[:new_index]):
+                if prev_old < old_index:
+                    current_index -= 1
+            meshes_collection.move(current_index, new_index)
+
 
 from ..asset.asset_helpers import (
     get_asset_description,
@@ -149,6 +203,18 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
         description="Armature to associate with this asset",
     )
 
+    # Meta Objects
+    show_meta_objects: BoolProperty(
+        name="Meta Objects",
+        default=False,
+        description="Expand meta objects section",
+    )
+    is_ue_collider: BoolProperty(
+        name="Unreal Engine Convex Collision",
+        default=False,
+        description="Mark as Unreal Engine convex-collision mesh (UCX_)",
+    )
+
     @classmethod
     def poll(cls, context):
         if len(context.selected_objects) != 1:
@@ -167,16 +233,35 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
         if modifier_armature:
             self.armature_choice = modifier_armature.name
 
+        # Auto-expand meta objects and set collider flag if mesh is UCX_
+        if mesh.name.upper().startswith("UCX_"):
+            self.show_meta_objects = True
+            self.is_ue_collider = True
+        else:
+            self.show_meta_objects = False
+            self.is_ue_collider = False
+
         return context.window_manager.invoke_props_dialog(self, width=350)
 
     def draw(self, context):
         layout = self.layout
+        mesh = context.selected_objects[0]
+
         layout.prop(self, "asset_name")
         layout.separator()
         layout.prop(self, "armature_choice")
         layout.separator()
 
-        if self.armature_choice == "NONE":
+        # Check for UCX-only static asset error
+        is_ucx_mesh = mesh.name.upper().startswith("UCX_")
+        if self.armature_choice == "NONE" and is_ucx_mesh:
+            err_box = layout.box()
+            err_box.alert = True
+            err_box.label(
+                text="Cannot create asset from collision mesh alone.", icon="ERROR"
+            )
+            err_box.label(text="Select an armature or a non-UCX mesh.")
+        elif self.armature_choice == "NONE":
             layout.label(text="This will create a static asset", icon="INFO")
         else:
             arm_obj = bpy.data.objects.get(self.armature_choice)
@@ -192,8 +277,39 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
                 else:
                     layout.label(text=f"This will create {desc}", icon="INFO")
 
+        # Meta Objects section (collapsible) - only for armature-based assets
+        if self.armature_choice != "NONE":
+            layout.separator()
+            box = layout.box()
+            row = box.row()
+            row.prop(
+                self,
+                "show_meta_objects",
+                icon="TRIA_DOWN" if self.show_meta_objects else "TRIA_RIGHT",
+                icon_only=True,
+                emboss=False,
+            )
+            row.label(text="Meta Objects", icon="PHYSICS")
+
+            if self.show_meta_objects:
+                box.prop(self, "is_ue_collider")
+                if self.is_ue_collider:
+                    box.label(text="Layer will be set to 'UCX'", icon="INFO")
+
     def execute(self, context):
         mesh = context.selected_objects[0]
+        is_ucx_mesh = mesh.name.upper().startswith("UCX_")
+
+        # Block UCX-only static asset creation
+        if self.armature_choice == "NONE" and is_ucx_mesh:
+            self.report({"ERROR"}, "Cannot create asset from collision mesh alone")
+            return {"CANCELLED"}
+
+        # Determine layer name
+        if self.is_ue_collider:
+            layer_name = "UCX"
+        else:
+            layer_name = mesh.name
 
         if self.armature_choice == "NONE":
             mesh.nyaa_asset.is_asset = True
@@ -221,7 +337,9 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
                 if not already_exists:
                     entry = cfg.meshes.add()
                     entry.mesh_object = mesh
-                    entry.layer_name = mesh.name
+                    entry.layer_name = layer_name
+                    entry.is_ue_collider = self.is_ue_collider
+                _sort_asset_meshes(cfg.meshes)
                 invalidate_selection_cache()
                 self.report(
                     {"INFO"}, f"Added mesh to existing asset '{cfg.asset_name}'"
@@ -232,7 +350,9 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
                 arm_obj.nyaa_asset.is_humanoid = is_humanoid(arm_obj)
                 entry = arm_obj.nyaa_asset.meshes.add()
                 entry.mesh_object = mesh
-                entry.layer_name = mesh.name
+                entry.layer_name = layer_name
+                entry.is_ue_collider = self.is_ue_collider
+                _sort_asset_meshes(arm_obj.nyaa_asset.meshes)
                 invalidate_selection_cache()
                 desc = get_asset_description(arm_obj)
                 self.report({"INFO"}, f"Created {desc} '{self.asset_name}' with mesh")
@@ -310,6 +430,18 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
     )
     new_layer_name: StringProperty(name="Layer Name", default="")
 
+    # Meta Objects
+    show_meta_objects: BoolProperty(
+        name="Meta Objects",
+        default=False,
+        description="Expand meta objects section",
+    )
+    is_ue_collider: BoolProperty(
+        name="Unreal Engine Convex Collision",
+        default=False,
+        description="Mark as Unreal Engine convex-collision mesh (UCX_)",
+    )
+
     @classmethod
     def poll(cls, context):
         sel = SelectionContext(context)
@@ -322,6 +454,15 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
             self.new_layer_name = sel.meshes[0].name
         else:
             self.new_layer_name = "Layer Name"
+
+        # Auto-expand meta objects and set collider flag if any mesh is UCX_
+        if _any_mesh_is_ucx(sel.meshes):
+            self.show_meta_objects = True
+            self.is_ue_collider = True
+        else:
+            self.show_meta_objects = False
+            self.is_ue_collider = False
+
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, context):
@@ -334,14 +475,44 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
         for mesh in sel.meshes:
             box.label(text=f"  {mesh.name}")
 
-        layout.separator()
-        layout.prop(self, "mode", expand=True)
-        layout.separator()
+        # Layer selection (hidden if collider)
+        if not self.is_ue_collider:
+            layout.separator()
+            layout.prop(self, "mode", expand=True)
+            layout.separator()
 
-        if self.mode == "EXISTING":
-            layout.prop(self, "existing_layer")
-        else:
-            layout.prop(self, "new_layer_name", text="Name")
+            if self.mode == "EXISTING":
+                layout.prop(self, "existing_layer")
+            else:
+                layout.prop(self, "new_layer_name", text="Name")
+
+            # Validate layer name
+            layer_name = (
+                self.existing_layer if self.mode == "EXISTING" else self.new_layer_name
+            )
+            is_valid, error = _validate_layer_name_ucx(layer_name, self.is_ue_collider)
+            if not is_valid:
+                err_box = layout.box()
+                err_box.alert = True
+                err_box.label(text=error, icon="ERROR")
+
+        # Meta Objects section (collapsible)
+        layout.separator()
+        box = layout.box()
+        row = box.row()
+        row.prop(
+            self,
+            "show_meta_objects",
+            icon="TRIA_DOWN" if self.show_meta_objects else "TRIA_RIGHT",
+            icon_only=True,
+            emboss=False,
+        )
+        row.label(text="Meta Objects", icon="PHYSICS")
+
+        if self.show_meta_objects:
+            box.prop(self, "is_ue_collider")
+            if self.is_ue_collider:
+                box.label(text="Layer will be set to 'UCX'", icon="INFO")
 
     def execute(self, context):
         sel = SelectionContext(context)
@@ -351,14 +522,22 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
 
         cfg = sel.asset.nyaa_asset
 
-        # Determine the layer name based on mode
-        if self.mode == "EXISTING":
+        # Determine the layer name
+        if self.is_ue_collider:
+            layer_name = "UCX"
+        elif self.mode == "EXISTING":
             layer_name = self.existing_layer
         else:
             layer_name = self.new_layer_name.strip()
             if not layer_name:
                 self.report({"ERROR"}, "Layer name cannot be empty")
                 return {"CANCELLED"}
+
+        # Validate layer name
+        is_valid, error = _validate_layer_name_ucx(layer_name, self.is_ue_collider)
+        if not is_valid:
+            self.report({"ERROR"}, error)
+            return {"CANCELLED"}
 
         added = 0
 
@@ -369,9 +548,11 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
             entry = cfg.meshes.add()
             entry.mesh_object = mesh
             entry.layer_name = layer_name
+            entry.is_ue_collider = self.is_ue_collider
             added += 1
 
         if added > 0:
+            _sort_asset_meshes(cfg.meshes)
             tag_view3d_redraw(context)
         self.report({"INFO"}, f"Added {added} mesh(es) to layer '{layer_name}'")
         return {"FINISHED"}
@@ -510,6 +691,18 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
     )
     new_layer_name: StringProperty(name="Rename", default="")
 
+    # Meta Objects
+    show_meta_objects: BoolProperty(
+        name="Meta Objects",
+        default=False,
+        description="Expand meta objects section",
+    )
+    is_ue_collider: BoolProperty(
+        name="Unreal Engine Convex Collision",
+        default=False,
+        description="Mark as Unreal Engine convex-collision mesh (UCX_)",
+    )
+
     @classmethod
     def poll(cls, context):
         sel = SelectionContext(context)
@@ -523,6 +716,12 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
         cfg = sel.asset.nyaa_asset
         entry = cfg.meshes[cfg.active_mesh_index]
         current_layer = entry.layer_name
+
+        # Load current collider state
+        self.is_ue_collider = entry.is_ue_collider
+
+        # Auto-expand meta objects if entry is a collider
+        self.show_meta_objects = entry.is_ue_collider
 
         # Count how many OTHER meshes use the same layer name
         other_count = sum(
@@ -547,25 +746,58 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
     def draw(self, context):
         layout = self.layout
 
-        layout.prop(self, "mode", expand=True)
-        layout.separator()
+        # Layer selection (hidden if collider)
+        if not self.is_ue_collider:
+            layout.prop(self, "mode", expand=True)
+            layout.separator()
 
-        if self.mode == "EXISTING":
-            # Check if there are any valid existing layers
-            items = _get_existing_layer_items_for_edit(self, context)
-            if items and items[0][0] == "__NONE__":
-                layout.label(text="No other layers available", icon="INFO")
+            if self.mode == "EXISTING":
+                # Check if there are any valid existing layers
+                items = _get_existing_layer_items_for_edit(self, context)
+                if items and items[0][0] == "__NONE__":
+                    layout.label(text="No other layers available", icon="INFO")
+                else:
+                    layout.prop(self, "existing_layer")
             else:
-                layout.prop(self, "existing_layer")
-        else:
-            layout.prop(self, "new_layer_name", text="Rename")
+                layout.prop(self, "new_layer_name", text="Rename")
+
+            # Validate layer name
+            layer_name = (
+                self.existing_layer if self.mode == "EXISTING" else self.new_layer_name
+            )
+            is_valid, error = _validate_layer_name_ucx(layer_name, self.is_ue_collider)
+            if not is_valid:
+                err_box = layout.box()
+                err_box.alert = True
+                err_box.label(text=error, icon="ERROR")
+
+        # Meta Objects section (collapsible)
+        layout.separator()
+        box = layout.box()
+        row = box.row()
+        row.prop(
+            self,
+            "show_meta_objects",
+            icon="TRIA_DOWN" if self.show_meta_objects else "TRIA_RIGHT",
+            icon_only=True,
+            emboss=False,
+        )
+        row.label(text="Meta Objects", icon="PHYSICS")
+
+        if self.show_meta_objects:
+            box.prop(self, "is_ue_collider")
+            if self.is_ue_collider:
+                box.label(text="Layer will be set to 'UCX'", icon="INFO")
 
     def execute(self, context):
         sel = SelectionContext(context)
         cfg = sel.asset.nyaa_asset
         entry = cfg.meshes[cfg.active_mesh_index]
 
-        if self.mode == "EXISTING":
+        # Determine layer name
+        if self.is_ue_collider:
+            layer_name = "UCX"
+        elif self.mode == "EXISTING":
             # Check for the placeholder value
             if self.existing_layer == "__NONE__":
                 self.report({"ERROR"}, "No existing layer selected")
@@ -577,7 +809,14 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
                 self.report({"ERROR"}, "Layer name cannot be empty")
                 return {"CANCELLED"}
 
+        # Validate layer name
+        is_valid, error = _validate_layer_name_ucx(layer_name, self.is_ue_collider)
+        if not is_valid:
+            self.report({"ERROR"}, error)
+            return {"CANCELLED"}
+
         entry.layer_name = layer_name
+        entry.is_ue_collider = self.is_ue_collider
         tag_view3d_redraw(context)
         self.report({"INFO"}, f"Updated layer to '{layer_name}'")
         return {"FINISHED"}

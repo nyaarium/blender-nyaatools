@@ -41,6 +41,7 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
     target_type: StringProperty(name="Target Type", default="file")
     export_static: BoolProperty(name="Export Static", default=False)
     bake_after_export: BoolProperty(name="Bake After Export", default=False)
+    include_ue_colliders: BoolProperty(name="Include UE Colliders", default=False)
 
     def execute(self, context):
         try:
@@ -63,12 +64,18 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
                     )
                     return {"CANCELLED"}
 
+            # VotV always includes colliders
+            include_colliders = (
+                self.include_ue_colliders or self.export_format == "votv"
+            )
+
             # Handle collection export
             if self.target_type == "collection":
                 exported, baking_pending = export_to_collection(
                     asset_host,
                     export_static=self.export_static,
                     bake_after_export=self.bake_after_export,
+                    include_ue_colliders=include_colliders,
                 )
                 self.report(
                     {"INFO"},
@@ -87,6 +94,7 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
                 self.export_format,
                 export_static=self.export_static,
                 bake_after_export=self.bake_after_export,
+                include_ue_colliders=include_colliders,
             )
 
             path = get_export_path_from_asset(asset_host)
@@ -107,7 +115,11 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
 
 
 def perform_merge_export(
-    asset_host, export_format, export_static=False, bake_after_export=False
+    asset_host,
+    export_format,
+    export_static=False,
+    bake_after_export=False,
+    include_ue_colliders=False,
 ):
     """
     Merge and export asset using PropertyGroup data.
@@ -117,6 +129,7 @@ def perform_merge_export(
         export_format: 'fbx', 'obj', or 'votv'
         export_static: If True, apply pose and modifiers, remove armature
         bake_after_export: If True, bake textures from merged meshes before export
+        include_ue_colliders: If True, include UCX_ collision meshes in export
     """
 
     def debug_print(*msgs):
@@ -165,9 +178,13 @@ def perform_merge_export(
             )
             unrename_info.extend(arm_unrename)
 
-        # Merge meshes by layer
-        merged_layers, mesh_unrename = merge_asset_layers(
-            asset_host, temp_scene.collection, armature_copy, debug_print
+        # Merge meshes by layer (and optionally process colliders)
+        merged_layers, collider_objects, mesh_unrename = merge_asset_layers(
+            asset_host,
+            temp_scene.collection,
+            armature_copy,
+            include_colliders=include_ue_colliders,
+            debug_print=debug_print,
         )
         unrename_info.extend(mesh_unrename)
 
@@ -192,6 +209,7 @@ def perform_merge_export(
 
         # Set up pending bake context if baking is requested
         # This must happen AFTER export but BEFORE finally cleanup
+        # Note: Only bake non-collider meshes
         if bake_after_export and merged_layers:
             from ..panels.operators_bake import set_pending_bake_context
 
