@@ -30,34 +30,31 @@ def _sort_asset_meshes(meshes_collection):
     Sort meshes collection: non-colliders first (by layer, then name),
     then colliders last (by name).
     """
-    # Build list of (index, entry) tuples
-    entries = [(i, entry) for i, entry in enumerate(meshes_collection)]
 
-    # Sort with colliders last
-    def sort_key(item):
-        _, entry = item
+    def sort_key(entry):
         if entry.is_ue_collider:
-            # Colliders: sort last, by mesh name
-            return (1, "", entry.mesh_object.name if entry.mesh_object else "")
+            return (1, "", entry.mesh_object.name.lower() if entry.mesh_object else "")
         else:
-            # Non-colliders: sort by layer name, then mesh name
             return (
                 0,
-                entry.layer_name,
-                entry.mesh_object.name if entry.mesh_object else "",
+                entry.layer_name.lower(),
+                entry.mesh_object.name.lower() if entry.mesh_object else "",
             )
 
-    entries.sort(key=sort_key)
-
-    # Reorder collection using .move()
-    for new_index, (old_index, _) in enumerate(entries):
-        if old_index != new_index:
-            # Find current position (may have changed due to previous moves)
-            current_index = old_index
-            for prev_new, (prev_old, _) in enumerate(entries[:new_index]):
-                if prev_old < old_index:
-                    current_index -= 1
-            meshes_collection.move(current_index, new_index)
+    # Selection sort using .move() - simple and correct
+    n = len(meshes_collection)
+    for target_pos in range(n):
+        # Find the minimum element among positions target_pos to n-1
+        min_idx = target_pos
+        min_key = sort_key(meshes_collection[target_pos])
+        for j in range(target_pos + 1, n):
+            j_key = sort_key(meshes_collection[j])
+            if j_key < min_key:
+                min_idx = j
+                min_key = j_key
+        # Move the minimum to target_pos
+        if min_idx != target_pos:
+            meshes_collection.move(min_idx, target_pos)
 
 
 from ..asset.asset_helpers import (
@@ -817,6 +814,7 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
 
         entry.layer_name = layer_name
         entry.is_ue_collider = self.is_ue_collider
+        _sort_asset_meshes(cfg.meshes)
         tag_view3d_redraw(context)
         self.report({"INFO"}, f"Updated layer to '{layer_name}'")
         return {"FINISHED"}
