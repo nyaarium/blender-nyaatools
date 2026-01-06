@@ -16,6 +16,21 @@ from .texture_utils import _image_to_np, _np_to_image_pixels
 BAKE_MARGIN = 256
 
 
+def _get_bake_margin(resolution: Tuple[int, int]) -> int:
+    """
+    Calculate appropriate bake margin based on resolution.
+    For very small textures, use a smaller margin to avoid processing overhead.
+    """
+    width, height = resolution
+    min_dimension = min(width, height)
+    # For textures smaller than 256px, use a margin proportional to size
+    # For larger textures, use the full 256px margin
+    if min_dimension < 256:
+        # Use 1/4 of the smallest dimension, min 8
+        return max(8, min_dimension // 4)
+    return BAKE_MARGIN
+
+
 # DTP channel mapping for sockets and texture baking
 DTP_SOCKET_MAP = {
     # Constant values
@@ -467,7 +482,8 @@ def _bake_emission_output(
 
     # Perform RGB bake
     bake_start_time = time.time()
-    bpy.ops.object.bake(type="EMIT", margin=BAKE_MARGIN, use_selected_to_active=False)
+    margin = _get_bake_margin(resolution)
+    bpy.ops.object.bake(type="EMIT", margin=margin, use_selected_to_active=False)
     bake_end_time = time.time()
     rgb_duration = int(bake_end_time - bake_start_time)
 
@@ -501,7 +517,8 @@ def _bake_emission_output(
 
     # Perform Alpha bake
     bake_start_time = time.time()
-    bpy.ops.object.bake(type="EMIT", margin=BAKE_MARGIN, use_selected_to_active=False)
+    margin = _get_bake_margin(resolution)
+    bpy.ops.object.bake(type="EMIT", margin=margin, use_selected_to_active=False)
     bake_end_time = time.time()
     alpha_duration = int(bake_end_time - bake_start_time)
 
@@ -579,9 +596,10 @@ def _bake_normal_output(
     # Perform the bake
     debug_print(f"🍞 Baking Normal at {resolution[0]}x{resolution[1]}")
     bake_start_time = time.time()
+    margin = _get_bake_margin(resolution)
     bpy.ops.object.bake(
         type="NORMAL",
-        margin=BAKE_MARGIN,
+        margin=margin,
         use_selected_to_active=False,
         normal_space="TANGENT",
     )

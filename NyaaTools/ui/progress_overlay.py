@@ -39,7 +39,8 @@ FONT_SIZE_SMALL = 14
 PADDING = 40
 LINE_HEIGHT = 26
 COLUMN_HEADER_PADDING = 8
-COLUMN_WIDTHS = [100, 180, 70, 320, 100]  # status, dtp, type, resolution, time
+COLUMN_WIDTHS = [120, 100, 180, 70, 480]  # status, time, dtp, type, resolution
+PANEL_VERTICAL_MARGIN = 20
 
 
 class BakeTask:
@@ -49,6 +50,7 @@ class BakeTask:
     STATUS_ACTIVE = "active"
     STATUS_DONE = "done"
     STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
 
     def __init__(
         self,
@@ -61,7 +63,10 @@ class BakeTask:
         self.material_name = material_name
         self.dtp_format = dtp_format
         self.image_type = image_type.upper()
-        self.resolution = resolution  # e.g., "2048x2048" or "2048" if square
+        self.resolution = (
+            resolution  # e.g., "2048x2048" or "2048" if square (max resolution)
+        )
+        self.render_resolution = ""  # e.g., "64x64" (detected render resolution)
         self.optimize = optimize
         self.status = self.STATUS_PENDING
         self.result_resolution = ""  # e.g., "256x256" after optimization
@@ -102,6 +107,7 @@ class ProgressOverlay:
         self._context = None
         self._title = ""
         self._tasks_by_material = {}  # {material_name: [BakeTask, ...]}
+        self._material_order = []  # Ordered list of material names
         self._task_list = []  # Flat list for indexing
         self._current = 0
         self._total = 0
@@ -111,6 +117,7 @@ class ProgressOverlay:
         self._state = OverlayState.RUNNING
         self._error_message = ""
         self._saved_ui_state = {}
+        self._scroll_offset = 0  # Vertical scroll offset in pixels
 
     @property
     def is_active(self) -> bool:
@@ -141,13 +148,14 @@ class ProgressOverlay:
         self._context = context
         self._title = title
         self._tasks_by_material = tasks_by_material
+        self._material_order = list(tasks_by_material.keys())
         self._is_active = True
         self._state = OverlayState.RUNNING
         self._error_message = ""
 
         # Build flat task list
         self._task_list = []
-        for mat_name in tasks_by_material:
+        for mat_name in self._material_order:
             self._task_list.extend(tasks_by_material[mat_name])
 
         self._total = len(self._task_list)
@@ -188,6 +196,12 @@ class ProgressOverlay:
             if area.type == "VIEW_3D":
                 for space in area.spaces:
                     if space.type == "VIEW_3D":
+                        # Save and hide header (top toolbar)
+                        self._saved_ui_state["show_region_header"] = (
+                            space.show_region_header
+                        )
+                        space.show_region_header = False
+
                         # Save and hide overlays
                         self._saved_ui_state["show_overlays"] = (
                             space.overlay.show_overlays
@@ -218,6 +232,11 @@ class ProgressOverlay:
                 if area.type == "VIEW_3D":
                     for space in area.spaces:
                         if space.type == "VIEW_3D":
+                            # Restore header (top toolbar)
+                            if "show_region_header" in self._saved_ui_state:
+                                space.show_region_header = self._saved_ui_state[
+                                    "show_region_header"
+                                ]
                             if "show_overlays" in self._saved_ui_state:
                                 space.overlay.show_overlays = self._saved_ui_state[
                                     "show_overlays"
@@ -275,12 +294,22 @@ class ProgressOverlay:
         """Mark the operation as completed, waiting for confirmation."""
         self._state = OverlayState.COMPLETED
         self._current_message = message or "Bake completed!"
+        self._scroll_offset = 0  # Reset scroll when completed
         self._tag_redraw()
 
     def set_cancelled(self, message: str = ""):
         """Mark the operation as cancelled, waiting for confirmation."""
         self._state = OverlayState.CANCELLED
         self._current_message = message or "Bake cancelled."
+        self._scroll_offset = 0  # Reset scroll when cancelled
+
+        # Mark all future tasks (from current index onwards) as cancelled
+        for task_idx in range(self._current, len(self._task_list)):
+            task = self._task_list[task_idx]
+            # Only mark pending tasks as cancelled (don't override done/failed/active)
+            if task.status == BakeTask.STATUS_PENDING:
+                task.status = BakeTask.STATUS_CANCELLED
+
         self._tag_redraw()
 
     def set_error(self, message: str):
@@ -288,6 +317,41 @@ class ProgressOverlay:
         self._state = OverlayState.ERROR
         self._error_message = message
         self._current_message = f"Error: {message}"
+        self._scroll_offset = 0  # Reset scroll when error
+        self._tag_redraw()
+
+    def handle_scroll(self, delta: int):
+        """Handle mouse wheel scroll.
+
+        Args:
+            delta: Positive for scroll down (WHEELDOWNMOUSE), negative for scroll up (WHEELUPMOUSE)
+        """
+        if not self._context or not self._context.region:
+            return
+
+        # Calculate max scroll based on content height
+        content_height = self._calculate_content_height()
+        viewport_height = self._context.region.height
+        header_height = 60
+        footer_height = 120
+        available_height = (
+            viewport_height
+            - 2 * PANEL_VERTICAL_MARGIN
+            - header_height
+            - footer_height
+            - PADDING * 2
+            - COLUMN_HEADER_PADDING
+            - 25
+        )
+
+        max_scroll = max(0, content_height - available_height)
+
+        # Update scroll offset
+        # Positive delta (scroll down/WHEELDOWNMOUSE) should increase offset to show content below
+        # Negative delta (scroll up/WHEELUPMOUSE) should decrease offset to show content above
+        scroll_speed = LINE_HEIGHT * 3  # Scroll 3 lines at a time
+        self._scroll_offset += delta * scroll_speed
+        self._scroll_offset = max(0, min(self._scroll_offset, max_scroll))
         self._tag_redraw()
 
     def _tag_redraw(self):
@@ -316,14 +380,14 @@ class ProgressOverlay:
         # Draw fullscreen dark background
         self._draw_rect(0, 0, width, height, COLOR_BG_DARK)
 
-        # Calculate panel dimensions (95% of viewport)
+        # Calculate panel dimensions (full width with margin, full height with tiny margin)
         panel_width = int(width * 0.95)
         panel_height = self._calculate_panel_height()
-        panel_height = min(panel_height, int(height * 0.95))
+        panel_height = min(panel_height, height - 2 * PANEL_VERTICAL_MARGIN)
 
-        # Center the panel
+        # Center horizontally, position at top with tiny margin
         x = (width - panel_width) // 2
-        y = (height - panel_height) // 2
+        y = height - panel_height - PANEL_VERTICAL_MARGIN
 
         # Draw panel background
         self._draw_rect(x, y, panel_width, panel_height, COLOR_BG_PANEL)
@@ -369,36 +433,84 @@ class ProgressOverlay:
         content_top = y + panel_height - header_height - PADDING
         content_bottom = y + PADDING + 120  # Leave room for footer
 
-        current_y = content_top
-
-        # Column headers - shown ONCE at top, prominent
-        current_y -= COLUMN_HEADER_PADDING
-        self._draw_column_headers(x + PADDING, current_y, prominent=True)
+        # Column headers - always shown at fixed position (not scrolled)
+        header_y = content_top - COLUMN_HEADER_PADDING
+        self._draw_column_headers(x + PADDING, header_y, prominent=True)
 
         # Separator line under column headers
-        current_y -= 10
+        separator_y = header_y - 10
         self._draw_rect(
-            x + PADDING, current_y, panel_width - 2 * PADDING, 2, COLOR_TEXT_DIM
+            x + PADDING, separator_y, panel_width - 2 * PADDING, 2, COLOR_TEXT_DIM
         )
-        current_y -= 15
+
+        # Start drawing from normal position
+        current_y = separator_y - 15
+
+        # Calculate how many lines to skip based on scroll offset
+        lines_to_skip = int(self._scroll_offset / LINE_HEIGHT)
+
+        # Determine if we should expand all (when not running)
+        expand_all = self._state != OverlayState.RUNNING
+        current_material_index = (
+            self._get_current_material_index() if not expand_all else 0
+        )
+
+        # Track how many lines we've processed (for skipping)
+        lines_processed = 0
 
         # Material sections
-        for mat_name, tasks in self._tasks_by_material.items():
-            if current_y < content_bottom:
-                break  # Would overflow
+        for mat_idx, mat_name in enumerate(self._material_order):
+            tasks = self._tasks_by_material[mat_name]
 
-            # Material name - smaller, less prominent
-            current_y -= LINE_HEIGHT
-            self._draw_text(
-                mat_name, x + PADDING, current_y, FONT_SIZE_BODY, COLOR_TEXT_HIGHLIGHT
-            )
+            # Determine if this material should be collapsed
+            # When not running, expand all. Otherwise collapse based on progress
+            should_collapse = not expand_all and mat_idx < current_material_index - 1
 
-            # Tasks directly under material name
-            for task in tasks:
+            if should_collapse:
+                # Collapsed: show only material name and total time
+                lines_processed += 1
+                if lines_processed <= lines_to_skip:
+                    continue  # Skip this line
                 if current_y < content_bottom:
-                    break
+                    break  # Would overflow
                 current_y -= LINE_HEIGHT
-                self._draw_task_row(x + PADDING, current_y, task)
+                total_time = sum(
+                    task.elapsed_seconds
+                    for task in tasks
+                    if task.status == BakeTask.STATUS_DONE
+                )
+                mat_text = f"{mat_name} ({len(tasks)} tasks, {self._format_seconds(total_time)})"
+                self._draw_text(
+                    mat_text, x + PADDING, current_y, FONT_SIZE_BODY, COLOR_TEXT_DIM
+                )
+            else:
+                # Expanded: show material name and tasks
+                lines_processed += 1
+                if lines_processed <= lines_to_skip:
+                    # Skip material name, but count tasks too
+                    for task in tasks:
+                        lines_processed += 1
+                    continue
+                if current_y < content_bottom:
+                    break  # Would overflow
+                current_y -= LINE_HEIGHT
+                self._draw_text(
+                    mat_name,
+                    x + PADDING,
+                    current_y,
+                    FONT_SIZE_BODY,
+                    COLOR_TEXT_HIGHLIGHT,
+                )
+
+                # Tasks directly under material name
+                for task in tasks:
+                    if current_y < content_bottom:
+                        break
+                    lines_processed += 1
+                    if lines_processed <= lines_to_skip:
+                        continue  # Skip this task
+                    current_y -= LINE_HEIGHT
+                    self._draw_task_row(x + PADDING, current_y, task)
 
         # Draw footer
         self._draw_footer(x, y, panel_width)
@@ -406,7 +518,7 @@ class ProgressOverlay:
     def _draw_column_headers(self, x: int, y: int, prominent: bool = False):
         """Draw column headers."""
         col_x = x
-        headers = ["Status", "DTP Format", "Type", "Resolution", "Time"]
+        headers = ["Status", "Time", "DTP Format", "Type", "Resolution"]
 
         font_size = FONT_SIZE_HEADER if prominent else FONT_SIZE_SMALL
         color = COLOR_TEXT if prominent else COLOR_TEXT_DIM
@@ -424,27 +536,13 @@ class ProgressOverlay:
             self._draw_text("Done", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_DONE)
         elif task.status == BakeTask.STATUS_FAILED:
             self._draw_text("Failed", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_FAILED)
+        elif task.status == BakeTask.STATUS_CANCELLED:
+            self._draw_text("Cancelled", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_ACTIVE)
         elif task.status == BakeTask.STATUS_ACTIVE:
             self._draw_text("Baking", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_ACTIVE)
         else:
             self._draw_text("—", col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
         col_x += COLUMN_WIDTHS[0]
-
-        # DTP format
-        self._draw_text(task.dtp_format, col_x, y, FONT_SIZE_BODY, COLOR_TEXT)
-        col_x += COLUMN_WIDTHS[1]
-
-        # Image type
-        self._draw_text(task.image_type, col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
-        col_x += COLUMN_WIDTHS[2]
-
-        # Resolution (shows original, and result if optimized)
-        res_prefix = "<=" if task.optimize else ""
-        res_text = f"{res_prefix}{task.resolution}"
-        if task.status == BakeTask.STATUS_DONE and task.result_resolution:
-            res_text += f" -> {task.result_resolution}"
-        self._draw_text(res_text, col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
-        col_x += COLUMN_WIDTHS[3]
 
         # Time column (ETA for pending, elapsed for done)
         if task.status == BakeTask.STATUS_DONE:
@@ -452,11 +550,36 @@ class ProgressOverlay:
             self._draw_text(time_text, col_x, y, FONT_SIZE_BODY, COLOR_STATUS_DONE)
         elif task.status == BakeTask.STATUS_FAILED:
             self._draw_text("—", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_FAILED)
+        elif task.status == BakeTask.STATUS_CANCELLED:
+            self._draw_text("—", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_ACTIVE)
         elif task.status == BakeTask.STATUS_ACTIVE:
             self._draw_text("...", col_x, y, FONT_SIZE_BODY, COLOR_STATUS_ACTIVE)
         elif task.estimated_seconds > 0:
             time_text = f"~{self._format_seconds(task.estimated_seconds)}"
             self._draw_text(time_text, col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
+        col_x += COLUMN_WIDTHS[1]
+
+        # DTP format
+        self._draw_text(task.dtp_format, col_x, y, FONT_SIZE_BODY, COLOR_TEXT)
+        col_x += COLUMN_WIDTHS[2]
+
+        # Image type
+        self._draw_text(task.image_type, col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
+        col_x += COLUMN_WIDTHS[3]
+
+        # Resolution (shows max -> render -> optimized for <= mode)
+        if task.optimize:
+            res_prefix = "<="
+            res_text = f"{res_prefix}{task.resolution}"
+            if task.render_resolution:
+                res_text += f" -> {task.render_resolution}"
+            if task.status == BakeTask.STATUS_DONE and task.result_resolution:
+                res_text += f" -> {task.result_resolution}"
+        else:
+            res_text = task.resolution
+            if task.status == BakeTask.STATUS_DONE and task.result_resolution:
+                res_text += f" -> {task.result_resolution}"
+        self._draw_text(res_text, col_x, y, FONT_SIZE_BODY, COLOR_TEXT_DIM)
 
     def _format_seconds(self, seconds: float) -> str:
         """Format seconds as human-readable string."""
@@ -516,6 +639,57 @@ class ProgressOverlay:
                 COLOR_TEXT_DIM,
             )
 
+    def _get_current_material_index(self) -> int:
+        """Get the index of the material currently being processed.
+
+        Returns the material index for the task at self._current (which represents
+        the number of completed tasks, so the current/active task is at that index).
+        """
+        if not self._task_list:
+            return 0
+
+        # self._current is the count of completed tasks (1-indexed)
+        # The current/active task is at index self._current (0-indexed)
+        # If all tasks are done, use the last task
+        current_task_idx = min(self._current, len(self._task_list) - 1)
+
+        if current_task_idx < 0:
+            return 0
+
+        current_task = self._task_list[current_task_idx]
+
+        # Find material index
+        for mat_idx, mat_name in enumerate(self._material_order):
+            if current_task.material_name == mat_name:
+                return mat_idx
+
+        return 0
+
+    def _calculate_content_height(self) -> int:
+        """Calculate the height of the scrollable content area."""
+        height = COLUMN_HEADER_PADDING + 25  # Column headers and separator
+
+        # When not running, expand all materials
+        if self._state != OverlayState.RUNNING:
+            # All expanded
+            for mat_name in self._material_order:
+                tasks = self._tasks_by_material[mat_name]
+                height += LINE_HEIGHT  # Material name
+                height += len(tasks) * LINE_HEIGHT  # Tasks
+        else:
+            # Collapse based on current progress
+            current_material_index = self._get_current_material_index()
+            for mat_idx, mat_name in enumerate(self._material_order):
+                tasks = self._tasks_by_material[mat_name]
+                should_collapse = mat_idx < current_material_index - 1
+                if should_collapse:
+                    height += LINE_HEIGHT  # Collapsed: just material name
+                else:
+                    height += LINE_HEIGHT  # Material name
+                    height += len(tasks) * LINE_HEIGHT  # Tasks
+
+        return height
+
     def _calculate_panel_height(self) -> int:
         """Calculate the total height needed for the panel."""
         height = 60  # Header
@@ -526,9 +700,8 @@ class ProgressOverlay:
         height += COLUMN_HEADER_PADDING  # Column headers
         height += 25  # Separator and spacing
 
-        for mat_name, tasks in self._tasks_by_material.items():
-            height += LINE_HEIGHT  # Material name
-            height += len(tasks) * LINE_HEIGHT  # Tasks
+        # Add content height
+        height += self._calculate_content_height()
 
         return max(height, 300)
 

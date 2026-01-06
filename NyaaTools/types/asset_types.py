@@ -35,6 +35,11 @@ class NyaaAssetMeshEntry(bpy.types.PropertyGroup):
         default="Base",
         description="Layer to merge this mesh onto (Base, Outfit, Hair, etc)",
     )
+    is_ue_collider: BoolProperty(
+        name="Unreal Engine Convex Collision",
+        default=False,
+        description="Mark as Unreal Engine convex-collision mesh (UCX_)",
+    )
 
 
 # Resolution options for bake
@@ -132,6 +137,11 @@ class NyaaExportProfile(bpy.types.PropertyGroup):
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
     )
+    include_ue_colliders: BoolProperty(
+        name="Include UE Colliders",
+        default=False,
+        description="Include Unreal Engine convex-collision meshes (UCX_) in export",
+    )
 
 
 class NyaaAssetConfig(bpy.types.PropertyGroup):
@@ -190,7 +200,12 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
     show_bake_channels: BoolProperty(
         name="Show Bake Channels",
         description="Expand bake channels section",
-        default=False,
+        default=True,
+    )
+    show_export_profiles: BoolProperty(
+        name="Show Export Profiles",
+        description="Expand export profiles section",
+        default=True,
     )
 
 

@@ -1,3 +1,5 @@
+# Version Auto
+
 """Material analysis utilities for extracting texture information from Blender materials."""
 
 import bpy
@@ -179,130 +181,6 @@ def has_socket_input(socket: bpy.types.NodeSocket) -> bool:
     return socket.is_linked if socket else False
 
 
-def old_detect_best_resolution(
-    socket: bpy.types.NodeSocket, material: bpy.types.Material = None
-) -> Tuple[int, int]:
-    """
-    Detect the best resolution for baking by analyzing connected textures.
-
-    Args:
-        socket: The input socket to search from
-        material: The material (needed to find group instances in parent tree)
-
-    Returns:
-        Tuple of (width, height) for the best resolution, defaults to 512x512 if no textures found
-    """
-
-    def debug_print(*msgs):
-        print("        ", *msgs)
-        return
-
-    if not socket or not socket.is_linked:
-        return (8, 8)
-
-    visited_nodes = {}
-    visited_groups = {}
-    visited_sockets = {}
-
-    max_resolution = None
-
-    # Build group instance map for traversing group boundaries
-    group_instances: Dict = {}
-    if material and material.node_tree:
-        _build_group_instance_map(material.node_tree, group_instances)
-
-    def search_node(node, node_tree, depth=0, path=None):
-        nonlocal max_resolution
-
-        if path is None:
-            path = []
-
-        node_key = f"{node.name}_{id(node)}"
-        if node_key in visited_nodes:
-            return
-        visited_nodes[node_key] = True
-
-        # Skip muted nodes - they act as pass-through
-        if node.mute:
-            return
-
-        current_path = path + [node_key]
-
-        if node.type == "TEX_IMAGE" and node.image and not node.mute:
-            width, height = node.image.size[0], node.image.size[1]
-            if max_resolution is None:
-                max_resolution = (width, height)
-            else:
-                if width * height > max_resolution[0] * max_resolution[1]:
-                    max_resolution = (width, height)
-
-        elif node.type == "GROUP_INPUT" and node_tree in group_instances:
-            # Handle group input - traverse back through group boundary
-            group_nodes = group_instances[node_tree]
-
-            # Traverse through group instances
-            for group_node, parent_tree in group_nodes:
-                group_key = f"{group_node.name}_{id(group_node)}"
-                if group_key in visited_groups:
-                    continue
-                visited_groups[group_key] = True
-
-                for i, group_input_socket in enumerate(group_node.inputs):
-                    if group_input_socket.is_linked:
-                        socket_key = (
-                            f"{group_input_socket.name}_{id(group_input_socket)}"
-                        )
-                        if socket_key in visited_sockets:
-                            continue
-                        visited_sockets[socket_key] = True
-
-                        for link in group_input_socket.links:
-                            from_node = link.from_node
-                            from_key = f"{from_node.name}_{id(from_node)}"
-                            if from_key not in current_path:
-                                search_node(
-                                    from_node, parent_tree, depth + 1, current_path
-                                )
-
-        elif node.type == "GROUP" and node.node_tree is not None:
-            # Recursively search node group internals
-            for group_node in node.node_tree.nodes:
-                group_node_key = f"{group_node.name}_{id(group_node)}"
-                if group_node_key not in current_path:
-                    search_node(group_node, node.node_tree, depth + 1, current_path)
-
-        # Search all input sockets of this node
-        for input_socket in node.inputs:
-            if input_socket.is_linked:
-                socket_key = f"{input_socket.name}_{id(input_socket)}"
-                if socket_key in visited_sockets:
-                    continue
-                visited_sockets[socket_key] = True
-
-                for link in input_socket.links:
-                    from_node = link.from_node
-                    from_key = f"{from_node.name}_{id(from_node)}"
-                    if from_key not in current_path:
-                        search_node(from_node, node_tree, depth + 1, current_path)
-
-    start_node_tree = None
-    if socket.is_linked:
-        start_node = socket.links[0].from_node
-        if material and material.node_tree:
-            start_node_tree = _find_node_tree_for_node(start_node, material.node_tree)
-
-        for link in socket.links:
-            search_node(link.from_node, start_node_tree, 0)
-
-    # Round to nearest power of 2 for optimal texture performance
-    if max_resolution:
-        width, height = max_resolution
-        return (_round_to_power_of_2(width), _round_to_power_of_2(height))
-
-    # Default to 512x512 if no textures found
-    return (512, 512)
-
-
 def _round_to_power_of_2(value: int) -> int:
     """
     Round a value to the nearest power of 2.
@@ -326,39 +204,6 @@ def _round_to_power_of_2(value: int) -> int:
         return lower_power
     else:
         return upper_power
-
-
-def _build_group_instance_map(node_tree, group_map, parent_tree=None):
-    """
-    Build a map of node_tree -> list of (group_node, parent_tree) instances.
-    """
-    if parent_tree is None:
-        parent_tree = node_tree
-
-    for node in node_tree.nodes:
-        if node.type == "GROUP" and node.node_tree is not None:
-            if node.node_tree not in group_map:
-                group_map[node.node_tree] = []
-            group_map[node.node_tree].append((node, parent_tree))
-
-            _build_group_instance_map(node.node_tree, group_map, parent_tree)
-
-
-def _find_node_tree_for_node(node, material_tree):
-    """
-    Find which node tree a node belongs to.
-    """
-    for n in material_tree.nodes:
-        if n == node:
-            return material_tree
-
-    for n in material_tree.nodes:
-        if n.type == "GROUP" and n.node_tree is not None:
-            result = _find_node_tree_for_node(node, n.node_tree)
-            if result:
-                return result
-
-    return None
 
 
 def detect_best_resolution(
@@ -387,7 +232,7 @@ def detect_best_resolution(
     for link in socket.links:
         from_node = link.from_node
         _detect_best_resolution_recursion(
-            from_node, current_tree, tree_stack, visited_nodes, max_dimensions
+            from_node, current_tree, tree_stack, visited_nodes, max_dimensions, None
         )
 
     # Round to nearest power of 2 for optimal texture performance
@@ -406,6 +251,7 @@ def _detect_best_resolution_recursion(
     tree_stack: list,
     visited_nodes: set,
     max_dimensions: list,
+    parent_group_node: Optional[bpy.types.Node] = None,
 ) -> None:
     """
     Recursively search for texture nodes within the tree stack constraint.
@@ -416,6 +262,7 @@ def _detect_best_resolution_recursion(
         tree_stack: List of valid trees to search in
         visited_nodes: Set of (node_id, tree_id) tuples to prevent infinite loops
         max_dimensions: [max_width, max_height] - mutable list to track maximum dimensions
+        parent_group_node: The GROUP node instance we entered from (None if not entered via a group)
     """
     # Material Tree (Shader Nodetree)
     # ├── Image Texture (8192x8192) ← TARGET TEXTURE
@@ -443,7 +290,7 @@ def _detect_best_resolution_recursion(
 
     # Handle GROUP nodes - only enter if the group's tree is in our tree_stack
     elif node.type == "GROUP" and node.node_tree and node.node_tree in tree_stack:
-        # Enter the group
+        # Enter the group, passing this GROUP node instance as parent_group_node
         new_tree = node.node_tree
         for group_node in new_tree.nodes:
             if group_node.type == "GROUP_OUTPUT":
@@ -457,35 +304,54 @@ def _detect_best_resolution_recursion(
                                 tree_stack,
                                 visited_nodes,
                                 max_dimensions,
+                                node,  # Pass the GROUP node instance we entered from
                             )
                 break
 
     # Handle GROUP_INPUT nodes - exit to parent tree
     elif node.type == "GROUP_INPUT" and current_tree in tree_stack:
-        # Find our position in tree_stack
-        try:
-            current_index = tree_stack.index(current_tree)
-            if current_index > 0:
-                parent_tree = tree_stack[current_index - 1]
-                # Find all GROUP nodes in parent tree that use current_tree
-                for group_node in parent_tree.nodes:
-                    if (
-                        group_node.type == "GROUP"
-                        and group_node.node_tree == current_tree
-                    ):
-                        # Follow all input sockets of this group node
-                        for input_socket in group_node.inputs:
-                            if input_socket.is_linked:
-                                for link in input_socket.links:
-                                    _detect_best_resolution_recursion(
-                                        link.from_node,
-                                        parent_tree,
-                                        tree_stack,
-                                        visited_nodes,
-                                        max_dimensions,
-                                    )
-        except ValueError:
-            pass  # current_tree not in tree_stack, skip
+        # Only follow inputs from the specific GROUP node instance we entered from
+        if parent_group_node:
+            parent_tree = parent_group_node.id_data
+            # Follow input sockets of the specific parent group node instance
+            for input_socket in parent_group_node.inputs:
+                if input_socket.is_linked:
+                    for link in input_socket.links:
+                        _detect_best_resolution_recursion(
+                            link.from_node,
+                            parent_tree,
+                            tree_stack,
+                            visited_nodes,
+                            max_dimensions,
+                            None,  # Reset parent_group_node when exiting to parent
+                        )
+        else:
+            # Fallback: if parent_group_node is None, use old behavior
+            # This shouldn't happen in normal traversal, but kept for safety
+            try:
+                current_index = tree_stack.index(current_tree)
+                if current_index > 0:
+                    parent_tree = tree_stack[current_index - 1]
+                    # Find all GROUP nodes in parent tree that use current_tree
+                    for group_node in parent_tree.nodes:
+                        if (
+                            group_node.type == "GROUP"
+                            and group_node.node_tree == current_tree
+                        ):
+                            # Follow all input sockets of this group node
+                            for input_socket in group_node.inputs:
+                                if input_socket.is_linked:
+                                    for link in input_socket.links:
+                                        _detect_best_resolution_recursion(
+                                            link.from_node,
+                                            parent_tree,
+                                            tree_stack,
+                                            visited_nodes,
+                                            max_dimensions,
+                                            None,
+                                        )
+            except ValueError:
+                pass  # current_tree not in tree_stack, skip
 
     # For all other nodes, follow input sockets backwards
     else:
@@ -498,4 +364,5 @@ def _detect_best_resolution_recursion(
                         tree_stack,
                         visited_nodes,
                         max_dimensions,
+                        parent_group_node,  # Preserve parent_group_node through other nodes
                     )

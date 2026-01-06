@@ -16,7 +16,7 @@ def get_asset_description(obj, export_profile=None) -> str:
         export_profile: Optional export profile to check for export_static flag
 
     Returns:
-        "Humanoid avatar" if armature marked as humanoid
+        "Humanoid asset" if armature marked as humanoid
         "Rigged asset" if armature but not humanoid
         "Static asset" if mesh-hosted asset or export_static is enabled
     """
@@ -28,7 +28,7 @@ def get_asset_description(obj, export_profile=None) -> str:
             return "Static asset"
         # Use cached flag instead of recomputing every draw
         if hasattr(obj, "nyaa_asset") and obj.nyaa_asset.is_humanoid:
-            return "Humanoid avatar"
+            return "Humanoid asset"
         return "Rigged asset"
     return "Static asset"
 

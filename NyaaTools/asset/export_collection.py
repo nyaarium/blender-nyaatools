@@ -12,6 +12,7 @@ import bpy
 from ..common.file_stuff import sanitize_name
 from ..common.resolve_path import resolve_path
 from ..common.renamer_restore import renamer_restore
+from ..panels.operators_bake import set_pending_bake_context
 from .merge_layers import (
     merge_asset_layers,
     copy_armature_to_collection,
@@ -299,7 +300,11 @@ TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
 def export_to_collection(
-    asset_host, export_static=False, bake_after_export=False, debug_print=None
+    asset_host,
+    export_static=False,
+    bake_after_export=False,
+    include_ue_colliders=False,
+    debug_print=None,
 ):
     """
     Export asset to __Export__ collection and mark as Blender asset.
@@ -312,10 +317,11 @@ def export_to_collection(
         asset_host: The asset host object (armature or mesh) with nyaa_asset config
         export_static: If True, apply pose and modifiers, remove armature
         bake_after_export: If True, bake textures from merged meshes before moving to collection
+        include_ue_colliders: If True, include UCX_ collision meshes in export
         debug_print: Optional function for debug output
 
     Returns:
-        List of exported objects
+        tuple: (exported_objects, baking_pending)
     """
     if debug_print is None:
 
@@ -340,7 +346,7 @@ def export_to_collection(
     # Get textures directory for material assignment
     textures_dir = get_textures_directory(asset_host)
 
-    # Create temp scene for merge operations (required by merge_onto_avatar_layer)
+    # Create temp scene for merge operations (required by merge_onto_layer)
     temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
     if temp_scene:
         bpy.data.scenes.remove(temp_scene, do_unlink=True)
@@ -367,9 +373,13 @@ def export_to_collection(
             )
             unrename_info.extend(arm_unrename)
 
-        # Merge meshes by layer in temp scene
-        merged_layers, mesh_unrename = merge_asset_layers(
-            asset_host, temp_scene.collection, armature_copy, debug_print
+        # Merge meshes by layer in temp scene (and optionally process colliders)
+        merged_layers, collider_objects, mesh_unrename = merge_asset_layers(
+            asset_host,
+            temp_scene.collection,
+            armature_copy,
+            include_colliders=include_ue_colliders,
+            debug_print=debug_print,
         )
         unrename_info.extend(mesh_unrename)
 
@@ -388,16 +398,17 @@ def export_to_collection(
             export_collection.objects.link(obj)
             exported_objects.append(obj)
 
-        # Mark as Blender asset
+        # Mark as Blender asset (don't mark colliders as assets)
+        collider_names = {obj.name for obj in collider_objects}
         if armature_copy and not treat_as_static:
             # For rigged assets, mark the armature
             armature_copy.asset_mark()
             armature_copy.asset_generate_preview()
             debug_print(f"✅ Marked as asset: {armature_copy.name}")
         else:
-            # For static exports, mark each mesh
+            # For static exports, mark each mesh (except colliders)
             for obj in exported_objects:
-                if obj.type == "MESH":
+                if obj.type == "MESH" and obj.name not in collider_names:
                     obj.asset_mark()
                     obj.asset_generate_preview()
                     debug_print(f"✅ Marked as asset: {obj.name}")
@@ -425,11 +436,15 @@ def export_to_collection(
 
     # Set up pending bake context if baking is requested
     # For collection export, meshes are now in the main scene (export collection)
+    # Note: Only bake non-collider meshes
     baking_pending = False
     if bake_after_export and exported_objects:
-        from ..panels.operators_bake import set_pending_bake_context
-
-        mesh_objects = [obj for obj in exported_objects if obj.type == "MESH"]
+        # Filter to non-collider meshes only
+        mesh_objects = [
+            obj
+            for obj in exported_objects
+            if obj.type == "MESH" and not obj.name.startswith("UCX_")
+        ]
         if mesh_objects:
             # Capture values for cleanup lambda
             collection_name = export_collection.name

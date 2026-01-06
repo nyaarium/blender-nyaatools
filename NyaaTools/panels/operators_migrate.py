@@ -12,12 +12,42 @@ from ..legacy import (
     PROP_AVATAR_NAME,
 )
 from .panels_context import (
-    SelectionContext,
     scene_has_legacy_data,
-    scene_has_old_avatar_data,
     invalidate_selection_cache,
 )
 from ..armature.estimate_humanoid_ratio import is_humanoid
+
+
+def _sort_asset_meshes(meshes_collection):
+    """
+    Sort meshes collection: non-colliders first (by layer, then name),
+    then colliders last (by name).
+    """
+
+    def sort_key(entry):
+        if entry.is_ue_collider:
+            return (1, "", entry.mesh_object.name.lower() if entry.mesh_object else "")
+        else:
+            return (
+                0,
+                entry.layer_name.lower(),
+                entry.mesh_object.name.lower() if entry.mesh_object else "",
+            )
+
+    # Selection sort using .move() - simple and correct
+    n = len(meshes_collection)
+    for target_pos in range(n):
+        # Find the minimum element among positions target_pos to n-1
+        min_idx = target_pos
+        min_key = sort_key(meshes_collection[target_pos])
+        for j in range(target_pos + 1, n):
+            j_key = sort_key(meshes_collection[j])
+            if j_key < min_key:
+                min_idx = j
+                min_key = j_key
+        # Move the minimum to target_pos
+        if min_idx != target_pos:
+            meshes_collection.move(min_idx, target_pos)
 
 
 # =============================================================================
@@ -60,8 +90,28 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                 export_path = obj[PROP_AVATAR_EXPORT_PATH]
                 if export_path:
                     profile = obj.nyaa_asset.export_profiles.add()
-                    profile.path = export_path
-                    profile.format = "fbx"
+
+                    # Normalize path separators and ensure it ends with separator
+                    normalized_path = export_path.replace("\\", "/").rstrip("/") + "/"
+                    profile.path = normalized_path
+
+                    # Auto-detect VotV export paths
+                    if normalized_path.endswith("/Assets/meshes/printer/"):
+                        profile.format = "votv"
+
+                        profile.bake_after_export = True
+
+                        profile.include_ue_colliders = True
+                        profile.export_static = True
+
+                        # Apply VotV bake preset
+                        # We need to ensure THIS object is active for the operator to work on it
+                        prev_active = context.view_layer.objects.active
+                        context.view_layer.objects.active = obj
+                        bpy.ops.nyaatools.load_bake_profile(preset="votv")
+                        context.view_layer.objects.active = prev_active
+                    else:
+                        profile.format = "fbx"
 
             avatar_armatures[avatar_name] = obj
             migrated_avatars += 1
@@ -70,6 +120,29 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                 del obj[PROP_AVATAR_NAME]
             if PROP_AVATAR_EXPORT_PATH in obj:
                 del obj[PROP_AVATAR_EXPORT_PATH]
+
+        # Add all UCX_ meshes in scene as colliders to each asset
+        # (old system only supported 1 asset at a time, so all UCX was included)
+        for avatar_name, armature in avatar_armatures.items():
+            for scene_obj in bpy.data.objects:
+                if scene_obj.type != "MESH":
+                    continue
+                if not scene_obj.name.upper().startswith("UCX_"):
+                    continue
+
+                # Check if already added
+                already_exists = any(
+                    entry.mesh_object == scene_obj
+                    for entry in armature.nyaa_asset.meshes
+                )
+                if already_exists:
+                    continue
+
+                entry = armature.nyaa_asset.meshes.add()
+                entry.mesh_object = scene_obj
+                entry.layer_name = "UCX"
+                entry.is_ue_collider = True
+                migrated_meshes += 1
 
         for obj in bpy.data.objects:
             if obj.type != "MESH":
@@ -103,10 +176,20 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
 
                 entry = armature.nyaa_asset.meshes.add()
                 entry.mesh_object = obj
-                entry.layer_name = layer_name
+
+                # Auto-detect UCX_ meshes as colliders
+                if obj.name.upper().startswith("UCX_"):
+                    entry.layer_name = "UCX"
+                    entry.is_ue_collider = True
+                else:
+                    entry.layer_name = layer_name
                 migrated_meshes += 1
 
             del obj[PROP_AVATAR_LAYERS]
+
+        # Sort all migrated assets
+        for armature in avatar_armatures.values():
+            _sort_asset_meshes(armature.nyaa_asset.meshes)
 
         invalidate_selection_cache()
         self.report(
@@ -116,204 +199,6 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
         return {"FINISHED"}
 
 
-class NYAATOOLS_OT_MigrateAvatarToAsset(Operator):
-    """Migrate from nyaa_avatar PropertyGroup to nyaa_asset"""
-
-    bl_idname = "nyaatools.migrate_avatar_to_asset"
-    bl_label = "Upgrade Avatar to Asset"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return scene_has_old_avatar_data(context)
-
-    def execute(self, context):
-        migrated = 0
-
-        for obj in bpy.data.objects:
-            if not hasattr(obj, "nyaa_avatar"):
-                continue
-            if not obj.nyaa_avatar.is_avatar:
-                continue
-
-            old = obj.nyaa_avatar
-            new = obj.nyaa_asset
-
-            new.is_asset = True
-            new.asset_name = old.avatar_name
-            # Pre-compute humanoid flag for armatures
-            if obj.type == "ARMATURE":
-                new.is_humanoid = is_humanoid(obj)
-
-            for old_entry in old.meshes:
-                new_entry = new.meshes.add()
-                new_entry.mesh_object = old_entry.mesh_object
-                new_entry.layer_name = old_entry.layer_name
-
-            for old_profile in old.export_profiles:
-                new_profile = new.export_profiles.add()
-                new_profile.path = old_profile.path
-                new_profile.format = old_profile.format
-
-            for old_bake in old.bake_images:
-                new_bake = new.bake_images.add()
-                new_bake.format = old_bake.format
-                new_bake.image_type = old_bake.image_type
-                new_bake.width = old_bake.width
-                new_bake.height = old_bake.height
-
-            old.is_avatar = False
-            old.avatar_name = ""
-            old.meshes.clear()
-            old.export_profiles.clear()
-            old.bake_images.clear()
-
-            migrated += 1
-
-        invalidate_selection_cache()
-        self.report({"INFO"}, f"Migrated {migrated} avatar(s) to unified asset system")
-        return {"FINISHED"}
-
-
-# =============================================================================
-# Legacy Operators (backward compatibility)
-# =============================================================================
-
-
-class NYAATOOLS_OT_MarkAsAvatar(Operator):
-    """Mark the selected armature as an avatar (legacy - redirects to asset)"""
-
-    bl_idname = "nyaatools.mark_as_avatar"
-    bl_label = "Mark as Avatar"
-    bl_options = {"REGISTER", "UNDO"}
-
-    avatar_name: StringProperty(name="Avatar Name", default="")
-
-    @classmethod
-    def poll(cls, context):
-        return (
-            len(context.selected_objects) == 1
-            and context.selected_objects[0].type == "ARMATURE"
-        )
-
-    def invoke(self, context, event):
-        arm = context.selected_objects[0]
-        if not self.avatar_name:
-            self.avatar_name = arm.name
-        return context.window_manager.invoke_props_dialog(self, width=300)
-
-    def draw(self, context):
-        self.layout.prop(self, "avatar_name")
-
-    def execute(self, context):
-        arm = context.selected_objects[0]
-        arm.nyaa_asset.is_asset = True
-        arm.nyaa_asset.asset_name = self.avatar_name
-        self.report({"INFO"}, f"Marked '{arm.name}' as asset '{self.avatar_name}'")
-        return {"FINISHED"}
-
-
-class NYAATOOLS_OT_UnmarkAvatar(Operator):
-    """Remove avatar status from the selected armature (legacy)"""
-
-    bl_idname = "nyaatools.unmark_avatar"
-    bl_label = "Unmark Avatar"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        if len(context.selected_objects) != 1:
-            return False
-        obj = context.selected_objects[0]
-        return (
-            obj.type == "ARMATURE"
-            and hasattr(obj, "nyaa_asset")
-            and obj.nyaa_asset.is_asset
-        )
-
-    def execute(self, context):
-        arm = context.selected_objects[0]
-        name = arm.nyaa_asset.asset_name
-        arm.nyaa_asset.is_asset = False
-        arm.nyaa_asset.asset_name = ""
-        arm.nyaa_asset.meshes.clear()
-        self.report({"INFO"}, f"Removed asset status from '{name}'")
-        return {"FINISHED"}
-
-
-class NYAATOOLS_OT_BakeMaterialSlots(Operator):
-    """Bake all material slots with configurable options"""
-
-    bl_idname = "nyaatools.bake_material_slots"
-    bl_label = "Bake Material Slots"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return (
-            context.active_object
-            and context.active_object.type == "MESH"
-            and len(context.selected_objects) == 1
-        )
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=300)
-
-    def draw(self, context):
-        layout = self.layout
-        settings = context.scene.nyaa_settings.bake
-
-        layout.label(text="Bake Settings", icon="IMAGE_DATA")
-
-        row = layout.row()
-        row.label(text="Resolution:")
-        row.prop(settings, "resolution", text="")
-
-        layout.separator()
-        layout.label(text="Textures to Bake:")
-
-        col = layout.column(align=True)
-        col.prop(settings, "include_rgba")
-        col.prop(settings, "include_orm")
-        col.prop(settings, "include_normal")
-        col.prop(settings, "include_emission")
-
-    def execute(self, context):
-        return bpy.ops.nyaa.bake_material_slots()
-
-
-class NYAATOOLS_OT_AvatarExport(Operator):
-    """Merge and export avatar with current settings (legacy)"""
-
-    bl_idname = "nyaatools.avatar_export"
-    bl_label = "Merge & Export"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        sel = SelectionContext(context)
-        if not sel.has_asset:
-            return False
-        if sel.asset.type == "ARMATURE":
-            return len(sel.asset.nyaa_asset.meshes) > 0
-        return True
-
-    def execute(self, context):
-        sel = SelectionContext(context)
-        cfg = sel.asset.nyaa_asset
-        settings = context.scene.nyaa_settings.export
-
-        return bpy.ops.nyaa.avatar_merge_export(
-            avatar_name=cfg.asset_name,
-            export_format=settings.format,
-        )
-
-
 MIGRATE_OPERATOR_CLASSES = [
     NYAATOOLS_OT_MigrateLegacyData,
-    NYAATOOLS_OT_MigrateAvatarToAsset,
-    NYAATOOLS_OT_MarkAsAvatar,
-    NYAATOOLS_OT_UnmarkAvatar,
-    NYAATOOLS_OT_BakeMaterialSlots,
-    NYAATOOLS_OT_AvatarExport,
 ]

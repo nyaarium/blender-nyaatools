@@ -63,14 +63,14 @@ def resolve_target_and_extra_armatures():
     # Check 1st and 2nd slot of selected objects using PropertyGroup
     obj1 = bpy.context.selected_objects[0]
     obj2 = bpy.context.selected_objects[1]
-    is_1st_avatar = obj1.type == "ARMATURE" and obj1.nyaa_avatar.is_avatar
-    is_2nd_avatar = obj2.type == "ARMATURE" and obj2.nyaa_avatar.is_avatar
+    is_1st_asset = obj1.type == "ARMATURE" and obj1.nyaa_asset.is_asset
+    is_2nd_asset = obj2.type == "ARMATURE" and obj2.nyaa_asset.is_asset
 
-    # If one is an Avatar, use that as the target
-    if is_1st_avatar and not is_2nd_avatar:
+    # If one is an Asset, use that as the target
+    if is_1st_asset and not is_2nd_asset:
         target_armature = bpy.context.selected_objects[0]
         extra_armature = bpy.context.selected_objects[1]
-    elif not is_1st_avatar and is_2nd_avatar:
+    elif not is_1st_asset and is_2nd_asset:
         target_armature = bpy.context.selected_objects[1]
         extra_armature = bpy.context.selected_objects[0]
     else:

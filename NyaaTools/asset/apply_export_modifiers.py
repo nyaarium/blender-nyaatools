@@ -1,39 +1,49 @@
+"""
+Modifier application for asset export.
+"""
+
 import bpy
 
-from ..avatar.list_avatar_armatures import list_avatar_armatures
+from .list_asset_armatures import list_asset_armatures
 from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
 from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
 
 
-def apply_avatar_modifiers(obj):
-    if obj == None:
-        raise BaseException("applyModifiers() :: Expected a mesh object, got: None")
+def apply_export_modifiers(obj):
+    """
+    Apply or remove modifiers in preparation for export.
+
+    - Removes internal modifiers (prefixed with "--")
+    - Removes MToon outline modifiers
+    - Removes armature modifiers targeting assets (will be reconfigured)
+    - Applies all other modifiers (with shape key support)
+    - Applies transforms
+    """
+    if obj is None:
+        raise BaseException("apply_export_modifiers() :: Expected a mesh object, got: None")
 
     selection_add(obj)
 
-    avatar_names = list_avatar_armatures()
+    asset_names = list_asset_armatures()
 
     for modifier in obj.modifiers:
         if modifier.name.startswith("--"):
-            # Anything with a name starting with "--" is for internal use only and should be removed
-
+            # Internal use only - remove
             bpy.ops.object.modifier_remove(modifier=modifier.name)
         elif modifier.name.startswith("MToon"):
-            # MToon is a special case where the outline modifier should be removed
-
+            # MToon outline modifier - remove
             bpy.ops.object.modifier_remove(modifier=modifier.name)
         elif modifier.type == "ARMATURE":
-            # Remove armature modifiers that target any avatars. These are purely for blender viewing and will be reconfigured by the tool
+            # Remove armature modifiers that target assets (will be reconfigured)
             # Otherwise apply it
-
-            if modifier.object == None:
+            if modifier.object is None:
                 bpy.ops.object.modifier_remove(modifier=modifier.name)
                 continue
 
             armature = modifier.object
 
-            if armature.name in avatar_names:
+            if armature.name in asset_names:
                 bpy.ops.object.modifier_remove(modifier=modifier.name)
             else:
                 applyModifierForObjectWithShapeKeys(bpy.context, [modifier.name], False)
@@ -43,6 +53,6 @@ def apply_avatar_modifiers(obj):
     try:
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     except:
-        None
+        pass
 
     deselect_all()

@@ -45,28 +45,6 @@ def scene_has_legacy_data(context) -> bool:
     return False
 
 
-def has_old_avatar_data(obj) -> bool:
-    """Check if an object has old nyaa_avatar PropertyGroup data that needs migration."""
-    if obj is None:
-        return False
-    if not hasattr(obj, "nyaa_avatar"):
-        return False
-    return obj.nyaa_avatar.is_avatar
-
-
-def selection_has_old_avatar_data(context) -> bool:
-    """Check if any selected object has old nyaa_avatar data needing migration. Uses cached SelectionContext."""
-    return get_selection_context(context).has_old_avatar_data
-
-
-def scene_has_old_avatar_data(context) -> bool:
-    """Check if any object in scene has old nyaa_avatar data needing migration."""
-    for obj in bpy.data.objects:
-        if has_old_avatar_data(obj):
-            return True
-    return False
-
-
 # =============================================================================
 # Selection Context Cache
 # =============================================================================
@@ -172,7 +150,6 @@ class SelectionContext:
         "is_humanoid",
         "meshes_belonging_to",
         "has_legacy_data",
-        "has_old_avatar_data",
     )
 
     def __init__(self, context):
@@ -183,7 +160,6 @@ class SelectionContext:
         self.is_humanoid = False
         self.meshes_belonging_to = []
         self.has_legacy_data = False
-        self.has_old_avatar_data = False
 
         for obj in context.selected_objects:
             if obj.type == "ARMATURE":
@@ -193,8 +169,6 @@ class SelectionContext:
             # Check legacy data while iterating (avoids second pass)
             if not self.has_legacy_data and has_legacy_avatar_data(obj):
                 self.has_legacy_data = True
-            if not self.has_old_avatar_data and has_old_avatar_data(obj):
-                self.has_old_avatar_data = True
 
         if len(self.armatures) == 1:
             self.armature = self.armatures[0]

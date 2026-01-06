@@ -10,8 +10,10 @@ import traceback
 import bpy
 from bpy.props import BoolProperty, StringProperty
 
+from ..common.file_stuff import sanitize_name
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
+from ..panels.operators_bake import set_pending_bake_context
 
 from ..asset.asset_lookup import (
     get_asset_by_name,
@@ -29,28 +31,29 @@ from ..asset.export_collection import export_to_collection, create_baked_materia
 TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
-class NyaaToolsAvatarMergeExport(bpy.types.Operator):
+class NyaaToolsAssetMergeExport(bpy.types.Operator):
     """Merge and export tool. For Voices of the Void, configure the path to the printer directory."""
 
-    bl_idname = "nyaa.avatar_merge_export"
+    bl_idname = "nyaa.asset_merge_export"
     bl_label = "Merge & Export"
     bl_options = {"REGISTER", "UNDO"}
 
-    avatar_name: StringProperty(name="Avatar Name", default="")
+    asset_name: StringProperty(name="Asset Name", default="")
     export_format: StringProperty(name="Export Format", default="fbx")
     target_type: StringProperty(name="Target Type", default="file")
     export_static: BoolProperty(name="Export Static", default=False)
     bake_after_export: BoolProperty(name="Bake After Export", default=False)
+    include_ue_colliders: BoolProperty(name="Include UE Colliders", default=False)
 
     def execute(self, context):
         try:
-            if not self.avatar_name:
+            if not self.asset_name:
                 self.report({"ERROR"}, "Specify an asset name.")
                 return {"CANCELLED"}
 
-            asset_host = get_asset_by_name(self.avatar_name)
+            asset_host = get_asset_by_name(self.asset_name)
             if not asset_host:
-                self.report({"ERROR"}, f"Asset '{self.avatar_name}' not found.")
+                self.report({"ERROR"}, f"Asset '{self.asset_name}' not found.")
                 return {"CANCELLED"}
 
             # Validate bake_after_export
@@ -63,12 +66,18 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
                     )
                     return {"CANCELLED"}
 
+            # VotV always includes colliders
+            include_colliders = (
+                self.include_ue_colliders or self.export_format == "votv"
+            )
+
             # Handle collection export
             if self.target_type == "collection":
                 exported, baking_pending = export_to_collection(
                     asset_host,
                     export_static=self.export_static,
                     bake_after_export=self.bake_after_export,
+                    include_ue_colliders=include_colliders,
                 )
                 self.report(
                     {"INFO"},
@@ -77,7 +86,7 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
 
                 # If baking was requested, invoke modal bake operator
                 if baking_pending:
-                    bpy.ops.nyaatools.run_bake("INVOKE_DEFAULT")
+                    bpy.ops.nyaatools.start_bake_queue("INVOKE_DEFAULT")
 
                 return {"FINISHED"}
 
@@ -87,17 +96,18 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
                 self.export_format,
                 export_static=self.export_static,
                 bake_after_export=self.bake_after_export,
+                include_ue_colliders=include_colliders,
             )
 
             path = get_export_path_from_asset(asset_host)
             if path:
-                path = resolve_path(path, self.avatar_name)
+                path = resolve_path(path, self.asset_name)
 
             self.report({"INFO"}, "Export successful!  " + (path or ""))
 
             # If baking was requested, invoke modal bake operator
             if baking_pending:
-                bpy.ops.nyaatools.run_bake("INVOKE_DEFAULT")
+                bpy.ops.nyaatools.start_bake_queue("INVOKE_DEFAULT")
 
             return {"FINISHED"}
         except Exception as error:
@@ -107,7 +117,11 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
 
 
 def perform_merge_export(
-    asset_host, export_format, export_static=False, bake_after_export=False
+    asset_host,
+    export_format,
+    export_static=False,
+    bake_after_export=False,
+    include_ue_colliders=False,
 ):
     """
     Merge and export asset using PropertyGroup data.
@@ -117,16 +131,14 @@ def perform_merge_export(
         export_format: 'fbx', 'obj', or 'votv'
         export_static: If True, apply pose and modifiers, remove armature
         bake_after_export: If True, bake textures from merged meshes before export
+        include_ue_colliders: If True, include UCX_ collision meshes in export
     """
 
     def debug_print(*msgs):
         print("   ", *msgs)
 
-    # Get asset name from new system, fallback to old
-    if hasattr(asset_host, "nyaa_asset") and asset_host.nyaa_asset.is_asset:
-        asset_name = asset_host.nyaa_asset.asset_name
-    else:
-        asset_name = asset_host.nyaa_avatar.avatar_name
+    # Get asset name
+    asset_name = asset_host.nyaa_asset.asset_name
 
     # Treat as static if mesh-hosted OR export_static is enabled
     is_static_asset = asset_host.type == "MESH"
@@ -154,8 +166,6 @@ def perform_merge_export(
     baking_pending = False
 
     try:
-        bpy.ops.wm.console_toggle()
-
         armature_copy = None
 
         # For armature-based assets, copy armature to temp scene
@@ -165,9 +175,13 @@ def perform_merge_export(
             )
             unrename_info.extend(arm_unrename)
 
-        # Merge meshes by layer
-        merged_layers, mesh_unrename = merge_asset_layers(
-            asset_host, temp_scene.collection, armature_copy, debug_print
+        # Merge meshes by layer (and optionally process colliders)
+        merged_layers, collider_objects, mesh_unrename = merge_asset_layers(
+            asset_host,
+            temp_scene.collection,
+            armature_copy,
+            include_colliders=include_ue_colliders,
+            debug_print=debug_print,
         )
         unrename_info.extend(mesh_unrename)
 
@@ -179,6 +193,16 @@ def perform_merge_export(
             armature_copy = None
 
         export_path = get_export_path_from_asset(asset_host)
+
+        # Capture mesh names BEFORE export (VotV export merges meshes, deleting originals)
+        # Filter out UCX collision meshes (safety check)
+        merged_mesh_list = [
+            obj
+            for obj in (list(merged_layers.values()) if merged_layers else [])
+            if obj.type == "MESH" and not obj.name.upper().startswith("UCX_")
+        ]
+        mesh_names = [obj.name for obj in merged_mesh_list] if merged_mesh_list else []
+
         _finalize_and_export(
             asset_name,
             armature_copy,
@@ -192,14 +216,23 @@ def perform_merge_export(
 
         # Set up pending bake context if baking is requested
         # This must happen AFTER export but BEFORE finally cleanup
+        # Note: Only bake non-collider meshes
         if bake_after_export and merged_layers:
-            from ..panels.operators_bake import set_pending_bake_context
-
             cfg = asset_host.nyaa_asset
             if export_path:
-                bake_dir = os.path.join(
-                    os.path.dirname(resolve_path(export_path, "temp")), "textures"
-                )
+                # For VotV, use the asset export directory (with sanitized asset name)
+                if export_format == "votv":
+                    clean_asset_name = sanitize_name(asset_name, strict=True)
+                    # Check if export path already ends with asset name
+                    if export_path.endswith(clean_asset_name):
+                        asset_export_dir = export_path
+                    else:
+                        asset_export_dir = os.path.join(export_path, clean_asset_name)
+                    bake_dir = asset_export_dir
+                else:
+                    bake_dir = os.path.join(
+                        os.path.dirname(resolve_path(export_path, "temp")), "textures"
+                    )
             else:
                 blend_dir = (
                     os.path.dirname(bpy.data.filepath)
@@ -208,13 +241,33 @@ def perform_merge_export(
                 )
                 bake_dir = os.path.join(blend_dir, "textures")
 
-            merged_mesh_list = list(merged_layers.values())
+            # For VotV exports, meshes are merged into a single object
+            # Find the merged object after export (exclude UCX meshes)
+            if export_format == "votv":
+                clean_asset_name = sanitize_name(asset_name, strict=True)
+                merged_obj = None
+                for obj in temp_scene.objects:
+                    if (
+                        obj.type == "MESH"
+                        and obj.name == clean_asset_name
+                        and not obj.name.upper().startswith("UCX_")
+                    ):
+                        merged_obj = obj
+                        break
+                if merged_obj:
+                    merged_mesh_list = [merged_obj]
+                    mesh_names = [merged_obj.name]
+                else:
+                    debug_print(
+                        f"⚠️ Could not find merged VotV object '{clean_asset_name}'"
+                    )
+                    merged_mesh_list = []
+                    mesh_names = []
 
             # Capture variables for cleanup lambda
             scene_name = TEMP_SCENE_NAME
             orig_scene = original_scene
             unrename = unrename_info
-            mesh_names = [obj.name for obj in merged_mesh_list]
             tex_dir = bake_dir
 
             def cleanup_merge_export():
@@ -265,8 +318,6 @@ def perform_merge_export(
                 bpy.data.scenes.remove(temp_scene, do_unlink=True)
                 bpy.ops.outliner.orphans_purge(do_recursive=True)
                 renamer_restore(unrename_info)
-
-        bpy.ops.wm.console_toggle()
 
         if error:
             raise error
