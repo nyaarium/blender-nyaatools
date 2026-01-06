@@ -200,7 +200,12 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
     show_bake_channels: BoolProperty(
         name="Show Bake Channels",
         description="Expand bake channels section",
-        default=False,
+        default=True,
+    )
+    show_export_profiles: BoolProperty(
+        name="Show Export Profiles",
+        description="Expand export profiles section",
+        default=True,
     )
 
 

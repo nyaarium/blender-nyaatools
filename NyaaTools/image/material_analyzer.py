@@ -1,3 +1,5 @@
+# Version Auto
+
 """Material analysis utilities for extracting texture information from Blender materials."""
 
 import bpy
@@ -230,7 +232,7 @@ def detect_best_resolution(
     for link in socket.links:
         from_node = link.from_node
         _detect_best_resolution_recursion(
-            from_node, current_tree, tree_stack, visited_nodes, max_dimensions
+            from_node, current_tree, tree_stack, visited_nodes, max_dimensions, None
         )
 
     # Round to nearest power of 2 for optimal texture performance
@@ -249,6 +251,7 @@ def _detect_best_resolution_recursion(
     tree_stack: list,
     visited_nodes: set,
     max_dimensions: list,
+    parent_group_node: Optional[bpy.types.Node] = None,
 ) -> None:
     """
     Recursively search for texture nodes within the tree stack constraint.
@@ -259,6 +262,7 @@ def _detect_best_resolution_recursion(
         tree_stack: List of valid trees to search in
         visited_nodes: Set of (node_id, tree_id) tuples to prevent infinite loops
         max_dimensions: [max_width, max_height] - mutable list to track maximum dimensions
+        parent_group_node: The GROUP node instance we entered from (None if not entered via a group)
     """
     # Material Tree (Shader Nodetree)
     # ├── Image Texture (8192x8192) ← TARGET TEXTURE
@@ -286,7 +290,7 @@ def _detect_best_resolution_recursion(
 
     # Handle GROUP nodes - only enter if the group's tree is in our tree_stack
     elif node.type == "GROUP" and node.node_tree and node.node_tree in tree_stack:
-        # Enter the group
+        # Enter the group, passing this GROUP node instance as parent_group_node
         new_tree = node.node_tree
         for group_node in new_tree.nodes:
             if group_node.type == "GROUP_OUTPUT":
@@ -300,35 +304,54 @@ def _detect_best_resolution_recursion(
                                 tree_stack,
                                 visited_nodes,
                                 max_dimensions,
+                                node,  # Pass the GROUP node instance we entered from
                             )
                 break
 
     # Handle GROUP_INPUT nodes - exit to parent tree
     elif node.type == "GROUP_INPUT" and current_tree in tree_stack:
-        # Find our position in tree_stack
-        try:
-            current_index = tree_stack.index(current_tree)
-            if current_index > 0:
-                parent_tree = tree_stack[current_index - 1]
-                # Find all GROUP nodes in parent tree that use current_tree
-                for group_node in parent_tree.nodes:
-                    if (
-                        group_node.type == "GROUP"
-                        and group_node.node_tree == current_tree
-                    ):
-                        # Follow all input sockets of this group node
-                        for input_socket in group_node.inputs:
-                            if input_socket.is_linked:
-                                for link in input_socket.links:
-                                    _detect_best_resolution_recursion(
-                                        link.from_node,
-                                        parent_tree,
-                                        tree_stack,
-                                        visited_nodes,
-                                        max_dimensions,
-                                    )
-        except ValueError:
-            pass  # current_tree not in tree_stack, skip
+        # Only follow inputs from the specific GROUP node instance we entered from
+        if parent_group_node:
+            parent_tree = parent_group_node.id_data
+            # Follow input sockets of the specific parent group node instance
+            for input_socket in parent_group_node.inputs:
+                if input_socket.is_linked:
+                    for link in input_socket.links:
+                        _detect_best_resolution_recursion(
+                            link.from_node,
+                            parent_tree,
+                            tree_stack,
+                            visited_nodes,
+                            max_dimensions,
+                            None,  # Reset parent_group_node when exiting to parent
+                        )
+        else:
+            # Fallback: if parent_group_node is None, use old behavior
+            # This shouldn't happen in normal traversal, but kept for safety
+            try:
+                current_index = tree_stack.index(current_tree)
+                if current_index > 0:
+                    parent_tree = tree_stack[current_index - 1]
+                    # Find all GROUP nodes in parent tree that use current_tree
+                    for group_node in parent_tree.nodes:
+                        if (
+                            group_node.type == "GROUP"
+                            and group_node.node_tree == current_tree
+                        ):
+                            # Follow all input sockets of this group node
+                            for input_socket in group_node.inputs:
+                                if input_socket.is_linked:
+                                    for link in input_socket.links:
+                                        _detect_best_resolution_recursion(
+                                            link.from_node,
+                                            parent_tree,
+                                            tree_stack,
+                                            visited_nodes,
+                                            max_dimensions,
+                                            None,
+                                        )
+            except ValueError:
+                pass  # current_tree not in tree_stack, skip
 
     # For all other nodes, follow input sockets backwards
     else:
@@ -341,4 +364,5 @@ def _detect_best_resolution_recursion(
                         tree_stack,
                         visited_nodes,
                         max_dimensions,
+                        parent_group_node,  # Preserve parent_group_node through other nodes
                     )

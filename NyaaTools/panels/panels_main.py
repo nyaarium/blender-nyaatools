@@ -53,6 +53,7 @@ def draw_asset_meshes_list(layout, asset):
 def draw_export_profiles(layout, asset, context):
     """Draw export profiles list with add/edit/remove/run controls."""
     cfg = asset.nyaa_asset
+    has_bake_profiles = len(cfg.bake_images) > 0
 
     if asset.type == "ARMATURE" and len(cfg.meshes) == 0:
         layout.label(text="No meshes assigned", icon="ERROR")
@@ -66,32 +67,16 @@ def draw_export_profiles(layout, asset, context):
         )
         return
 
-    row = layout.row()
-    row.template_list(
-        "NYAATOOLS_UL_ExportProfiles",
-        "",
-        cfg,
-        "export_profiles",
-        cfg,
-        "active_export_index",
-        rows=2,
-    )
-
-    col = row.column(align=True)
-    col.operator("nyaatools.add_export_profile", icon="ADD", text="")
-    col.operator("nyaatools.remove_export_profile", icon="REMOVE", text="")
-
     if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
         cfg.export_profiles
     ):
         profile = cfg.export_profiles[cfg.active_export_index]
 
         # Show validation warnings
-        has_bake_profiles = len(cfg.bake_images) > 0
         if profile.bake_after_export and not has_bake_profiles:
             box = layout.box()
             box.alert = True
-            box.label(text='"Bake after export" requires bake profiles.', icon="ERROR")
+            box.label(text='"Bake after export" requires a bake profile', icon="ERROR")
 
         # Check for layer name collisions (for any export type)
         collisions = get_layer_name_collisions(asset)
@@ -116,10 +101,114 @@ def draw_export_profiles(layout, asset, context):
                 icon="ASSET_MANAGER",
             )
         else:
-            row.operator(
-                "nyaatools.run_export_profile", text="Merge & Export", icon="EXPORT"
-            )
-        row.operator("nyaatools.edit_export_profile", text="", icon="PREFERENCES")
+            if profile.bake_after_export:
+                row.operator(
+                    "nyaatools.run_export_profile",
+                    text="Merge, Export, Bake",
+                    icon="EXPORT",
+                )
+            else:
+                row.operator(
+                    "nyaatools.run_export_profile", text="Merge & Export", icon="EXPORT"
+                )
+
+    # Export Profiles (collapsible)
+    box = layout.box()
+    row = box.row()
+
+    # Icon reflects current export mode
+    active_profile = None
+    if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
+        cfg.export_profiles
+    ):
+        active_profile = cfg.export_profiles[cfg.active_export_index]
+    if active_profile and active_profile.export_static and asset.type == "ARMATURE":
+        icon = "OUTLINER_OB_MESH"
+    elif asset.type == "ARMATURE":
+        icon = "OUTLINER_OB_ARMATURE"
+    else:
+        icon = "OUTLINER_OB_MESH"
+
+    title = "Export Profile"
+    if active_profile:
+        desc = get_asset_description(asset, active_profile)
+        all_formats = active_profile.bl_rna.properties["format"]
+        format_enums = dict(all_formats.enum_items)
+        current_format = format_enums.get(active_profile.format, active_profile.format)
+        title = "Export Profile: " + current_format.name + " (" + desc + ")"
+
+    row.prop(
+        cfg,
+        "show_export_profiles",
+        icon="TRIA_DOWN" if cfg.show_export_profiles else "TRIA_RIGHT",
+        icon_only=True,
+        emboss=False,
+    )
+    row.label(text=title, icon=icon)
+    show_export_profiles = cfg.show_export_profiles
+
+    if show_export_profiles:
+        row = box.row()
+        row.template_list(
+            "NYAATOOLS_UL_ExportProfiles",
+            "",
+            cfg,
+            "export_profiles",
+            cfg,
+            "active_export_index",
+            rows=2,
+        )
+
+        col = row.column(align=True)
+        col.operator("nyaatools.add_export_profile", icon="ADD", text="")
+        col.operator("nyaatools.remove_export_profile", icon="REMOVE", text="")
+        col.separator()
+        col.operator("nyaatools.edit_export_profile", text="", icon="PREFERENCES")
+
+
+def draw_bake_channels(layout, asset, context):
+    """Draw bake channels list with add/edit/remove/run controls."""
+    cfg = asset.nyaa_asset
+    has_bake_channels = len(cfg.bake_images) > 0
+
+    box = layout.box()
+    row = box.row()
+
+    title = "Bake Channels"
+    if has_bake_channels:
+        list = []
+        for img in cfg.bake_images:
+            list.append(img.format)
+        title = "Bake Channels: " + ", ".join(list)
+
+    row.prop(
+        cfg,
+        "show_bake_channels",
+        icon="TRIA_DOWN" if cfg.show_bake_channels else "TRIA_RIGHT",
+        icon_only=True,
+        emboss=not has_bake_channels,
+    )
+    row.label(text=title, icon="OUTPUT")
+
+    show_bake_channels = cfg.show_bake_channels
+    if show_bake_channels:
+        row = box.row()
+        row.template_list(
+            "NYAATOOLS_UL_BakeImages",
+            "",
+            cfg,
+            "bake_images",
+            cfg,
+            "active_bake_index",
+            rows=4,
+        )
+        col = row.column(align=True)
+        col.operator("nyaatools.add_bake_image", icon="ADD", text="")
+        col.operator("nyaatools.remove_bake_image", icon="REMOVE", text="")
+        col.separator()
+        col.operator("nyaatools.edit_bake_image", icon="PREFERENCES", text="")
+        col.separator()
+        col.operator("nyaatools.load_bake_profile", icon="IMPORT", text="")
 
 
 # =============================================================================
@@ -249,78 +338,22 @@ class NYAATOOLS_PT_AssetConfig(Panel):
         """Draw the full asset configuration UI."""
         cfg = asset.nyaa_asset
 
-        # Get active export profile for dynamic description
-        active_profile = None
-        if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
-            cfg.export_profiles
-        ):
-            active_profile = cfg.export_profiles[cfg.active_export_index]
-
-        desc = get_asset_description(asset, active_profile)
-
         box = layout.box()
         row = box.row(align=True)
 
-        # Icon reflects current export mode
-        if active_profile and active_profile.export_static and asset.type == "ARMATURE":
-            icon = "OUTLINER_OB_MESH"
-        elif asset.type == "ARMATURE":
-            icon = "OUTLINER_OB_ARMATURE"
-        else:
-            icon = "OUTLINER_OB_MESH"
-
-        row.label(text="", icon=icon)
+        row.label(text="", icon="PACKAGE")
         row.prop(cfg, "asset_name", text="")
 
+        # Show "Destroy Asset" button
         row = box.row()
-        row.label(text=desc, icon="INFO")
+        row.label(text="")
+        row.operator("nyaatools.unmark_asset", text="Destroy Asset", icon="X")
 
         layout.separator()
-        layout.label(text="Export Profiles:")
+
         draw_export_profiles(layout, asset, bpy.context)
 
-        layout.separator()
-
-        # Bake Channels (collapsible)
-        box = layout.box()
-        row = box.row()
-        row.prop(
-            cfg,
-            "show_bake_channels",
-            icon="TRIA_DOWN" if cfg.show_bake_channels else "TRIA_RIGHT",
-            icon_only=True,
-            emboss=False,
-        )
-        row.label(text="Bake Channels", icon="RENDER_STILL")
-
-        if cfg.show_bake_channels:
-            if len(cfg.bake_images) == 0:
-                inner = box.box()
-                inner.label(text="No bake channels configured.", icon="INFO")
-                row = inner.row(align=True)
-                row.operator(
-                    "nyaatools.load_bake_profile", text="Load Preset", icon="PRESET"
-                )
-                row.operator("nyaatools.add_bake_image", text="Custom", icon="ADD")
-            else:
-                row = box.row()
-                row.template_list(
-                    "NYAATOOLS_UL_BakeImages",
-                    "",
-                    cfg,
-                    "bake_images",
-                    cfg,
-                    "active_bake_index",
-                    rows=3,
-                )
-                col = row.column(align=True)
-                col.operator("nyaatools.add_bake_image", icon="ADD", text="")
-                col.operator("nyaatools.remove_bake_image", icon="REMOVE", text="")
-                col.separator()
-                col.operator("nyaatools.edit_bake_image", icon="PREFERENCES", text="")
-
-        layout.separator()
-        layout.operator("nyaatools.unmark_asset", text="Remove Asset Status", icon="X")
+        draw_bake_channels(layout, asset, bpy.context)
 
 
 # =============================================================================

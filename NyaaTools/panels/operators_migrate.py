@@ -90,6 +90,7 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                 export_path = obj[PROP_AVATAR_EXPORT_PATH]
                 if export_path:
                     profile = obj.nyaa_asset.export_profiles.add()
+
                     # Normalize path separators and ensure it ends with separator
                     normalized_path = export_path.replace("\\", "/").rstrip("/") + "/"
                     profile.path = normalized_path
@@ -97,7 +98,18 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                     # Auto-detect VotV export paths
                     if normalized_path.endswith("/Assets/meshes/printer/"):
                         profile.format = "votv"
+
+                        profile.bake_after_export = True
+
                         profile.include_ue_colliders = True
+                        profile.export_static = True
+
+                        # Apply VotV bake preset
+                        # We need to ensure THIS object is active for the operator to work on it
+                        prev_active = context.view_layer.objects.active
+                        context.view_layer.objects.active = obj
+                        bpy.ops.nyaatools.load_bake_profile(preset="votv")
+                        context.view_layer.objects.active = prev_active
                     else:
                         profile.format = "fbx"
 

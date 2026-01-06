@@ -31,7 +31,6 @@ def register():
     from .ui import eta_estimator
     from .operators import NyaaToolsAddModifier
     from .operators import NyaaToolsAssetMergeExport
-    from .operators import NyaaToolsBakeMaterialSlots
     from .operators import NyaaToolsCheckImageFormats
     from .operators import NyaaToolsDissolveBones
     from .operators import NyaaToolsHelpImageFormat
@@ -57,7 +56,6 @@ def register():
     classes = [
         NyaaToolsAddModifier.NyaaToolsAddModifier,
         NyaaToolsAssetMergeExport.NyaaToolsAssetMergeExport,
-        NyaaToolsBakeMaterialSlots.NyaaToolsBakeMaterialSlots,
         NyaaToolsCheckImageFormats.NyaaToolsCheckImageFormats,
         NyaaToolsDissolveBones.NyaaToolsDissolveBones,
         NyaaToolsHelpImageFormat.NyaaToolsHelpImageFormat,
@@ -87,7 +85,6 @@ def unregister():
     from .ui import eta_estimator
     from .operators import NyaaToolsAddModifier
     from .operators import NyaaToolsAssetMergeExport
-    from .operators import NyaaToolsBakeMaterialSlots
     from .operators import NyaaToolsCheckImageFormats
     from .operators import NyaaToolsDissolveBones
     from .operators import NyaaToolsHelpImageFormat
@@ -110,7 +107,6 @@ def unregister():
     classes = [
         NyaaToolsAddModifier.NyaaToolsAddModifier,
         NyaaToolsAssetMergeExport.NyaaToolsAssetMergeExport,
-        NyaaToolsBakeMaterialSlots.NyaaToolsBakeMaterialSlots,
         NyaaToolsCheckImageFormats.NyaaToolsCheckImageFormats,
         NyaaToolsDissolveBones.NyaaToolsDissolveBones,
         NyaaToolsHelpImageFormat.NyaaToolsHelpImageFormat,

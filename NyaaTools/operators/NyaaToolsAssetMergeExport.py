@@ -10,8 +10,10 @@ import traceback
 import bpy
 from bpy.props import BoolProperty, StringProperty
 
+from ..common.file_stuff import sanitize_name
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
+from ..panels.operators_bake import set_pending_bake_context
 
 from ..asset.asset_lookup import (
     get_asset_by_name,
@@ -84,7 +86,7 @@ class NyaaToolsAssetMergeExport(bpy.types.Operator):
 
                 # If baking was requested, invoke modal bake operator
                 if baking_pending:
-                    bpy.ops.nyaatools.run_bake("INVOKE_DEFAULT")
+                    bpy.ops.nyaatools.start_bake_queue("INVOKE_DEFAULT")
 
                 return {"FINISHED"}
 
@@ -105,7 +107,7 @@ class NyaaToolsAssetMergeExport(bpy.types.Operator):
 
             # If baking was requested, invoke modal bake operator
             if baking_pending:
-                bpy.ops.nyaatools.run_bake("INVOKE_DEFAULT")
+                bpy.ops.nyaatools.start_bake_queue("INVOKE_DEFAULT")
 
             return {"FINISHED"}
         except Exception as error:
@@ -164,8 +166,6 @@ def perform_merge_export(
     baking_pending = False
 
     try:
-        bpy.ops.wm.console_toggle()
-
         armature_copy = None
 
         # For armature-based assets, copy armature to temp scene
@@ -193,6 +193,16 @@ def perform_merge_export(
             armature_copy = None
 
         export_path = get_export_path_from_asset(asset_host)
+
+        # Capture mesh names BEFORE export (VotV export merges meshes, deleting originals)
+        # Filter out UCX collision meshes (safety check)
+        merged_mesh_list = [
+            obj
+            for obj in (list(merged_layers.values()) if merged_layers else [])
+            if obj.type == "MESH" and not obj.name.upper().startswith("UCX_")
+        ]
+        mesh_names = [obj.name for obj in merged_mesh_list] if merged_mesh_list else []
+
         _finalize_and_export(
             asset_name,
             armature_copy,
@@ -208,13 +218,21 @@ def perform_merge_export(
         # This must happen AFTER export but BEFORE finally cleanup
         # Note: Only bake non-collider meshes
         if bake_after_export and merged_layers:
-            from ..panels.operators_bake import set_pending_bake_context
-
             cfg = asset_host.nyaa_asset
             if export_path:
-                bake_dir = os.path.join(
-                    os.path.dirname(resolve_path(export_path, "temp")), "textures"
-                )
+                # For VotV, use the asset export directory (with sanitized asset name)
+                if export_format == "votv":
+                    clean_asset_name = sanitize_name(asset_name, strict=True)
+                    # Check if export path already ends with asset name
+                    if export_path.endswith(clean_asset_name):
+                        asset_export_dir = export_path
+                    else:
+                        asset_export_dir = os.path.join(export_path, clean_asset_name)
+                    bake_dir = asset_export_dir
+                else:
+                    bake_dir = os.path.join(
+                        os.path.dirname(resolve_path(export_path, "temp")), "textures"
+                    )
             else:
                 blend_dir = (
                     os.path.dirname(bpy.data.filepath)
@@ -223,13 +241,33 @@ def perform_merge_export(
                 )
                 bake_dir = os.path.join(blend_dir, "textures")
 
-            merged_mesh_list = list(merged_layers.values())
+            # For VotV exports, meshes are merged into a single object
+            # Find the merged object after export (exclude UCX meshes)
+            if export_format == "votv":
+                clean_asset_name = sanitize_name(asset_name, strict=True)
+                merged_obj = None
+                for obj in temp_scene.objects:
+                    if (
+                        obj.type == "MESH"
+                        and obj.name == clean_asset_name
+                        and not obj.name.upper().startswith("UCX_")
+                    ):
+                        merged_obj = obj
+                        break
+                if merged_obj:
+                    merged_mesh_list = [merged_obj]
+                    mesh_names = [merged_obj.name]
+                else:
+                    debug_print(
+                        f"⚠️ Could not find merged VotV object '{clean_asset_name}'"
+                    )
+                    merged_mesh_list = []
+                    mesh_names = []
 
             # Capture variables for cleanup lambda
             scene_name = TEMP_SCENE_NAME
             orig_scene = original_scene
             unrename = unrename_info
-            mesh_names = [obj.name for obj in merged_mesh_list]
             tex_dir = bake_dir
 
             def cleanup_merge_export():
@@ -280,8 +318,6 @@ def perform_merge_export(
                 bpy.data.scenes.remove(temp_scene, do_unlink=True)
                 bpy.ops.outliner.orphans_purge(do_recursive=True)
                 renamer_restore(unrename_info)
-
-        bpy.ops.wm.console_toggle()
 
         if error:
             raise error

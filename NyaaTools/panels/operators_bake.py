@@ -3,6 +3,7 @@ Bake operators and helpers for NyaaTools panel.
 """
 
 import os
+from typing import Tuple
 
 import bpy
 from bpy.types import Operator
@@ -10,7 +11,13 @@ from bpy.props import BoolProperty, EnumProperty
 
 from .panels_context import SelectionContext
 from ..common.file_stuff import sanitize_name
-from ..image.texture_baker import bake_dtp_texture
+from ..image.texture_baker import (
+    bake_dtp_texture,
+    _parse_format_string,
+    _get_bake_type_for_channels,
+    DTP_SOCKET_MAP,
+)
+from ..image.material_analyzer import find_principled_bsdf, detect_best_resolution
 
 
 # =============================================================================
@@ -110,6 +117,109 @@ def get_auto_bake_settings(dtp_format: str) -> tuple:
 
 
 # =============================================================================
+# Helper Functions
+# =============================================================================
+
+
+def _detect_render_resolution(
+    material: bpy.types.Material,
+    dtp_format: str,
+    max_resolution: Tuple[int, int],
+) -> Tuple[int, int]:
+    """
+    Detect the render resolution for a material based on its shader graph.
+
+    Args:
+        material: The material to analyze
+        dtp_format: DTP format string (e.g., "rgba", "normalgl", "me-sp-ro")
+        max_resolution: Maximum resolution cap (width, height)
+
+    Returns:
+        Tuple of (width, height) for the detected render resolution
+    """
+    if not material or not material.use_nodes:
+        return max_resolution
+
+    # Find Principled BSDF
+    principled_result = find_principled_bsdf(material)
+    if not principled_result:
+        return max_resolution
+
+    principled_bsdf = principled_result["principled_bsdf"]
+    tree_stack = principled_result["tree_stack"]
+
+    # Parse format to determine bake type
+    try:
+        channels = _parse_format_string(dtp_format)
+        bake_type = _get_bake_type_for_channels(channels)
+    except (ValueError, AttributeError):
+        # If parsing fails, default to max resolution
+        return max_resolution
+
+    detected_resolution = None
+
+    if bake_type == "NORMAL":
+        # For normal maps, detect from Normal socket
+        normal_socket = principled_bsdf.inputs.get("Normal")
+        if normal_socket and normal_socket.is_linked:
+            detected_resolution = detect_best_resolution(normal_socket, tree_stack)
+        else:
+            detected_resolution = (1024, 1024)  # Default for unconnected normal
+    else:
+        # For emission bakes, check relevant sockets
+        # Check Base Color and Emission Color sockets
+        resolutions = []
+
+        base_color_socket = principled_bsdf.inputs.get("Base Color")
+        if base_color_socket and base_color_socket.is_linked:
+            resolutions.append(detect_best_resolution(base_color_socket, tree_stack))
+
+        emission_color_socket = principled_bsdf.inputs.get("Emission Color")
+        if emission_color_socket and emission_color_socket.is_linked:
+            resolutions.append(
+                detect_best_resolution(emission_color_socket, tree_stack)
+            )
+
+        # Also check other sockets that might be used (Metallic, Roughness, etc.)
+        # based on the channels in the format
+        for channel in channels:
+            socket_mapping = DTP_SOCKET_MAP.get(channel)
+            if isinstance(socket_mapping, str) and socket_mapping not in (
+                "__CONSTANT_0__",
+                "__CONSTANT_1__",
+                "__UNUSED__",
+            ):
+                socket = principled_bsdf.inputs.get(socket_mapping)
+                if socket and socket.is_linked:
+                    resolutions.append(detect_best_resolution(socket, tree_stack))
+            elif isinstance(socket_mapping, tuple):
+                socket_name, _ = socket_mapping
+                socket = principled_bsdf.inputs.get(socket_name)
+                if socket and socket.is_linked:
+                    resolutions.append(detect_best_resolution(socket, tree_stack))
+
+        if resolutions:
+            # Take max of all detected resolutions
+            detected_resolution = (
+                max(r[0] for r in resolutions),
+                max(r[1] for r in resolutions),
+            )
+        else:
+            detected_resolution = (512, 512)  # Default if nothing connected
+
+    # Apply max_resolution cap
+    if detected_resolution:
+        max_width, max_height = max_resolution
+        final_resolution = (
+            min(detected_resolution[0], max_width),
+            min(detected_resolution[1], max_height),
+        )
+        return final_resolution
+
+    return max_resolution
+
+
+# =============================================================================
 # Bake Presets
 # =============================================================================
 
@@ -202,6 +312,69 @@ BAKE_TEMPLATE_ITEMS = [
 
 
 # =============================================================================
+# Bake Image Dialog Helpers
+# =============================================================================
+
+
+def get_bake_format_from_operator(operator) -> str:
+    """
+    Get the DTP format string from a bake image operator's properties.
+
+    Args:
+        operator: The operator instance with template/channel properties
+
+    Returns:
+        DTP format string like "rgba", "normalgl", or "me-ro-sp"
+    """
+    if operator.template == "custom":
+        channels = [operator.r_channel, operator.g_channel, operator.b_channel]
+        if operator.a_channel != "xx":
+            channels.append(operator.a_channel)
+        return "-".join(channels)
+    return operator.template
+
+
+def draw_bake_image_ui(layout, operator, context):
+    """
+    Shared draw logic for bake image Add/Edit dialogs.
+
+    Args:
+        layout: Blender UI layout
+        operator: The operator instance (has properties like template, channels, etc.)
+        context: Blender context
+    """
+    layout.prop(operator, "template")
+
+    if operator.template == "custom":
+        layout.separator()
+        box = layout.box()
+        box.label(text="Custom Channels:", icon="COLOR")
+        col = box.column(align=True)
+        col.prop(operator, "r_channel")
+        col.prop(operator, "g_channel")
+        col.prop(operator, "b_channel")
+        col.prop(operator, "a_channel")
+
+    layout.separator()
+    layout.prop(operator, "image_type")
+
+    fmt = get_bake_format_from_operator(operator)
+    if operator.image_type == "png" and not is_format_color_based(fmt):
+        box = layout.box()
+        box.alert = True
+        box.label(text="Warning: PNG may lose precision", icon="ERROR")
+        box.label(text="For linear/utility maps, EXR recommended.")
+
+    layout.separator()
+    row = layout.row(align=True)
+    row.prop(operator, "width")
+    row.label(text="x")
+    row.prop(operator, "height")
+
+    layout.prop(operator, "optimize_resolution")
+
+
+# =============================================================================
 # Bake Operators
 # =============================================================================
 
@@ -275,7 +448,7 @@ class NYAATOOLS_OT_AddBakeImage(Operator):
     """Add a new bake image configuration"""
 
     bl_idname = "nyaatools.add_bake_image"
-    bl_label = "Custom Bake"
+    bl_label = "Add Bake Channel"
     bl_options = {"REGISTER", "UNDO"}
 
     template: EnumProperty(name="Template", items=BAKE_TEMPLATE_ITEMS, default="rgba")
@@ -339,50 +512,14 @@ class NYAATOOLS_OT_AddBakeImage(Operator):
         self.height = h
         return context.window_manager.invoke_props_dialog(self, width=300)
 
-    def _get_current_format(self) -> str:
-        if self.template == "custom":
-            channels = [self.r_channel, self.g_channel, self.b_channel]
-            if self.a_channel != "xx":
-                channels.append(self.a_channel)
-            return "-".join(channels)
-        return self.template
-
     def draw(self, context):
-        layout = self.layout
-        layout.prop(self, "template")
-
-        if self.template == "custom":
-            layout.separator()
-            box = layout.box()
-            box.label(text="Custom Channels:", icon="COLOR")
-            col = box.column(align=True)
-            col.prop(self, "r_channel")
-            col.prop(self, "g_channel")
-            col.prop(self, "b_channel")
-            col.prop(self, "a_channel")
-
-        layout.separator()
-        layout.prop(self, "image_type")
-
-        fmt = self._get_current_format()
-        if self.image_type == "png" and not is_format_color_based(fmt):
-            box = layout.box()
-            box.alert = True
-            box.label(text="Warning: PNG may lose precision", icon="ERROR")
-            box.label(text="For linear/utility maps, EXR recommended.")
-
-        layout.separator()
-        row = layout.row(align=True)
-        row.prop(self, "width")
-        row.prop(self, "height")
-
-        layout.prop(self, "optimize_resolution")
+        draw_bake_image_ui(self.layout, self, context)
 
     def execute(self, context):
         sel = SelectionContext(context)
         cfg = sel.asset.nyaa_asset
 
-        fmt = self._get_current_format()
+        fmt = get_bake_format_from_operator(self)
 
         img = cfg.bake_images.add()
         img.format = fmt
@@ -401,7 +538,7 @@ class NYAATOOLS_OT_EditBakeImage(Operator):
     """Edit the selected bake image configuration"""
 
     bl_idname = "nyaatools.edit_bake_image"
-    bl_label = "Edit Bake Image"
+    bl_label = "Edit Bake Channel"
     bl_options = {"REGISTER", "UNDO"}
 
     template: EnumProperty(name="Template", items=BAKE_TEMPLATE_ITEMS, default="custom")
@@ -484,52 +621,15 @@ class NYAATOOLS_OT_EditBakeImage(Operator):
 
         return context.window_manager.invoke_props_dialog(self, width=300)
 
-    def _get_current_format(self) -> str:
-        if self.template == "custom":
-            channels = [self.r_channel, self.g_channel, self.b_channel]
-            if self.a_channel != "xx":
-                channels.append(self.a_channel)
-            return "-".join(channels)
-        return self.template
-
     def draw(self, context):
-        layout = self.layout
-        layout.prop(self, "template")
-
-        if self.template == "custom":
-            layout.separator()
-            box = layout.box()
-            box.label(text="Custom Channels:", icon="COLOR")
-            col = box.column(align=True)
-            col.prop(self, "r_channel")
-            col.prop(self, "g_channel")
-            col.prop(self, "b_channel")
-            col.prop(self, "a_channel")
-
-        layout.separator()
-        layout.prop(self, "image_type")
-
-        fmt = self._get_current_format()
-        if self.image_type == "png" and not is_format_color_based(fmt):
-            box = layout.box()
-            box.alert = True
-            box.label(text="Warning: PNG may lose precision", icon="ERROR")
-            box.label(text="For linear/utility maps, EXR recommended.")
-
-        layout.separator()
-        row = layout.row(align=True)
-        row.prop(self, "width")
-        row.label(text="x")
-        row.prop(self, "height")
-
-        layout.prop(self, "optimize_resolution")
+        draw_bake_image_ui(self.layout, self, context)
 
     def execute(self, context):
         sel = SelectionContext(context)
         cfg = sel.asset.nyaa_asset
         img = cfg.bake_images[cfg.active_bake_index]
 
-        fmt = self._get_current_format()
+        fmt = get_bake_format_from_operator(self)
 
         img.format = fmt
         img.image_type = self.image_type
@@ -545,7 +645,7 @@ class NYAATOOLS_OT_RemoveBakeImage(Operator):
     """Remove the selected bake image configuration"""
 
     bl_idname = "nyaatools.remove_bake_image"
-    bl_label = "Remove Bake Image"
+    bl_label = "Remove Bake Channel"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -570,11 +670,11 @@ class NYAATOOLS_OT_RemoveBakeImage(Operator):
         return {"FINISHED"}
 
 
-class NYAATOOLS_OT_RunBake(Operator):
-    """Bake all configured images for all materials on asset meshes"""
+class NYAATOOLS_OT_StartBakeQueue(Operator):
+    """Start the polling process to bake the images in the queue"""
 
-    bl_idname = "nyaatools.run_bake"
-    bl_label = "Bake All Materials"
+    bl_idname = "nyaatools.start_bake_queue"
+    bl_label = "Start Bake Queue"
     bl_options = {"REGISTER"}
 
     # Modal state
@@ -678,6 +778,27 @@ class NYAATOOLS_OT_RunBake(Operator):
 
                 # Create display task
                 res_str = f"{width}x{height}"
+
+                # Detect render resolution if optimize is enabled
+                render_width, render_height = width, height
+                if optimize and mat:
+                    try:
+                        detected = _detect_render_resolution(
+                            mat, dtp_format, (width, height)
+                        )
+                        render_width, render_height = detected
+                    except Exception as e:
+                        print(
+                            f"[RunBake] Failed to detect render resolution for {mat_name}: {e}"
+                        )
+                        # Fall back to max resolution
+                        render_width, render_height = width, height
+                else:
+                    # If not optimizing, render resolution equals max resolution
+                    render_width, render_height = width, height
+
+                render_res_str = f"{render_width}x{render_height}"
+
                 display_task = BakeTask(
                     material_name=mat_name,
                     dtp_format=dtp_format,
@@ -685,6 +806,7 @@ class NYAATOOLS_OT_RunBake(Operator):
                     resolution=res_str,
                     optimize=optimize,
                 )
+                display_task.render_resolution = render_res_str
                 tasks_by_material[mat_name].append(display_task)
 
                 # Determine bake type for ETA estimation
@@ -692,6 +814,8 @@ class NYAATOOLS_OT_RunBake(Operator):
                 bake_type = "bake_rgba" if is_rgba else "bake_rgb"
 
                 # Create work task - store extracted values instead of bake_img reference
+                # Use render resolution for ETA calculation
+                megapixels = resolution_to_megapixels(render_width, render_height)
                 self._tasks.append(
                     {
                         "mesh": mesh,
@@ -699,10 +823,12 @@ class NYAATOOLS_OT_RunBake(Operator):
                         "dtp_format": dtp_format,
                         "width": width,
                         "height": height,
+                        "render_width": render_width,
+                        "render_height": render_height,
                         "img_type": img_type,
                         "optimize": optimize,
                         "display_task": display_task,
-                        "megapixels": resolution_to_megapixels(width, height),
+                        "megapixels": megapixels,
                         "bake_type": bake_type,
                     }
                 )
@@ -754,6 +880,14 @@ class NYAATOOLS_OT_RunBake(Operator):
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
+        # Handle mouse wheel scrolling (works in all states)
+        if event.type in ("WHEELUPMOUSE", "WHEELDOWNMOUSE") and self._overlay:
+            # WHEELDOWNMOUSE should scroll down (show content below) -> increase offset
+            # WHEELUPMOUSE should scroll up (show content above) -> decrease offset
+            delta = 1 if event.type == "WHEELDOWNMOUSE" else -1
+            self._overlay.handle_scroll(delta)
+            return {"RUNNING_MODAL"}
+
         # Handle confirmation state - wait for ENTER to close
         if self._awaiting_confirmation:
             if event.type in ("RET", "NUMPAD_ENTER") and event.value == "PRESS":
@@ -775,7 +909,7 @@ class NYAATOOLS_OT_RunBake(Operator):
                     self.report({"INFO"}, result_msg)
                 return {"FINISHED"}
 
-            # Block all other input while awaiting confirmation
+            # Block all other input while awaiting confirmation (except wheel, handled above)
             return {"RUNNING_MODAL"}
 
         # Handle ESC to cancel (only works between bakes)
@@ -1027,5 +1161,5 @@ BAKE_OPERATOR_CLASSES = [
     NYAATOOLS_OT_AddBakeImage,
     NYAATOOLS_OT_EditBakeImage,
     NYAATOOLS_OT_RemoveBakeImage,
-    NYAATOOLS_OT_RunBake,
+    NYAATOOLS_OT_StartBakeQueue,
 ]
