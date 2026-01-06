@@ -447,8 +447,8 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
         # VotV forces colliders on
         include_colliders = profile.include_ue_colliders or profile.format == "votv"
 
-        return bpy.ops.nyaa.avatar_merge_export(
-            avatar_name=cfg.asset_name,
+        return bpy.ops.nyaa.asset_merge_export(
+            asset_name=cfg.asset_name,
             export_format=profile.format,
             target_type=profile.target_type,
             export_static=profile.export_static,

@@ -150,29 +150,8 @@ class NYAATOOLS_UL_BakeImages(UIList):
             layout.label(text="", icon="IMAGE_DATA")
 
 
-class NYAATOOLS_UL_AvatarMeshes(UIList):
-    """UIList for displaying meshes assigned to an avatar (legacy compatibility)."""
-
-    bl_idname = "NYAATOOLS_UL_AvatarMeshes"
-
-    def draw_item(
-        self, context, layout, data, item, icon, active_data, active_propname, index
-    ):
-        if self.layout_type in {"DEFAULT", "COMPACT"}:
-            row = layout.row(align=True)
-            row.label(text=item.layer_name)
-            if item.mesh_object:
-                row.label(text=item.mesh_object.name, icon="OUTLINER_OB_MESH")
-            else:
-                row.label(text="(deleted)", icon="ERROR")
-        elif self.layout_type == "GRID":
-            layout.alignment = "CENTER"
-            layout.label(text="", icon="OUTLINER_OB_MESH")
-
-
 UILIST_CLASSES = [
     NYAATOOLS_UL_AssetMeshes,
     NYAATOOLS_UL_ExportProfiles,
     NYAATOOLS_UL_BakeImages,
-    NYAATOOLS_UL_AvatarMeshes,
 ]

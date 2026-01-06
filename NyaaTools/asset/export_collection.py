@@ -346,7 +346,7 @@ def export_to_collection(
     # Get textures directory for material assignment
     textures_dir = get_textures_directory(asset_host)
 
-    # Create temp scene for merge operations (required by merge_onto_avatar_layer)
+    # Create temp scene for merge operations (required by merge_onto_layer)
     temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
     if temp_scene:
         bpy.data.scenes.remove(temp_scene, do_unlink=True)

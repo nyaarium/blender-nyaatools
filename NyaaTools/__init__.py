@@ -7,8 +7,8 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (5, 0, 1),
-    "version": (2, 0, 0),
-    "description": "Various Nyaarium tools for mesh cleanup, merging, and exporting avatars",
+    "version": (2, 1, 0),
+    "description": "Various Nyaarium tools for mesh cleanup, merging, and exporting assets",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
 }
@@ -30,7 +30,7 @@ def register():
     from . import types
     from .ui import eta_estimator
     from .operators import NyaaToolsAddModifier
-    from .operators import NyaaToolsAvatarMergeExport
+    from .operators import NyaaToolsAssetMergeExport
     from .operators import NyaaToolsBakeMaterialSlots
     from .operators import NyaaToolsCheckImageFormats
     from .operators import NyaaToolsDissolveBones
@@ -56,7 +56,7 @@ def register():
     # Build class list from freshly imported modules
     classes = [
         NyaaToolsAddModifier.NyaaToolsAddModifier,
-        NyaaToolsAvatarMergeExport.NyaaToolsAvatarMergeExport,
+        NyaaToolsAssetMergeExport.NyaaToolsAssetMergeExport,
         NyaaToolsBakeMaterialSlots.NyaaToolsBakeMaterialSlots,
         NyaaToolsCheckImageFormats.NyaaToolsCheckImageFormats,
         NyaaToolsDissolveBones.NyaaToolsDissolveBones,
@@ -86,7 +86,7 @@ def unregister():
     from . import types
     from .ui import eta_estimator
     from .operators import NyaaToolsAddModifier
-    from .operators import NyaaToolsAvatarMergeExport
+    from .operators import NyaaToolsAssetMergeExport
     from .operators import NyaaToolsBakeMaterialSlots
     from .operators import NyaaToolsCheckImageFormats
     from .operators import NyaaToolsDissolveBones
@@ -109,7 +109,7 @@ def unregister():
     # Build class list
     classes = [
         NyaaToolsAddModifier.NyaaToolsAddModifier,
-        NyaaToolsAvatarMergeExport.NyaaToolsAvatarMergeExport,
+        NyaaToolsAssetMergeExport.NyaaToolsAssetMergeExport,
         NyaaToolsBakeMaterialSlots.NyaaToolsBakeMaterialSlots,
         NyaaToolsCheckImageFormats.NyaaToolsCheckImageFormats,
         NyaaToolsDissolveBones.NyaaToolsDissolveBones,

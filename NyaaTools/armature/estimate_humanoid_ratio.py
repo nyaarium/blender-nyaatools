@@ -42,7 +42,7 @@ def estimate_humanoid_ratio(armature_obj) -> float:
 
     Returns:
         A float from 0.0 to 1.0 indicating humanoid similarity.
-        0.8+ is considered a humanoid avatar.
+        0.8+ is considered a humanoid.
     """
     if armature_obj is None or armature_obj.type != "ARMATURE":
         return 0.0

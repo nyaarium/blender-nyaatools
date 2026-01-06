@@ -15,7 +15,6 @@ from ..asset.asset_helpers import (
 from .panels_context import (
     get_selection_context,
     selection_has_legacy_data,
-    selection_has_old_avatar_data,
 )
 from .panels_utils import (
     NYAATOOLS_PT_ArmatureTools,
@@ -189,20 +188,6 @@ class NYAATOOLS_PT_AssetConfig(Panel):
             col.operator(
                 "nyaatools.migrate_legacy_data",
                 text="Upgrade Legacy Data",
-                icon="FILE_REFRESH",
-            )
-            return
-
-        if selection_has_old_avatar_data(context):
-            box = layout.box()
-            box.alert = True
-            col = box.column(align=True)
-            col.label(text="Old avatar data found!", icon="ERROR")
-            col.label(text="Upgrade to unified asset system.")
-            col.separator()
-            col.operator(
-                "nyaatools.migrate_avatar_to_asset",
-                text="Upgrade to Assets",
                 icon="FILE_REFRESH",
             )
             return

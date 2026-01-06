@@ -55,7 +55,7 @@ class NyaaToolsBakeSettings(bpy.types.PropertyGroup):
 
 
 class NyaaToolsExportSettings(bpy.types.PropertyGroup):
-    """Settings for avatar export operations."""
+    """Settings for asset export operations."""
 
     format: EnumProperty(
         name="Format",

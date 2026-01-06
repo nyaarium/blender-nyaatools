@@ -1,15 +1,14 @@
 """
 Shared layer merge functionality for asset export.
 
-Used by both file-based export (NyaaToolsAvatarMergeExport) and
-collection-based export (export_collection).
+Used by both file-based export and collection-based export.
 """
 
 import bpy
 
 from ..mesh.cleanup_mesh import cleanup_mesh
 from ..common.renamer_rename import rename_object
-from ..avatar.merge_onto_avatar_layer import merge_onto_avatar_layer
+from .merge_onto_layer import merge_onto_layer
 
 from .asset_lookup import get_asset_meshes_by_layer
 
@@ -198,7 +197,7 @@ def merge_asset_layers(
                 first_visit = False
                 debug_print(f"📦 Created layer: {layer_name}")
 
-            merge_onto_avatar_layer(layer_name, mesh_copy, armature_copy)
+            merge_onto_layer(layer_name, mesh_copy, armature_copy)
             debug_print(f"   Merged: {mesh_name}")
 
         # Get the merged result (named after the layer)

@@ -36,12 +36,12 @@ def perform_add_modifier(meshes, which_modifier):
                 break
             bpy.ops.object.modifier_move_up(modifier=modifier.name)
 
-    def search_for_avatar_armature(mesh):
-        """Find the avatar armature that owns this mesh using PropertyGroup system."""
+    def find_asset_armature_for_mesh(mesh):
+        """Find the asset armature that owns this mesh."""
         for obj in bpy.data.objects:
-            if obj.type != "ARMATURE" or not obj.nyaa_avatar.is_avatar:
+            if obj.type != "ARMATURE" or not obj.nyaa_asset.is_asset:
                 continue
-            for entry in obj.nyaa_avatar.meshes:
+            for entry in obj.nyaa_asset.meshes:
                 if entry.mesh_object == mesh:
                     return obj
         return None
@@ -72,7 +72,7 @@ def perform_add_modifier(meshes, which_modifier):
                 mesh.modifiers.remove(mod)
             mod = mesh.modifiers.new(name, "ARMATURE")
             move_modifier_to_top(mod)
-            mod.object = search_for_avatar_armature(mesh)
+            mod.object = find_asset_armature_for_mesh(mesh)
             if mod.object == None:
                 mod.object = search_for_only_armature()
             mod.show_expanded = mod.object == None

@@ -29,14 +29,14 @@ from ..asset.export_collection import export_to_collection, create_baked_materia
 TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
-class NyaaToolsAvatarMergeExport(bpy.types.Operator):
+class NyaaToolsAssetMergeExport(bpy.types.Operator):
     """Merge and export tool. For Voices of the Void, configure the path to the printer directory."""
 
-    bl_idname = "nyaa.avatar_merge_export"
+    bl_idname = "nyaa.asset_merge_export"
     bl_label = "Merge & Export"
     bl_options = {"REGISTER", "UNDO"}
 
-    avatar_name: StringProperty(name="Avatar Name", default="")
+    asset_name: StringProperty(name="Asset Name", default="")
     export_format: StringProperty(name="Export Format", default="fbx")
     target_type: StringProperty(name="Target Type", default="file")
     export_static: BoolProperty(name="Export Static", default=False)
@@ -45,13 +45,13 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            if not self.avatar_name:
+            if not self.asset_name:
                 self.report({"ERROR"}, "Specify an asset name.")
                 return {"CANCELLED"}
 
-            asset_host = get_asset_by_name(self.avatar_name)
+            asset_host = get_asset_by_name(self.asset_name)
             if not asset_host:
-                self.report({"ERROR"}, f"Asset '{self.avatar_name}' not found.")
+                self.report({"ERROR"}, f"Asset '{self.asset_name}' not found.")
                 return {"CANCELLED"}
 
             # Validate bake_after_export
@@ -99,7 +99,7 @@ class NyaaToolsAvatarMergeExport(bpy.types.Operator):
 
             path = get_export_path_from_asset(asset_host)
             if path:
-                path = resolve_path(path, self.avatar_name)
+                path = resolve_path(path, self.asset_name)
 
             self.report({"INFO"}, "Export successful!  " + (path or ""))
 
@@ -135,11 +135,8 @@ def perform_merge_export(
     def debug_print(*msgs):
         print("   ", *msgs)
 
-    # Get asset name from new system, fallback to old
-    if hasattr(asset_host, "nyaa_asset") and asset_host.nyaa_asset.is_asset:
-        asset_name = asset_host.nyaa_asset.asset_name
-    else:
-        asset_name = asset_host.nyaa_avatar.avatar_name
+    # Get asset name
+    asset_name = asset_host.nyaa_asset.asset_name
 
     # Treat as static if mesh-hosted OR export_static is enabled
     is_static_asset = asset_host.type == "MESH"

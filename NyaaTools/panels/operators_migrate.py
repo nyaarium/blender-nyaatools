@@ -13,7 +13,6 @@ from ..legacy import (
 )
 from .panels_context import (
     scene_has_legacy_data,
-    scene_has_old_avatar_data,
     invalidate_selection_cache,
 )
 from ..armature.estimate_humanoid_ratio import is_humanoid
@@ -191,123 +190,6 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
         return {"FINISHED"}
 
 
-class NYAATOOLS_OT_MigrateAvatarToAsset(Operator):
-    """Migrate from nyaa_avatar PropertyGroup to nyaa_asset"""
-
-    bl_idname = "nyaatools.migrate_avatar_to_asset"
-    bl_label = "Upgrade Avatar to Asset"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return scene_has_old_avatar_data(context)
-
-    def execute(self, context):
-        migrated = 0
-        migrated_assets = []
-
-        for obj in bpy.data.objects:
-            if not hasattr(obj, "nyaa_avatar"):
-                continue
-            if not obj.nyaa_avatar.is_avatar:
-                continue
-
-            old = obj.nyaa_avatar
-            new = obj.nyaa_asset
-
-            new.is_asset = True
-            new.asset_name = old.avatar_name
-            # Pre-compute humanoid flag for armatures
-            if obj.type == "ARMATURE":
-                new.is_humanoid = is_humanoid(obj)
-
-            for old_entry in old.meshes:
-                new_entry = new.meshes.add()
-                new_entry.mesh_object = old_entry.mesh_object
-
-                # Auto-detect UCX_ meshes as colliders
-                if (
-                    old_entry.mesh_object
-                    and old_entry.mesh_object.name.upper().startswith("UCX_")
-                ):
-                    new_entry.layer_name = "UCX"
-                    new_entry.is_ue_collider = True
-                else:
-                    new_entry.layer_name = old_entry.layer_name
-
-            for old_profile in old.export_profiles:
-                new_profile = new.export_profiles.add()
-
-                # Normalize path separators and ensure it ends with separator
-                normalized_path = old_profile.path.replace("\\", "/").rstrip("/") + "/"
-                new_profile.path = normalized_path
-
-                # Auto-detect VotV export paths
-                if normalized_path.endswith("/Assets/meshes/printer/"):
-                    new_profile.format = "votv"
-                    new_profile.include_ue_colliders = True
-                else:
-                    new_profile.format = old_profile.format
-
-            for old_bake in old.bake_images:
-                new_bake = new.bake_images.add()
-                new_bake.format = old_bake.format
-                new_bake.image_type = old_bake.image_type
-                new_bake.width = old_bake.width
-                new_bake.height = old_bake.height
-
-            old.is_avatar = False
-            old.avatar_name = ""
-            old.meshes.clear()
-            old.export_profiles.clear()
-            old.bake_images.clear()
-
-            migrated += 1
-            migrated_assets.append(obj)
-
-        # Add all UCX_ meshes in scene as colliders to each migrated asset
-        # (old system only supported 1 asset at a time, so all UCX was included)
-        migrated_colliders = 0
-        for asset_obj in migrated_assets:
-            for scene_obj in bpy.data.objects:
-                if scene_obj.type != "MESH":
-                    continue
-                if not scene_obj.name.upper().startswith("UCX_"):
-                    continue
-
-                # Check if already added
-                already_exists = any(
-                    entry.mesh_object == scene_obj
-                    for entry in asset_obj.nyaa_asset.meshes
-                )
-                if already_exists:
-                    continue
-
-                entry = asset_obj.nyaa_asset.meshes.add()
-                entry.mesh_object = scene_obj
-                entry.layer_name = "UCX"
-                entry.is_ue_collider = True
-                migrated_colliders += 1
-
-        # Sort all migrated assets
-        for asset_obj in migrated_assets:
-            _sort_asset_meshes(asset_obj.nyaa_asset.meshes)
-
-        invalidate_selection_cache()
-
-        if migrated_colliders > 0:
-            self.report(
-                {"INFO"},
-                f"Migrated {migrated} avatar(s) to unified asset system and added {migrated_colliders} UCX collider(s)",
-            )
-        else:
-            self.report(
-                {"INFO"}, f"Migrated {migrated} avatar(s) to unified asset system"
-            )
-        return {"FINISHED"}
-
-
 MIGRATE_OPERATOR_CLASSES = [
     NYAATOOLS_OT_MigrateLegacyData,
-    NYAATOOLS_OT_MigrateAvatarToAsset,
 ]

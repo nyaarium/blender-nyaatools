@@ -125,13 +125,13 @@ def perform_bake(obj):
 def get_export_directory(obj):
     """Determine the export directory for textures."""
 
-    # Try to get avatar export path from parent armature using PropertyGroup
+    # Try to get export path from parent armature
     armature = None
     if obj.parent and obj.parent.type == "ARMATURE":
         armature = obj.parent
 
-    if armature and armature.nyaa_avatar.is_avatar:
-        cfg = armature.nyaa_avatar
+    if armature and armature.nyaa_asset.is_asset:
+        cfg = armature.nyaa_asset
         # Get path from active export profile
         if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
             cfg.export_profiles
