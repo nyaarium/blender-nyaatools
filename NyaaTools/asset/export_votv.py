@@ -81,7 +81,7 @@ def render_votv_icon(asset_host, asset_name, debug_print):
     bpy.ops.render.render()
 
     # Save the rendered image as icon.png
-    render_result = bpy.data.images["Render Result"]
+    render_result = bpy.data.images.get("Render Result")
     if render_result:
         clean_asset_name = sanitize_name(asset_name, strict=True)
         if export_path.endswith(clean_asset_name):
@@ -94,6 +94,11 @@ def render_votv_icon(asset_host, asset_name, debug_print):
         icon_path = os.path.join(asset_export_dir, "icon.png")
         render_result.save_render(icon_path)
         debug_print(f"Saved camera icon: {icon_path}")
+
+        # Clear filepath to prevent "Render Result" from showing as unsaved
+        # Render Result is a system image and shouldn't have a persistent filepath
+        render_result.filepath_raw = ""
+        render_result.filepath = ""
 
     # Restore original render settings
     original_scene.render.resolution_x = original_resolution_x

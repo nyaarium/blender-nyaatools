@@ -35,6 +35,7 @@ def set_pending_bake_context(
     bake_images,
     export_dir,
     on_cleanup=None,
+    filename_formatter=None,
 ):
     """
     Set up a bake context for the RunBake modal operator.
@@ -47,6 +48,8 @@ def set_pending_bake_context(
         bake_images: CollectionProperty or list of bake image configs
         export_dir: Directory to save baked textures
         on_cleanup: Optional callback called when baking finishes (success or failure)
+        filename_formatter: Optional function(mat_name, dtp_format, ext) -> filename
+                           If provided, used instead of default naming
     """
     global _pending_bake_context
     # Copy bake image data as dicts since PropertyGroup refs may become invalid
@@ -69,6 +72,7 @@ def set_pending_bake_context(
         "bake_images": bake_images_data,
         "export_dir": export_dir,
         "on_cleanup": on_cleanup,
+        "filename_formatter": filename_formatter,
     }
 
 
@@ -718,6 +722,7 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
         bake_images = pending_ctx["bake_images"]
         self._export_dir = pending_ctx["export_dir"]
         self._on_cleanup = pending_ctx.get("on_cleanup")
+        self._filename_formatter = pending_ctx.get("filename_formatter")
 
         # Filter out UCX_ collision meshes (safety check)
         meshes = [m for m in meshes if not m.name.upper().startswith("UCX_")]
@@ -1018,7 +1023,12 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
             if result_image:
                 mat_name = sanitize_name(mat.name)
                 ext = "exr" if img_type == "exr" else "png"
-                filename = f"{mat_name}.{dtp_format}.{ext}"
+
+                # Use custom formatter if provided, otherwise use default
+                if self._filename_formatter:
+                    filename = self._filename_formatter(mat_name, dtp_format, ext)
+                else:
+                    filename = f"{mat_name}.{dtp_format}.{ext}"
                 save_path = os.path.join(self._export_dir, filename)
 
                 # Get resolution before saving (image is removed after save)

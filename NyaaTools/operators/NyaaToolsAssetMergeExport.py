@@ -31,6 +31,33 @@ from ..asset.export_collection import export_to_collection, create_baked_materia
 TEMP_SCENE_NAME = "Temp Merge & Export"
 
 
+def _votv_filename_formatter(mat_name, dtp_format, ext):
+    """
+    Format filename for VotV baked textures.
+
+    VotV expects:
+    - rgba → diffuse_{mat_name}.png
+    - me-sp-ro → pbr_{mat_name}.png
+    - normalgl → normal_{mat_name}.png
+    - emission → emissive_{mat_name}.png
+    """
+    # Mapping from DTP format to VotV prefix
+    votv_format_map = {
+        "rgba": "diffuse",
+        "me-sp-ro": "pbr",
+        "normalgl": "normal",
+        "emission": "emissive",
+    }
+
+    # Use VotV naming if format is mapped, otherwise fall back to default
+    if dtp_format in votv_format_map:
+        votv_prefix = votv_format_map[dtp_format]
+        return f"{votv_prefix}_{mat_name}.png"
+    else:
+        # Fallback to default naming for unmapped formats
+        return f"{mat_name}.{dtp_format}.{ext}"
+
+
 class NyaaToolsAssetMergeExport(bpy.types.Operator):
     """Merge and export tool. For Voices of the Void, configure the path to the printer directory."""
 
@@ -270,6 +297,11 @@ def perform_merge_export(
             unrename = unrename_info
             tex_dir = bake_dir
 
+            # Use VotV filename formatter if exporting VotV
+            filename_formatter = None
+            if export_format == "votv":
+                filename_formatter = _votv_filename_formatter
+
             def cleanup_merge_export():
                 """Assign baked materials, clean up temp scene, and restore names."""
                 # Assign baked materials to merged meshes
@@ -294,6 +326,13 @@ def perform_merge_export(
                         bpy.context.window.scene = orig_scene
                     bpy.data.scenes.remove(temp, do_unlink=True)
                     bpy.ops.outliner.orphans_purge(do_recursive=True)
+
+                # Clear Render Result filepath if it was set during VotV icon rendering
+                render_result = bpy.data.images.get("Render Result")
+                if render_result and render_result.filepath_raw:
+                    render_result.filepath_raw = ""
+                    render_result.filepath = ""
+
                 if unrename:
                     renamer_restore(unrename)
 
@@ -302,6 +341,7 @@ def perform_merge_export(
                 cfg.bake_images,
                 bake_dir,
                 on_cleanup=cleanup_merge_export,
+                filename_formatter=filename_formatter,
             )
             baking_pending = True
             debug_print(f"🍞 Baking queued for {len(merged_mesh_list)} merged meshes")

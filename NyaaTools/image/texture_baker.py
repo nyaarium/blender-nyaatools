@@ -27,7 +27,7 @@ def _get_bake_margin(resolution: Tuple[int, int]) -> int:
     # For larger textures, use the full 256px margin
     if min_dimension < 256:
         # Use 1/4 of the smallest dimension, min 8
-        return max(8, min_dimension // 4)
+        return max(8, min_dimension)
     return BAKE_MARGIN
 
 
