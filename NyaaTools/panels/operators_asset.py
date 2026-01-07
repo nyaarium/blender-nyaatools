@@ -446,14 +446,19 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
 
     def invoke(self, context, event):
         sel = SelectionContext(context)
+        # Filter out host mesh if asset is mesh-hosted
+        meshes_to_add = sel.meshes
+        if sel.asset and sel.asset.type == "MESH":
+            meshes_to_add = [m for m in sel.meshes if m != sel.asset]
+
         # Default new layer name to mesh name if single mesh
-        if len(sel.meshes) == 1:
-            self.new_layer_name = sel.meshes[0].name
+        if len(meshes_to_add) == 1:
+            self.new_layer_name = meshes_to_add[0].name
         else:
             self.new_layer_name = "Layer Name"
 
         # Auto-expand meta objects and set collider flag if any mesh is UCX_
-        if _any_mesh_is_ucx(sel.meshes):
+        if _any_mesh_is_ucx(meshes_to_add):
             self.show_meta_objects = True
             self.is_ue_collider = True
         else:
@@ -466,10 +471,15 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
         layout = self.layout
         sel = SelectionContext(context)
 
+        # Filter out host mesh if asset is mesh-hosted
+        meshes_to_add = sel.meshes
+        if sel.asset and sel.asset.type == "MESH":
+            meshes_to_add = [m for m in sel.meshes if m != sel.asset]
+
         # Show meshes to be added
         box = layout.box()
         box.label(text="Meshes to add:", icon="OUTLINER_OB_MESH")
-        for mesh in sel.meshes:
+        for mesh in meshes_to_add:
             box.label(text=f"  {mesh.name}")
 
         # Layer selection (hidden if collider)
@@ -536,9 +546,14 @@ class NYAATOOLS_OT_AddSelectedMeshes(Operator):
             self.report({"ERROR"}, error)
             return {"CANCELLED"}
 
+        # Filter out host mesh if asset is mesh-hosted
+        meshes_to_add = sel.meshes
+        if sel.asset.type == "MESH":
+            meshes_to_add = [m for m in sel.meshes if m != sel.asset]
+
         added = 0
 
-        for mesh in sel.meshes:
+        for mesh in meshes_to_add:
             already_exists = any(entry.mesh_object == mesh for entry in cfg.meshes)
             if already_exists:
                 continue
@@ -820,6 +835,111 @@ class NYAATOOLS_OT_EditMeshEntry(Operator):
         return {"FINISHED"}
 
 
+class NYAATOOLS_OT_RenameLayer(Operator):
+    """Rename the layer of the active mesh entry"""
+
+    bl_idname = "nyaatools.rename_layer"
+    bl_label = "Rename Layer"
+    bl_options = {"REGISTER", "UNDO"}
+
+    new_layer_name: StringProperty(name="New Layer Name", default="")
+
+    @classmethod
+    def poll(cls, context):
+        sel = SelectionContext(context)
+        if not sel.has_asset:
+            return False
+        cfg = sel.asset.nyaa_asset
+        return len(cfg.meshes) > 0 and 0 <= cfg.active_mesh_index < len(cfg.meshes)
+
+    def invoke(self, context, event):
+        sel = SelectionContext(context)
+        cfg = sel.asset.nyaa_asset
+        entry = cfg.meshes[cfg.active_mesh_index]
+        self.new_layer_name = entry.layer_name
+        return context.window_manager.invoke_props_dialog(self, width=300)
+
+    def draw(self, context):
+        layout = self.layout
+        sel = SelectionContext(context)
+        cfg = sel.asset.nyaa_asset
+        entry = cfg.meshes[cfg.active_mesh_index]
+        current_layer = entry.layer_name
+
+        layout.prop(self, "new_layer_name", text="New Name")
+
+        new_name = self.new_layer_name.strip()
+        if not new_name:
+            err_box = layout.box()
+            err_box.alert = True
+            err_box.label(text="Layer name cannot be empty", icon="ERROR")
+            return
+
+        if new_name == current_layer:
+            return
+
+        # Check if new name collides with another layer (excluding current layer)
+        other_layers = set()
+        for e in cfg.meshes:
+            if e.layer_name != current_layer:
+                other_layers.add(e.layer_name)
+
+        if new_name in other_layers:
+            warn_box = layout.box()
+            warn_box.alert = True
+            warn_box.label(text="Warning: Layer name collision", icon="ERROR")
+            warn_box.label(text=f"Layer '{new_name}' already exists")
+            warn_box.label(text="This will merge layers", icon="INFO")
+
+        # Validate layer name format
+        is_valid, error = _validate_layer_name_ucx(new_name, entry.is_ue_collider)
+        if not is_valid:
+            err_box = layout.box()
+            err_box.alert = True
+            err_box.label(text=error, icon="ERROR")
+
+    def execute(self, context):
+        sel = SelectionContext(context)
+        cfg = sel.asset.nyaa_asset
+        entry = cfg.meshes[cfg.active_mesh_index]
+        current_layer = entry.layer_name
+
+        new_name = self.new_layer_name.strip()
+        if not new_name:
+            self.report({"ERROR"}, "Layer name cannot be empty")
+            return {"CANCELLED"}
+
+        if new_name == current_layer:
+            self.report({"INFO"}, "Layer name unchanged")
+            return {"FINISHED"}
+
+        # Validate layer name format
+        is_valid, error = _validate_layer_name_ucx(new_name, entry.is_ue_collider)
+        if not is_valid:
+            self.report({"ERROR"}, error)
+            return {"CANCELLED"}
+
+        # Rename all meshes in the current layer to the new name
+        renamed_count = 0
+        for e in cfg.meshes:
+            if e.layer_name == current_layer:
+                e.layer_name = new_name
+                renamed_count += 1
+
+        _sort_asset_meshes(cfg.meshes)
+        tag_view3d_redraw(context)
+
+        if renamed_count > 1:
+            self.report(
+                {"INFO"},
+                f"Renamed layer '{current_layer}' to '{new_name}' ({renamed_count} meshes)",
+            )
+        else:
+            self.report({"INFO"}, f"Renamed layer '{current_layer}' to '{new_name}'")
+
+        return {"FINISHED"}
+
+
 ASSET_OPERATOR_CLASSES = [
     NYAATOOLS_OT_MarkAsAsset,
     NYAATOOLS_OT_UnmarkAsset,
@@ -829,4 +949,5 @@ ASSET_OPERATOR_CLASSES = [
     NYAATOOLS_OT_RemoveMesh,
     NYAATOOLS_OT_RemoveSelectedMeshes,
     NYAATOOLS_OT_EditMeshEntry,
+    NYAATOOLS_OT_RenameLayer,
 ]

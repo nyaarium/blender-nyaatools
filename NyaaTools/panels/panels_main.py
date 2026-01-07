@@ -48,6 +48,8 @@ def draw_asset_meshes_list(layout, asset):
     col.operator("nyaatools.remove_mesh", icon="REMOVE", text="")
     col.separator()
     col.operator("nyaatools.edit_mesh_entry", icon="PREFERENCES", text="")
+    col.separator()
+    col.operator("nyaatools.rename_layer", icon="OUTLINER_OB_FONT", text="")
 
 
 def draw_export_profiles(layout, asset, context):
