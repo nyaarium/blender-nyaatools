@@ -12,7 +12,7 @@ import bpy
 from ..common.file_stuff import sanitize_name
 from ..common.resolve_path import resolve_path
 from ..common.renamer_restore import renamer_restore
-from ..panels.operators_bake import set_pending_bake_context
+from ..bake.bake_context import set_pending_bake_context
 from .merge_layers import (
     merge_asset_layers,
     copy_armature_to_collection,
@@ -436,14 +436,14 @@ def export_to_collection(
 
     # Set up pending bake context if baking is requested
     # For collection export, meshes are now in the main scene (export collection)
-    # Note: Only bake non-collider meshes
+    # Note: Collider filtering is now handled by is_ue_collider flag in bake context
     baking_pending = False
     if bake_after_export and exported_objects:
-        # Filter to non-collider meshes only
+        # Get all mesh objects (collider filtering handled by is_ue_collider flag)
         mesh_objects = [
             obj
             for obj in exported_objects
-            if obj.type == "MESH" and not obj.name.startswith("UCX_")
+            if obj.type == "MESH"
         ]
         if mesh_objects:
             # Capture values for cleanup lambda
@@ -478,6 +478,8 @@ def export_to_collection(
                 cfg.bake_images,
                 textures_dir,
                 on_cleanup=cleanup_collection_export,
+                wait_for_enter=False,  # Collection export doesn't wait
+                asset_host=asset_host,  # Pass asset host for meta tracking
             )
             baking_pending = True
             debug_print(f"🍞 Baking queued for {len(mesh_objects)} exported meshes")

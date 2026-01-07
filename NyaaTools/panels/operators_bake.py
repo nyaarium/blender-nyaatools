@@ -18,76 +18,26 @@ from ..image.texture_baker import (
     DTP_SOCKET_MAP,
 )
 from ..image.material_analyzer import find_principled_bsdf, detect_best_resolution
+from ..bake.bake_context import (
+    get_pending_bake_context as get_bake_context,
+    BakeContext,
+)
+from ..bake.bake_prepare import prepare_meshes_for_baking
+from ..bake.bake_execute import execute_bake_for_material
 
 
 # =============================================================================
-# Bake Context
+# Bake Context (DEPRECATED - use bake.bake_context instead)
 # =============================================================================
 
-# Module-level storage for bake context.
-# RunBake uses this to determine what meshes to bake and how to clean up.
-# Set via set_pending_bake_context() or created from asset via _create_bake_context_from_asset().
-_pending_bake_context = None
-
-
-def set_pending_bake_context(
-    meshes,
-    bake_images,
-    export_dir,
-    on_cleanup=None,
-    filename_formatter=None,
-):
-    """
-    Set up a bake context for the RunBake modal operator.
-
-    This allows callers to specify exactly which meshes to bake and what
-    cleanup to perform when baking completes.
-
-    Args:
-        meshes: List of mesh objects to bake from
-        bake_images: CollectionProperty or list of bake image configs
-        export_dir: Directory to save baked textures
-        on_cleanup: Optional callback called when baking finishes (success or failure)
-        filename_formatter: Optional function(mat_name, dtp_format, ext) -> filename
-                           If provided, used instead of default naming
-    """
-    global _pending_bake_context
-    # Copy bake image data as dicts since PropertyGroup refs may become invalid
-    bake_images_data = []
-    for img in bake_images:
-        if isinstance(img, dict):
-            bake_images_data.append(img)
-        else:
-            bake_images_data.append(
-                {
-                    "format": img.format,
-                    "image_type": img.image_type,
-                    "width": img.width,
-                    "height": img.height,
-                    "optimize_resolution": img.optimize_resolution,
-                }
-            )
-    _pending_bake_context = {
-        "meshes": meshes,
-        "bake_images": bake_images_data,
-        "export_dir": export_dir,
-        "on_cleanup": on_cleanup,
-        "filename_formatter": filename_formatter,
-    }
-
-
-def get_pending_bake_context():
-    """Get and clear the pending bake context."""
-    global _pending_bake_context
-    ctx = _pending_bake_context
-    _pending_bake_context = None
-    return ctx
-
-
-def clear_pending_bake_context():
-    """Clear any pending bake context without using it."""
-    global _pending_bake_context
-    _pending_bake_context = None
+# Legacy compatibility: Re-export set_pending_bake_context from bake_context
+# This allows old code to continue working during transition
+from ..bake.bake_context import (
+    set_pending_bake_context,
+    get_pending_bake_context,
+    clear_pending_bake_context,
+    has_pending_bake_context,
+)
 
 
 # =============================================================================
@@ -697,11 +647,15 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
     _task_start_time = 0.0  # Start time of current task
     # Cleanup callback (called when baking finishes)
     _on_cleanup = None
+    # Bake context
+    _bake_ctx = None
+    _wait_for_enter = False
+    _awaiting_enter = False  # True when waiting for Enter key before bake
 
     @classmethod
     def poll(cls, context):
         # Only allow if there's a pending bake context (from merge/export)
-        return _pending_bake_context is not None
+        return has_pending_bake_context()
 
     def invoke(self, context, event):
         from ..ui.progress_overlay import ProgressOverlay, BakeTask
@@ -712,84 +666,91 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
         )
 
         # Get pending bake context (set by merge/export)
-        pending_ctx = get_pending_bake_context()
-        if not pending_ctx:
+        ctx = get_bake_context()
+        if not ctx:
             self.report({"ERROR"}, "No pending bake context")
             return {"CANCELLED"}
 
-        # Extract context data
-        meshes = pending_ctx["meshes"]
-        bake_images = pending_ctx["bake_images"]
-        self._export_dir = pending_ctx["export_dir"]
-        self._on_cleanup = pending_ctx.get("on_cleanup")
-        self._filename_formatter = pending_ctx.get("filename_formatter")
+        if not isinstance(ctx, BakeContext):
+            # Legacy dict format - convert to BakeContext for compatibility
+            self.report({"ERROR"}, "Legacy bake context format not supported. Please update caller.")
+            return {"CANCELLED"}
 
-        # Filter out UCX_ collision meshes (safety check)
-        meshes = [m for m in meshes if not m.name.upper().startswith("UCX_")]
+        # Store context reference
+        self._bake_ctx = ctx
+        self._export_dir = ctx.export_dir
+        self._on_cleanup = ctx.on_cleanup
+        self._filename_formatter = ctx.filename_formatter
+        self._wait_for_enter = ctx.wait_for_enter
 
-        print(f"[RunBake] Baking {len(meshes)} meshes")
+        print(f"[RunBake] Starting bake with {len(ctx.mesh_metas)} mesh metas")
 
-        if not meshes:
-            self.report({"ERROR"}, "No meshes to bake")
+        # Run prepare phase (steps 1-5): delete colliders, apply modifiers, separate by material, join compatible meshes
+        print("[RunBake] Preparing meshes for baking...")
+        try:
+            meshes_by_material = prepare_meshes_for_baking(ctx, debug_print=print)
+        except Exception as e:
+            # Cleanup on failure
+            print(f"[RunBake] Prepare failed: {e}")
+            if self._on_cleanup:
+                try:
+                    self._on_cleanup()
+                    print("[RunBake] Cleanup callback executed after prepare failure")
+                except Exception as cleanup_error:
+                    print(f"[RunBake] Cleanup callback error: {cleanup_error}")
+            self.report({"ERROR"}, f"Prepare failed: {str(e)}")
+            return {"CANCELLED"}
+
+        if not meshes_by_material:
+            # Cleanup if no materials found
+            if self._on_cleanup:
+                try:
+                    self._on_cleanup()
+                    print("[RunBake] Cleanup callback executed (no materials)")
+                except Exception as cleanup_error:
+                    print(f"[RunBake] Cleanup callback error: {cleanup_error}")
+            self.report({"ERROR"}, "No materials found after preparation")
             return {"CANCELLED"}
 
         os.makedirs(self._export_dir, exist_ok=True)
 
         print(f"[RunBake] Export directory: {self._export_dir}")
-        print(f"[RunBake] Meshes to bake: {[m.name for m in meshes]}")
+        print(f"[RunBake] Materials to bake: {list(meshes_by_material.keys())}")
 
-        # Collect all materials and build task list
-        materials_seen = set()
-        material_mesh_map = {}  # mat_name -> mesh
-
-        for mesh in meshes:
-            if not mesh.data or not mesh.data.materials:
-                print(f"[RunBake] Mesh '{mesh.name}' has no materials, skipping")
-                continue
-            for mat in mesh.data.materials:
-                if mat and mat.name not in materials_seen:
-                    materials_seen.add(mat.name)
-                    material_mesh_map[mat.name] = (mesh, mat)
-                    print(
-                        f"[RunBake] Found material '{mat.name}' on mesh '{mesh.name}'"
-                    )
-
-        if not material_mesh_map:
-            self.report({"ERROR"}, "No materials found on meshes")
-            return {"CANCELLED"}
-
-        # Build task list and overlay display data
+        # Build task list and overlay display data from meshes_by_material
         self._tasks = []
         tasks_by_material = {}
-        task_idx = 0
 
-        for mat_name, (mesh, mat) in material_mesh_map.items():
+        for mat_name, meshes in meshes_by_material.items():
             tasks_by_material[mat_name] = []
 
-            for bake_img in bake_images:
-                # Handle both dict (from pending context) and PropertyGroup access
-                if isinstance(bake_img, dict):
-                    dtp_format = bake_img["format"]
-                    width = int(bake_img["width"])
-                    height = int(bake_img["height"])
-                    img_type = bake_img["image_type"]
-                    optimize = bake_img["optimize_resolution"]
-                else:
-                    dtp_format = bake_img.format
-                    width = int(bake_img.width)
-                    height = int(bake_img.height)
-                    img_type = bake_img.image_type
-                    optimize = bake_img.optimize_resolution
+            # Get material object
+            material = bpy.data.materials.get(mat_name)
+            if not material:
+                print(f"[RunBake] Material '{mat_name}' not found, skipping")
+                continue
+
+            # Calculate ETA multiplier for multi-mesh materials
+            mesh_count = len(meshes)
+            format_count = len(ctx.bake_images)
+
+            for bake_img in ctx.bake_images:
+                # Extract bake image config (already converted to BakeImageConfig)
+                dtp_format = bake_img.format
+                width = int(bake_img.width)
+                height = int(bake_img.height)
+                img_type = bake_img.image_type
+                optimize = bake_img.optimize_resolution
 
                 # Create display task
                 res_str = f"{width}x{height}"
 
                 # Detect render resolution if optimize is enabled
                 render_width, render_height = width, height
-                if optimize and mat:
+                if optimize and material:
                     try:
                         detected = _detect_render_resolution(
-                            mat, dtp_format, (width, height)
+                            material, dtp_format, (width, height)
                         )
                         render_width, render_height = detected
                     except Exception as e:
@@ -818,13 +779,19 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
                 is_rgba = is_rgba_format(dtp_format)
                 bake_type = "bake_rgba" if is_rgba else "bake_rgb"
 
-                # Create work task - store extracted values instead of bake_img reference
+                # Create work task - store material name and meshes list
                 # Use render resolution for ETA calculation
                 megapixels = resolution_to_megapixels(render_width, render_height)
+                
+                # For multi-mesh materials, multiply ETA by (mesh_count × format_count)
+                # This accounts for individual mesh bakes + final merged bake
+                eta_multiplier = mesh_count * format_count if mesh_count > 1 else 1
+                
                 self._tasks.append(
                     {
-                        "mesh": mesh,
-                        "mat": mat,
+                        "material_name": mat_name,
+                        "material": material,
+                        "meshes": meshes,  # List of meshes for this material
                         "dtp_format": dtp_format,
                         "width": width,
                         "height": height,
@@ -835,9 +802,9 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
                         "display_task": display_task,
                         "megapixels": megapixels,
                         "bake_type": bake_type,
+                        "eta_multiplier": eta_multiplier,
                     }
                 )
-                task_idx += 1
 
         print(f"[RunBake] Total bake tasks: {len(self._tasks)}")
 
@@ -853,6 +820,7 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
         self._current_material = ""
         self._awaiting_confirmation = False
         self._pending_bake = False
+        self._awaiting_enter = False
 
         # Initialize overlay
         self._overlay = ProgressOverlay()
@@ -866,9 +834,11 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
         if self._eta.is_calibrated and self._tasks:
             total_eta = 0.0
             for task in self._tasks:
-                task_eta = self._eta.estimate_task_time(
+                base_eta = self._eta.estimate_task_time(
                     task["bake_type"], task["megapixels"]
                 )
+                # Apply multiplier for multi-mesh materials
+                task_eta = base_eta * task["eta_multiplier"]
                 task["display_task"].estimated_seconds = task_eta
                 total_eta += task_eta
             initial_eta = self._eta.format_eta(total_eta)
@@ -950,8 +920,9 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
 
             # Get current task
             task = self._tasks[self._task_index]
-            mesh = task["mesh"]
-            mat = task["mat"]
+            mat_name = task["material_name"]
+            material = task["material"]
+            meshes = task["meshes"]
             megapixels = task["megapixels"]
             bake_type = task["bake_type"]
             dtp_format = task["dtp_format"]
@@ -959,28 +930,37 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
             # Phase 1: Update overlay to show we're about to bake, then return
             # This gives the viewport time to redraw before the blocking bake
             if not self._pending_bake:
+                # Handle wait_for_enter flag
+                if self._wait_for_enter and not self._awaiting_enter:
+                    # Start waiting for Enter key
+                    self._awaiting_enter = True
+                    self._overlay._current_message = f"Press ENTER to bake {mat_name} / {dtp_format}..."
+                    return {"RUNNING_MODAL"}
+                
+                # Check if we're waiting for Enter
+                if self._awaiting_enter:
+                    if event.type in ("RET", "NUMPAD_ENTER") and event.value == "PRESS":
+                        self._awaiting_enter = False
+                        self._pending_bake = True
+                    else:
+                        # Still waiting
+                        return {"RUNNING_MODAL"}
+
                 # Track material changes for ETA
-                if mat.name != self._current_material:
+                if mat_name != self._current_material:
                     if self._current_material:
                         self._materials_completed += 1
-                    self._current_material = mat.name
+                    self._current_material = mat_name
 
                 # Update overlay - mark task as active
                 self._overlay.set_active_task(self._task_index)
 
-                self._pending_bake = True
+                if not self._wait_for_enter or not self._awaiting_enter:
+                    self._pending_bake = True
                 return {"RUNNING_MODAL"}
 
             # Phase 2: Actually perform the bake
             self._pending_bake = False
-
-            # Ensure mesh is accessible (unhide collections it belongs to)
-            _ensure_object_accessible(mesh)
-
-            # Select and activate the mesh
-            bpy.ops.object.select_all(action="DESELECT")
-            mesh.select_set(True)
-            context.view_layer.objects.active = mesh
 
             # Start timing
             import time
@@ -988,26 +968,21 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
             self._task_start_time = time.perf_counter()
             self._eta.start_task(bake_type, megapixels)
 
-            # Perform the bake with error handling
-            width = task["width"]
-            height = task["height"]
-            img_type = task["img_type"]
-            optimize = task["optimize"]
-
+            # Perform the bake using new execute_bake_for_material function
+            resolutions = {}
             try:
-                result_image = bake_dtp_texture(
-                    dtp_format,
-                    mesh,
-                    mat,
-                    resolution=None if optimize else (width, height),
-                    max_resolution=(width, height) if optimize else None,
+                resolutions = execute_bake_for_material(
+                    self._bake_ctx,
+                    mat_name,
+                    meshes,
+                    debug_print=print,
                 )
             except Exception as e:
-                print(f"[RunBake] ERROR baking {dtp_format}: {e}")
+                print(f"[RunBake] ERROR baking {mat_name} / {dtp_format}: {e}")
                 import traceback
 
                 traceback.print_exc()
-                result_image = None
+                resolutions = {}
                 self._overlay.set_error(f"Bake failed: {str(e)[:50]}")
                 self._awaiting_confirmation = True
                 if self._timer:
@@ -1019,33 +994,14 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
             elapsed = time.perf_counter() - self._task_start_time
             self._eta.end_task()
 
-            # Process result
-            if result_image:
-                mat_name = sanitize_name(mat.name)
-                ext = "exr" if img_type == "exr" else "png"
-
-                # Use custom formatter if provided, otherwise use default
-                if self._filename_formatter:
-                    filename = self._filename_formatter(mat_name, dtp_format, ext)
-                else:
-                    filename = f"{mat_name}.{dtp_format}.{ext}"
-                save_path = os.path.join(self._export_dir, filename)
-
-                # Get resolution before saving (image is removed after save)
-                result_w = result_image.size[0]
-                result_h = result_image.size[1]
-
-                if _save_baked_image(result_image, save_path, img_type):
-                    self._baked_count += 1
-                    result_res = f"{result_w}x{result_h}"
-                    self._overlay.mark_task_done(
-                        self._task_index, result_res=result_res, elapsed_seconds=elapsed
-                    )
-                else:
-                    self._failed_count += 1
-                    self._overlay.mark_task_done(
-                        self._task_index, result_res="FAILED", elapsed_seconds=elapsed
-                    )
+            # Process result - get resolution for this specific format
+            if resolutions and dtp_format in resolutions:
+                self._baked_count += 1
+                width, height = resolutions[dtp_format]
+                result_res = f"{width}x{height}"
+                self._overlay.mark_task_done(
+                    self._task_index, result_res=result_res, elapsed_seconds=elapsed
+                )
             else:
                 self._failed_count += 1
                 self._overlay.mark_task_done(
@@ -1054,9 +1010,11 @@ class NYAATOOLS_OT_StartBakeQueue(Operator):
 
             # Recalculate ETAs for remaining pending tasks (scalars may have updated)
             for remaining_task in self._tasks[self._task_index + 1 :]:
-                new_eta = self._eta.estimate_task_time(
+                base_eta = self._eta.estimate_task_time(
                     remaining_task["bake_type"], remaining_task["megapixels"]
                 )
+                # Apply multiplier for multi-mesh materials
+                new_eta = base_eta * remaining_task["eta_multiplier"]
                 remaining_task["display_task"].estimated_seconds = new_eta
 
             # Calculate total ETA for remaining tasks

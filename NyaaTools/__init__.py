@@ -45,9 +45,13 @@ def register():
     from .operators import NyaaSelectStandardBones
     from .operators import PrzemirApplyTopModifier
     from .panels import LinkButton, NyaaPanel
+    from .bake import debug_bake_prepare
 
     # Register PropertyGroups first (operators may reference them)
     types.register()
+
+    # Register bake debug operators
+    debug_bake_prepare.register()
 
     # Register UI module (ETA estimator has scene properties)
     eta_estimator.register()
@@ -99,6 +103,10 @@ def unregister():
     from .operators import NyaaSelectStandardBones
     from .operators import PrzemirApplyTopModifier
     from .panels import LinkButton, NyaaPanel
+    from .bake import debug_bake_prepare
+
+    # Unregister bake debug operators
+    debug_bake_prepare.unregister()
 
     # Unregister panel first
     NyaaPanel.unregister()

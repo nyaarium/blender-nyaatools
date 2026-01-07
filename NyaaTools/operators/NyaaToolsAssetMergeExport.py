@@ -13,7 +13,7 @@ from bpy.props import BoolProperty, StringProperty
 from ..common.file_stuff import sanitize_name
 from ..common.renamer_restore import renamer_restore
 from ..common.resolve_path import resolve_path
-from ..panels.operators_bake import set_pending_bake_context
+from ..bake.bake_context import set_pending_bake_context
 
 from ..asset.asset_lookup import (
     get_asset_by_name,
@@ -222,11 +222,11 @@ def perform_merge_export(
         export_path = get_export_path_from_asset(asset_host)
 
         # Capture mesh names BEFORE export (VotV export merges meshes, deleting originals)
-        # Filter out UCX collision meshes (safety check)
+        # Note: Collider filtering is now handled by is_ue_collider flag in bake context
         merged_mesh_list = [
             obj
             for obj in (list(merged_layers.values()) if merged_layers else [])
-            if obj.type == "MESH" and not obj.name.upper().startswith("UCX_")
+            if obj.type == "MESH"
         ]
         mesh_names = [obj.name for obj in merged_mesh_list] if merged_mesh_list else []
 
@@ -269,16 +269,13 @@ def perform_merge_export(
                 bake_dir = os.path.join(blend_dir, "textures")
 
             # For VotV exports, meshes are merged into a single object
-            # Find the merged object after export (exclude UCX meshes)
+            # Find the merged object after export
+            # Note: Collider filtering is now handled by is_ue_collider flag in bake context
             if export_format == "votv":
                 clean_asset_name = sanitize_name(asset_name, strict=True)
                 merged_obj = None
                 for obj in temp_scene.objects:
-                    if (
-                        obj.type == "MESH"
-                        and obj.name == clean_asset_name
-                        and not obj.name.upper().startswith("UCX_")
-                    ):
+                    if obj.type == "MESH" and obj.name == clean_asset_name:
                         merged_obj = obj
                         break
                 if merged_obj:
@@ -342,6 +339,8 @@ def perform_merge_export(
                 bake_dir,
                 on_cleanup=cleanup_merge_export,
                 filename_formatter=filename_formatter,
+                wait_for_enter=False,  # Merge & Export doesn't wait
+                asset_host=asset_host,  # Pass asset host for meta tracking
             )
             baking_pending = True
             debug_print(f"🍞 Baking queued for {len(merged_mesh_list)} merged meshes")
@@ -417,7 +416,7 @@ def _finalize_and_export(
         # Ensure parent directory exists
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-        bpy.ops.export_scene.obj(
+        bpy.ops.wm.obj_export(
             filepath=path,
             check_existing=False,
             filter_glob="*.obj",

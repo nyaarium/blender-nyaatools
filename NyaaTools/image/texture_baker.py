@@ -18,7 +18,7 @@ def _get_bake_margin(resolution: Tuple[int, int]) -> int:
     """
     width, height = resolution
     max_dimension = max(width, height)
-    return int(max_dimension / 16)
+    return max(16, int(max_dimension / 8))
 
 
 # DTP channel mapping for sockets and texture baking
@@ -62,7 +62,23 @@ def bake_dtp_texture(
     material: bpy.types.Material,
     resolution: Optional[Tuple[int, int]] = None,
     max_resolution: Optional[Tuple[int, int]] = None,
+    uv_layer_name: Optional[str] = None,
 ) -> Optional[bpy.types.Image]:
+    """
+    Bake a material to a texture using DTP format specification.
+
+    Args:
+        dtp_format: DTP format string (e.g., "rgba", "normalgl", "me-sp-ro")
+        obj: The mesh object to bake from
+        material: The material to bake
+        resolution: Fixed resolution (width, height). If None, auto-detect.
+        max_resolution: Maximum resolution cap (width, height)
+        uv_layer_name: Specific UV layer to use. If None, uses first UV layer.
+
+    Returns:
+        The baked image, or None if baking failed
+    """
+
     def debug_print(*msgs):
         print("        ", *msgs)
         return
@@ -117,6 +133,16 @@ def bake_dtp_texture(
         debug_print(f"Warning: Could not ensure UV map for object {obj.name}")
         return None
 
+    # Set active UV layer for baking
+    # First UV is always the displayable UV
+    mesh_data = obj.data
+    if mesh_data.uv_layers:
+        target_uv_name = uv_layer_name if uv_layer_name else mesh_data.uv_layers[0].name
+        target_uv = mesh_data.uv_layers.get(target_uv_name)
+        if target_uv:
+            mesh_data.uv_layers.active = target_uv
+            debug_print(f"Using UV layer: {target_uv_name}")
+
     # Store original render settings
     scene = bpy.context.scene
     original_engine = scene.render.engine
@@ -156,6 +182,13 @@ def bake_dtp_texture(
                     min(final_resolution[1], max_height),
                 )
 
+            # Get UV layer name for UVMap node
+            target_uv_name = (
+                uv_layer_name
+                if uv_layer_name
+                else (mesh_data.uv_layers[0].name if mesh_data.uv_layers else None)
+            )
+
             # Bake normal
             result = _bake_normal_output(
                 dtp_format,
@@ -165,6 +198,7 @@ def bake_dtp_texture(
                 principled_tree,
                 normal_output_node,
                 final_resolution,
+                target_uv_name,
                 debug_print,
             )
 
@@ -195,6 +229,13 @@ def bake_dtp_texture(
                     min(final_resolution[1], max_height),
                 )
 
+            # Get UV layer name for UVMap node
+            target_uv_name = (
+                uv_layer_name
+                if uv_layer_name
+                else (mesh_data.uv_layers[0].name if mesh_data.uv_layers else None)
+            )
+
             # Bake emission
             result = _bake_emission_output(
                 dtp_format,
@@ -204,6 +245,7 @@ def bake_dtp_texture(
                 rgb_output_node,
                 alpha_output_node,
                 final_resolution,
+                target_uv_name,
                 debug_print,
             )
 
@@ -430,6 +472,7 @@ def _bake_emission_output(
     rgb_output_node: object,
     alpha_output_node: Optional[object],
     resolution: Tuple[int, int],
+    uv_layer_name: Optional[str],
     debug_print,
 ) -> Optional[bpy.types.Image]:
     # Create temporary Material Output node in the same tree as the emission node
@@ -459,6 +502,20 @@ def _bake_emission_output(
     img_node.image = rgb_image
     img_node.select = True
     root_tree.nodes.active = img_node
+
+    # Add UVMap node and connect to Image Texture (1st UV is always displayable UV)
+    if uv_layer_name:
+        uv_node = shader_state.add_node(root_tree, "ShaderNodeUVMap")
+        uv_node.uv_map = uv_layer_name
+        uv_node.location = (img_node.location.x - 200, img_node.location.y)
+        shader_state.connect_sockets(
+            root_tree,
+            uv_node,
+            "UV",
+            img_node,
+            "Vector",
+            "UV map to image texture",
+        )
 
     # Connect RGB emission to Material Output
     shader_state.connect_sockets(
@@ -536,6 +593,7 @@ def _bake_normal_output(
     principled_tree: bpy.types.NodeTree,
     normal_output_node: object,
     resolution: Tuple[int, int],
+    uv_layer_name: Optional[str],
     debug_print,
 ) -> Optional[bpy.types.Image]:
     # Create target image
@@ -552,6 +610,20 @@ def _bake_normal_output(
     img_node.image = target_image
     img_node.select = True
     root_tree.nodes.active = img_node
+
+    # Add UVMap node and connect to Image Texture (1st UV is always displayable UV)
+    if uv_layer_name:
+        uv_node = shader_state.add_node(root_tree, "ShaderNodeUVMap")
+        uv_node.uv_map = uv_layer_name
+        uv_node.location = (img_node.location.x - 200, img_node.location.y)
+        shader_state.connect_sockets(
+            root_tree,
+            uv_node,
+            "UV",
+            img_node,
+            "Vector",
+            "UV map to image texture",
+        )
 
     # Create temporary Principled BSDF for normal baking in the same tree as the normal output
     temp_principled = shader_state.add_node(principled_tree, "ShaderNodeBsdfPrincipled")
