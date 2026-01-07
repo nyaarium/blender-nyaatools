@@ -12,23 +12,13 @@ from .texture_utils import resize_image_to_size
 from .texture_utils import _image_to_np, _np_to_image_pixels
 
 
-# Constants
-BAKE_MARGIN = 256
-
-
 def _get_bake_margin(resolution: Tuple[int, int]) -> int:
     """
-    Calculate appropriate bake margin based on resolution.
-    For very small textures, use a smaller margin to avoid processing overhead.
+    Calculate bake margin based on resolution.
     """
     width, height = resolution
-    min_dimension = min(width, height)
-    # For textures smaller than 256px, use a margin proportional to size
-    # For larger textures, use the full 256px margin
-    if min_dimension < 256:
-        # Use 1/4 of the smallest dimension, min 8
-        return max(8, min_dimension)
-    return BAKE_MARGIN
+    max_dimension = max(width, height)
+    return int(max_dimension / 16)
 
 
 # DTP channel mapping for sockets and texture baking
