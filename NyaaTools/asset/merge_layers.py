@@ -9,7 +9,7 @@ import bpy
 from ..mesh.cleanup_mesh import cleanup_mesh
 from ..common.renamer_rename import rename_object
 from .merge_onto_layer import merge_onto_layer
-
+from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
 from .asset_lookup import get_asset_meshes_by_layer
 
 
@@ -388,16 +388,24 @@ def apply_armature_modifiers_and_remove(objects, armature, debug_print=None):
         if obj.type != "MESH":
             continue
 
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
 
         for mod in list(obj.modifiers):
             if mod.type == "ARMATURE" and mod.object == armature:
                 try:
-                    bpy.ops.object.modifier_apply(modifier=mod.name)
+                    success, error_info = applyModifierForObjectWithShapeKeys(
+                        bpy.context, [mod.name], False
+                    )
+                    if not success:
+                        raise RuntimeError(
+                            f"Failed to apply armature modifier '{mod.name}' on '{obj.name}': {error_info or 'Unknown error'}"
+                        )
                     debug_print(f"Applied armature modifier on {obj.name}")
                 except RuntimeError as e:
-                    debug_print(
-                        f"⚠️ Could not apply armature modifier on {obj.name}: {e}"
+                    raise RuntimeError(
+                        f"Failed to apply armature modifier '{mod.name}' on '{obj.name}': {e}"
                     )
 
     bpy.data.objects.remove(armature, do_unlink=True)
