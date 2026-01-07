@@ -88,6 +88,30 @@ def is_votv_printer_path(path: str) -> bool:
     return normalized.endswith(VOTV_PRINTER_SUFFIX)
 
 
+def update_export_path(self, context):
+    """Callback for path property update. Appends / if path doesn't end with an extension."""
+    if not self.path:
+        return
+
+    # Already ends with directory separator, do nothing
+    if self.path.endswith("/") or self.path.endswith("\\"):
+        return
+
+    # Check if last component has a file extension
+    last_component = self.path.split("/")[-1].split("\\")[-1]
+    if "." in last_component:
+        # Has a dot, check if it's a valid extension
+        parts = last_component.split(".")
+        if len(parts) > 1 and parts[-1]:
+            extension = parts[-1].lower()
+            # Common file extensions for export
+            if extension in ("fbx", "obj"):
+                return
+
+    # No extension found, append directory separator
+    self.path = self.path + "/"
+
+
 def update_export_format(self, context):
     """Callback for format property update."""
     global _votv_restore_state
@@ -252,7 +276,9 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
         ],
         default="file",
     )
-    path: StringProperty(name="Path", default="", subtype="FILE_PATH")
+    path: StringProperty(
+        name="Path", default="", subtype="FILE_PATH", update=update_export_path
+    )
     format: EnumProperty(
         name="Format",
         items=[
@@ -356,7 +382,9 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         ],
         default="file",
     )
-    path: StringProperty(name="Path", default="", subtype="FILE_PATH")
+    path: StringProperty(
+        name="Path", default="", subtype="FILE_PATH", update=update_export_path
+    )
     format: EnumProperty(
         name="Format",
         items=[
