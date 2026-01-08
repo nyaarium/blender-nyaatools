@@ -536,6 +536,7 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
         profile = cfg.export_profiles[cfg.active_export_index]
 
         return bpy.ops.nyaa.asset_merge_export(
+            "INVOKE_DEFAULT",
             asset_name=cfg.asset_name,
             export_format=profile.format,
             target_type=profile.target_type,
@@ -545,10 +546,3 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
         )
 
 
-EXPORT_OPERATOR_CLASSES = [
-    NYAATOOLS_OT_SetVotvPath,
-    NYAATOOLS_OT_AddExportProfile,
-    NYAATOOLS_OT_EditExportProfile,
-    NYAATOOLS_OT_RemoveExportProfile,
-    NYAATOOLS_OT_RunExportProfile,
-]

@@ -3,7 +3,7 @@ import bpy
 from bpy.props import StringProperty
 
 
-class LinkButton(bpy.types.Operator):
+class NYAATOOLS_OT_LinkButton(bpy.types.Operator):
     """Open links in a web browser"""
 
     bl_idname = "ops.open_link"

@@ -49,7 +49,7 @@ eb = Emission (blue)
 es = Emission Strength"""
 
 
-class NyaaToolsHelpImageFormat(bpy.types.Operator):
+class NYAATOOLS_OT_HelpDTPFormat(bpy.types.Operator):
     """Display help about DTP image format naming convention"""
 
     bl_idname = "nyaa.help_image_formats"

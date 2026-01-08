@@ -2,7 +2,7 @@ import traceback
 import bpy
 
 
-class NyaaToolsDissolveBones(bpy.types.Operator):
+class NYAATOOLS_OT_DissolveBones(bpy.types.Operator):
     """Dissolve a selection of bones and combine the vertex groups of affected meshes. Good for reducing hair bones. Important: Only affects meshes that have this armature as the deform modifier."""
 
     bl_idname = "nyaa.dissolve_bones"

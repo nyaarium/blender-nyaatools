@@ -13,7 +13,7 @@ from ..common.selection_get_armature import selection_get_armature
 from ..bone_desc_map import BONE_DESC_MAP
 
 
-class NyaaToolsNormalizeArmatureATPose(bpy.types.Operator):
+class NYAATOOLS_OT_NormalizeArmatureATPose(bpy.types.Operator):
     """Normalizes armatures to Nyaa's preferred A or T pose layout"""
 
     bl_idname = "nyaa.normalize_armature_at_pose"

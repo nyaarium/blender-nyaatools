@@ -6,7 +6,7 @@ from ..common.selection_get_armature import selection_get_armature
 from ..bone_desc_map import BONE_DESC_MAP
 
 
-class NyaaSelectStandardBones(bpy.types.Operator):
+class NYAATOOLS_OT_SelectStandardBones(bpy.types.Operator):
     """Select only the standard bones of a humanoid armature. Must be Nyaa Normalized."""
 
     bl_idname = "nyaa.select_standard_bones"

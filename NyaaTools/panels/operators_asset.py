@@ -940,14 +940,3 @@ class NYAATOOLS_OT_RenameLayer(Operator):
         return {"FINISHED"}
 
 
-ASSET_OPERATOR_CLASSES = [
-    NYAATOOLS_OT_MarkAsAsset,
-    NYAATOOLS_OT_UnmarkAsset,
-    NYAATOOLS_OT_CreateAssetFromMesh,
-    NYAATOOLS_OT_JumpToAsset,
-    NYAATOOLS_OT_AddSelectedMeshes,
-    NYAATOOLS_OT_RemoveMesh,
-    NYAATOOLS_OT_RemoveSelectedMeshes,
-    NYAATOOLS_OT_EditMeshEntry,
-    NYAATOOLS_OT_RenameLayer,
-]

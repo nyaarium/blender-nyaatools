@@ -2,7 +2,7 @@ import bpy
 import traceback
 
 
-class NyaaToolsImagePacker(bpy.types.Operator):
+class NYAATOOLS_OT_ImagePacker(bpy.types.Operator):
     """Pack or unpack images used by selected meshes"""
 
     bl_idname = "nyaa.image_packer"

@@ -1,8 +1,8 @@
 """
-Collection export functionality.
+Collection export helpers.
 
-Exports assets to a __Export__ collection and marks them as Blender assets
-for use in downstream render scenes via the Asset Browser.
+Helper functions for exporting assets to a __Export__ collection.
+The main export logic is in NyaaToolsAssetMergeExport operator.
 """
 
 import os
@@ -11,13 +11,6 @@ import bpy
 
 from ..common.file_stuff import sanitize_name
 from ..common.resolve_path import resolve_path
-from ..common.renamer_restore import renamer_restore
-from ..bake.bake_context import set_pending_bake_context
-from .merge_layers import (
-    merge_asset_layers,
-    copy_armature_to_collection,
-    apply_armature_modifiers_and_remove,
-)
 
 
 EXPORT_COLLECTION_NAME = "__Export__"
@@ -45,11 +38,9 @@ def get_or_create_export_collection():
     if collection.name not in bpy.context.scene.collection.children:
         bpy.context.scene.collection.children.link(collection)
 
-    # Move to top of collection list by unlinking and relinking at index 0
+    # Move to top of collection list by unlinking and relinking
     try:
         bpy.context.scene.collection.children.unlink(collection)
-        # Link it back - Blender doesn't have direct index control,
-        # but we can use move_above/move_below with operators if needed
         bpy.context.scene.collection.children.link(collection)
     except RuntimeError:
         pass
@@ -84,20 +75,17 @@ def set_collection_visibility(collection, hide=True, hide_render=True):
     Args:
         collection: The collection to modify
         hide: If True, hide from viewport
-        hide_render: If True, hide from renders (always True for __Export__)
+        hide_render: If True, hide from renders
     """
-    # Hide in viewport at the collection level
     collection.hide_viewport = hide
-    # Always hide __Export__ from renders
     collection.hide_render = hide_render
 
-    # Also set view layer visibility if available
     view_layer = bpy.context.view_layer
-    layer_collection = find_layer_collection(
+    layer_collection = _find_layer_collection(
         view_layer.layer_collection, collection.name
     )
     if layer_collection:
-        layer_collection.exclude = False  # Don't exclude, keep in view layer
+        layer_collection.exclude = False
         layer_collection.hide_viewport = hide
 
 
@@ -108,12 +96,10 @@ def ensure_collection_accessible(collection):
     Args:
         collection: The collection to make accessible
     """
-    # Unhide at collection level
     collection.hide_viewport = False
 
-    # Ensure it's in the view layer and not excluded
     view_layer = bpy.context.view_layer
-    layer_collection = find_layer_collection(
+    layer_collection = _find_layer_collection(
         view_layer.layer_collection, collection.name
     )
     if layer_collection:
@@ -121,12 +107,12 @@ def ensure_collection_accessible(collection):
         layer_collection.hide_viewport = False
 
 
-def find_layer_collection(layer_collection, name):
+def _find_layer_collection(layer_collection, name):
     """Recursively find a LayerCollection by name."""
     if layer_collection.name == name:
         return layer_collection
     for child in layer_collection.children:
-        result = find_layer_collection(child, name)
+        result = _find_layer_collection(child, name)
         if result:
             return result
     return None
@@ -140,7 +126,7 @@ def get_textures_directory(asset_host):
         asset_host: The asset host object
 
     Returns:
-        Path to textures directory or None
+        Path to textures directory
     """
     cfg = asset_host.nyaa_asset
     if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
@@ -180,7 +166,6 @@ def find_baked_textures(textures_dir, material_name):
 
         parts = filename.rsplit(".", 2)
         if len(parts) >= 3:
-            # parts[-1] is extension, parts[-2] is dtp_format
             dtp_format = parts[-2]
             filepath = os.path.join(textures_dir, filename)
             found[dtp_format] = filepath
@@ -294,197 +279,3 @@ def create_baked_material(original_mat, textures_dir):
                     links.new(invert.outputs["Value"], principled.inputs["Roughness"])
 
     return new_mat
-
-
-TEMP_SCENE_NAME = "Temp Merge & Export"
-
-
-def export_to_collection(
-    asset_host,
-    export_static=False,
-    bake_after_export=False,
-    include_ue_colliders=False,
-    debug_print=None,
-):
-    """
-    Export asset to __Export__ collection and mark as Blender asset.
-
-    Uses the same layer merge logic as file-based export to ensure consistency.
-    Creates a temp scene for merging (required by merge operators), then moves
-    the result to the __Export__ collection.
-
-    Args:
-        asset_host: The asset host object (armature or mesh) with nyaa_asset config
-        export_static: If True, apply pose and modifiers, remove armature
-        bake_after_export: If True, bake textures from merged meshes before moving to collection
-        include_ue_colliders: If True, include UCX_ collision meshes in export
-        debug_print: Optional function for debug output
-
-    Returns:
-        tuple: (exported_objects, baking_pending)
-    """
-    if debug_print is None:
-
-        def debug_print(*args):
-            print("   ", *args)
-
-    cfg = asset_host.nyaa_asset
-    asset_name = cfg.asset_name
-    is_static_asset = asset_host.type == "MESH"
-    treat_as_static = is_static_asset or export_static
-
-    # Purge orphans first to avoid name collisions with deleted objects
-    bpy.ops.outliner.orphans_purge(do_recursive=True)
-
-    # Get or create export collection and clear it
-    export_collection = get_or_create_export_collection()
-    clear_export_collection()
-
-    # Ensure collection is accessible for operations
-    ensure_collection_accessible(export_collection)
-
-    # Get textures directory for material assignment
-    textures_dir = get_textures_directory(asset_host)
-
-    # Create temp scene for merge operations (required by merge_onto_layer)
-    temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
-    if temp_scene:
-        bpy.data.scenes.remove(temp_scene, do_unlink=True)
-        bpy.ops.outliner.orphans_purge(do_recursive=True)
-
-    temp_scene = bpy.data.scenes.new(name=TEMP_SCENE_NAME)
-    original_scene = bpy.context.window.scene
-    bpy.context.window.scene = temp_scene
-
-    # Update view layer after scene switch
-    bpy.context.view_layer.update()
-
-    exported_objects = []
-    unrename_info = []
-    error = None
-
-    try:
-        armature_copy = None
-
-        # For armature-based assets, copy armature (unless exporting static)
-        if not is_static_asset and not export_static:
-            armature_copy, arm_unrename = copy_armature_to_collection(
-                asset_host, temp_scene.collection, asset_name, debug_print
-            )
-            unrename_info.extend(arm_unrename)
-
-        # Merge meshes by layer in temp scene (and optionally process colliders)
-        merged_layers, collider_objects, mesh_unrename = merge_asset_layers(
-            asset_host,
-            temp_scene.collection,
-            armature_copy,
-            include_colliders=include_ue_colliders,
-            debug_print=debug_print,
-        )
-        unrename_info.extend(mesh_unrename)
-
-        # Apply armature modifier and remove armature if exporting static
-        if export_static and armature_copy:
-            apply_armature_modifiers_and_remove(
-                temp_scene.objects, armature_copy, debug_print
-            )
-            armature_copy = None
-
-        # Move objects from temp scene to export collection
-        for obj in list(temp_scene.collection.objects):
-            # Unlink from temp scene
-            temp_scene.collection.objects.unlink(obj)
-            # Link to export collection
-            export_collection.objects.link(obj)
-            exported_objects.append(obj)
-
-        # Mark as Blender asset (don't mark colliders as assets)
-        collider_names = {obj.name for obj in collider_objects}
-        if armature_copy and not treat_as_static:
-            # For rigged assets, mark the armature
-            armature_copy.asset_mark()
-            armature_copy.asset_generate_preview()
-            debug_print(f"✅ Marked as asset: {armature_copy.name}")
-        else:
-            # For static exports, mark each mesh (except colliders)
-            for obj in exported_objects:
-                if obj.type == "MESH" and obj.name not in collider_names:
-                    obj.asset_mark()
-                    obj.asset_generate_preview()
-                    debug_print(f"✅ Marked as asset: {obj.name}")
-
-    except Exception as e:
-        error = e
-
-    finally:
-        # Restore original scene and clean up temp scene
-        bpy.context.window.scene = original_scene
-
-        temp_scene = bpy.data.scenes.get(TEMP_SCENE_NAME)
-        if temp_scene:
-            bpy.data.scenes.remove(temp_scene, do_unlink=True)
-            bpy.ops.outliner.orphans_purge(do_recursive=True)
-
-        # Restore any objects that were renamed due to conflicts
-        renamer_restore(unrename_info)
-
-        # Force context update to ensure selection is recognized
-        bpy.context.view_layer.update()
-
-        if error:
-            raise error
-
-    # Set up pending bake context if baking is requested
-    # For collection export, meshes are now in the main scene (export collection)
-    # Note: Collider filtering is now handled by is_ue_collider flag in bake context
-    baking_pending = False
-    if bake_after_export and exported_objects:
-        # Get all mesh objects (collider filtering handled by is_ue_collider flag)
-        mesh_objects = [
-            obj
-            for obj in exported_objects
-            if obj.type == "MESH"
-        ]
-        if mesh_objects:
-            # Capture values for cleanup lambda
-            collection_name = export_collection.name
-            mesh_names = [obj.name for obj in mesh_objects]
-            tex_dir = textures_dir
-
-            def cleanup_collection_export():
-                """Assign baked materials and hide collection after baking."""
-                # Assign baked materials to exported meshes
-                for mesh_name in mesh_names:
-                    obj = bpy.data.objects.get(mesh_name)
-                    if obj and obj.type == "MESH":
-                        for slot in obj.material_slots:
-                            if slot.material:
-                                baked_mat = create_baked_material(
-                                    slot.material, tex_dir
-                                )
-                                if baked_mat:
-                                    slot.material = baked_mat
-                                    print(
-                                        f"🎨 Assigned baked material: {baked_mat.name}"
-                                    )
-
-                # Hide export collection
-                coll = bpy.data.collections.get(collection_name)
-                if coll:
-                    set_collection_visibility(coll, hide=True, hide_render=True)
-
-            set_pending_bake_context(
-                mesh_objects,
-                cfg.bake_images,
-                textures_dir,
-                on_cleanup=cleanup_collection_export,
-                wait_for_enter=False,  # Collection export doesn't wait
-                asset_host=asset_host,  # Pass asset host for meta tracking
-            )
-            baking_pending = True
-            debug_print(f"🍞 Baking queued for {len(mesh_objects)} exported meshes")
-    else:
-        # Only hide collection if not baking (baking will hide it when done)
-        set_collection_visibility(export_collection, hide=True, hide_render=True)
-
-    return exported_objects, baking_pending

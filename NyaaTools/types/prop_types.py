@@ -34,22 +34,3 @@ class NyaaPropConfig(bpy.types.PropertyGroup):
     )
 
 
-CLASSES = [
-    NyaaPropConfig,
-]
-
-
-def register():
-    for cls in CLASSES:
-        bpy.utils.register_class(cls)
-
-    # Attach to Object type
-    bpy.types.Object.nyaa_prop = PointerProperty(type=NyaaPropConfig)
-
-
-def unregister():
-    if hasattr(bpy.types.Object, "nyaa_prop"):
-        del bpy.types.Object.nyaa_prop
-
-    for cls in reversed(CLASSES):
-        bpy.utils.unregister_class(cls)

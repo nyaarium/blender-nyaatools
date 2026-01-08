@@ -209,27 +209,3 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
     )
 
 
-# Registration order matters: dependencies first
-CLASSES = [
-    NyaaAssetMeshEntry,
-    NyaaExportProfile,
-    NyaaBakeImage,
-    NyaaAssetConfig,
-]
-
-
-def register():
-    for cls in CLASSES:
-        bpy.utils.register_class(cls)
-
-    # Attach to Object type (works for both Armatures and Meshes)
-    bpy.types.Object.nyaa_asset = PointerProperty(type=NyaaAssetConfig)
-
-
-def unregister():
-    # Remove from Object type
-    if hasattr(bpy.types.Object, "nyaa_asset"):
-        del bpy.types.Object.nyaa_asset
-
-    for cls in reversed(CLASSES):
-        bpy.utils.unregister_class(cls)

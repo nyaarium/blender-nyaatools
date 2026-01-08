@@ -16,11 +16,6 @@ from .panels_context import (
     get_selection_context,
     selection_has_legacy_data,
 )
-from .panels_utils import (
-    NYAATOOLS_PT_ArmatureTools,
-    NYAATOOLS_PT_MeshTools,
-    NYAATOOLS_PT_Normalization,
-)
 
 
 # =============================================================================
@@ -395,14 +390,3 @@ class NYAATOOLS_PT_AssetParts(Panel):
 
         layout.label(text="Assigned Meshes:")
         draw_asset_meshes_list(layout, sel.asset)
-
-
-# Combine all panel classes in order
-PANEL_CLASSES = [
-    NYAATOOLS_PT_Main,
-    NYAATOOLS_PT_AssetConfig,
-    NYAATOOLS_PT_AssetParts,
-    NYAATOOLS_PT_MeshTools,
-    NYAATOOLS_PT_ArmatureTools,
-    NYAATOOLS_PT_Normalization,
-]

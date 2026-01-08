@@ -67,8 +67,8 @@ class BakeContext:
     save_to_file: bool = True
     wait_for_enter: bool = True  # Merge & Export sets this to False
 
-    # Cleanup
-    on_cleanup: Optional[Callable[[], None]] = None
+    # Cleanup - called with reason: 'success' | 'error' | 'cancel'
+    on_cleanup: Optional[Callable[[str], None]] = None
 
     # Debug state
     debug_mode: bool = False

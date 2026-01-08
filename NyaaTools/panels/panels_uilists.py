@@ -150,8 +150,3 @@ class NYAATOOLS_UL_BakeImages(UIList):
             layout.label(text="", icon="IMAGE_DATA")
 
 
-UILIST_CLASSES = [
-    NYAATOOLS_UL_AssetMeshes,
-    NYAATOOLS_UL_ExportProfiles,
-    NYAATOOLS_UL_BakeImages,
-]

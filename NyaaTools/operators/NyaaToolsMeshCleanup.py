@@ -9,7 +9,7 @@ from ..mesh.remove_unused_vertex_groups import remove_unused_vertex_groups
 from ..asset.merge_layers import sort_mesh_elements_by_material
 
 
-class NyaaToolsMeshCleanup(bpy.types.Operator):
+class NYAATOOLS_OT_MeshCleanup(bpy.types.Operator):
     """Removes unused vertex groups, shape keys, and materials from a mesh object"""
 
     bl_idname = "nyaa.mesh_cleanup"

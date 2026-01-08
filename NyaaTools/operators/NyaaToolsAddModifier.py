@@ -5,7 +5,7 @@ from bpy.props import StringProperty
 from ..common.selection_get_meshes import selection_get_meshes
 
 
-class NyaaToolsAddModifier(bpy.types.Operator):
+class NYAATOOLS_OT_AddModifier(bpy.types.Operator):
     """Adds a modifier to the selected objects"""
 
     bl_idname = "nyaa.add_modifier"

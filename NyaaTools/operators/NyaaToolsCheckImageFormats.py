@@ -4,7 +4,7 @@ import traceback
 from ..image.dtp_format import is_filename_dtp_formatted
 
 
-class NyaaToolsCheckImageFormats(bpy.types.Operator):
+class NYAATOOLS_OT_CheckImageFormats(bpy.types.Operator):
     """Check if images in selected meshes follow Nyaarium's DTP naming convention"""
 
     bl_idname = "nyaa.check_image_formats"

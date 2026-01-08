@@ -199,6 +199,3 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
         return {"FINISHED"}
 
 
-MIGRATE_OPERATOR_CLASSES = [
-    NYAATOOLS_OT_MigrateLegacyData,
-]

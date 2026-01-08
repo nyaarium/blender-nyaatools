@@ -6,7 +6,7 @@ from ..armature.merge_armatures import merge_armatures
 is_armature = lambda self, object: object.type == "ARMATURE"
 
 
-class NyaaToolsMergeArmatures(bpy.types.Operator):
+class NYAATOOLS_OT_MergeArmatures(bpy.types.Operator):
     """
     Merge bones from another armature into the active armature
     """

@@ -4,7 +4,7 @@ import traceback
 from ..image.renamePackedImage import renamePackedImage
 
 
-class NyaaToolsRenamePackedImage(bpy.types.Operator):
+class NYAATOOLS_OT_RenamePackedImage(bpy.types.Operator):
     """Rename packed images to match their name in Blender"""
 
     bl_idname = "nyaa.rename_packed_images"

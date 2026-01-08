@@ -6,7 +6,7 @@ from ..armature.normalize_armature_rename_bones import normalize_armature_rename
 from ..common.selection_get_armature import selection_get_armature
 
 
-class NyaaToolsNormalizeArmatureRename(bpy.types.Operator):
+class NYAATOOLS_OT_NormalizeArmatureRename(bpy.types.Operator):
     """Renames bones in armatures to Nyaa's preferred naming convention"""
 
     bl_idname = "nyaa.normalize_armature_rename"

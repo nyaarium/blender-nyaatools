@@ -76,25 +76,3 @@ class NyaaToolsSettings(bpy.types.PropertyGroup):
     export: PointerProperty(type=NyaaToolsExportSettings)
 
 
-# Registration order matters
-CLASSES = [
-    NyaaToolsBakeSettings,
-    NyaaToolsExportSettings,
-    NyaaToolsSettings,
-]
-
-
-def register():
-    for cls in CLASSES:
-        bpy.utils.register_class(cls)
-
-    # Attach to Scene for per-file persistence
-    bpy.types.Scene.nyaa_settings = PointerProperty(type=NyaaToolsSettings)
-
-
-def unregister():
-    if hasattr(bpy.types.Scene, "nyaa_settings"):
-        del bpy.types.Scene.nyaa_settings
-
-    for cls in reversed(CLASSES):
-        bpy.utils.unregister_class(cls)

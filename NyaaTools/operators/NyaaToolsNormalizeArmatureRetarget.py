@@ -6,7 +6,7 @@ from ..armature.normalize_armature_retarget import normalize_armature_retarget
 from ..common.selection_get_armature import selection_get_armature
 
 
-class NyaaToolsNormalizeArmatureRetarget(bpy.types.Operator):
+class NYAATOOLS_OT_NormalizeArmatureRetarget(bpy.types.Operator):
     """Retarget the animation on this armature to match source armature. A new dopesheet animation will be created."""
 
     bl_idname = "nyaa.normalize_armature_retarget"

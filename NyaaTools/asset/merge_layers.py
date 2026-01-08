@@ -136,6 +136,75 @@ def sort_mesh_elements_by_material(mesh_obj, debug_print=None):
         bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def merge_single_layer(
+    layer_name,
+    layer_meshes,
+    target_collection,
+    armature_copy=None,
+    debug_print=None,
+):
+    """
+    Copy and merge meshes for a single layer into a target collection.
+
+    Args:
+        layer_name: Name of the layer
+        layer_meshes: Dict of {mesh_name: mesh_object} for this layer
+        target_collection: Collection to link copied objects to
+        armature_copy: Optional copied armature (None for static/mesh-hosted assets)
+        debug_print: Optional debug print function
+
+    Returns:
+        tuple: (merged_mesh_object, unrename_info)
+            - merged_mesh_object: The resulting merged mesh object
+            - unrename_info: list of rename info for restoration
+    """
+    if debug_print is None:
+
+        def debug_print(*args):
+            pass
+
+    unrename_info = []
+    first_visit = True
+
+    for mesh_name in layer_meshes:
+        mesh = layer_meshes[mesh_name]
+
+        mesh_copy = mesh.copy()
+        mesh_copy.data = mesh.data.copy()
+        layer_meshes[mesh_name] = mesh_copy
+        target_collection.objects.link(mesh_copy)
+
+        # Clear nyaa_asset config on copy (don't want exported objects marked as assets)
+        if hasattr(mesh_copy, "nyaa_asset"):
+            mesh_copy.nyaa_asset.is_asset = False
+            mesh_copy.nyaa_asset.asset_name = ""
+            mesh_copy.nyaa_asset.meshes.clear()
+            mesh_copy.nyaa_asset.export_profiles.clear()
+            mesh_copy.nyaa_asset.bake_images.clear()
+
+        if first_visit:
+            unrename_info.extend(rename_object(mesh_copy, layer_name))
+            first_visit = False
+            debug_print(f"📦 Created layer: {layer_name}")
+
+        merge_onto_layer(layer_name, mesh_copy, armature_copy)
+        debug_print(f"   Merged: {mesh_name}")
+
+    # Get the merged result (named after the layer)
+    merged_obj = None
+    for obj in target_collection.objects:
+        if obj.name == layer_name and obj.type == "MESH":
+            merged_obj = obj
+            break
+
+    if merged_obj:
+        cleanup_mesh(merged_obj)
+        sort_mesh_elements_by_material(merged_obj, debug_print)
+        debug_print(f"✅ Cleaned up layer: {layer_name}")
+
+    return merged_obj, unrename_info
+
+
 def merge_asset_layers(
     asset_host,
     target_collection,
