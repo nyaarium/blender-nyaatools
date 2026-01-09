@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+---
+# Blender Development
+
+## Deploying changes
+
+Command: `./dev_deploy.sh | grep ".py"`
+
+After making changes, auto-run the command to deploy to Blender. Inform the user to reload the addon after calling it.
+
+## Debugging across Windows/WSL filesystem boundaries
+
+Blender runs on Windows, code workspace is in WSL.
+
+### Write diagnostics as Windows paths
+
+In Blender Python, have instrumentation write diagnostics to Windows %TEMP% path.
+
+```python
+# Writes to: C:\Users\{username}\AppData\Local\Temp\...
+log_path = os.path.join(tempfile.gettempdir(), ...)
+```
+
+### Read diagnostics as Linux paths
+
+As the agent, you can read the diagnostics from Linux /mnt/ path. Tools like `read_file` or `grep` can access over filesystem boundary at: `/mnt/c/Users/{username}/AppData/Local/Temp/...`.
+
+### Cleanup logs before next `<reproduction_steps>`
+
+After you read the diagnostics, delete it to reduce bloat during the next debug cycle.
