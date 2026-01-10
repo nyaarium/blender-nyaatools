@@ -182,12 +182,23 @@ def _separate_by_material(
         if obj.type != "MESH":
             continue
 
+        # Find original name from meta to use in renamed pieces
+        orig_mesh_name = obj.name
+        for meta in ctx.mesh_metas:
+            if meta.mesh_object == obj:
+                orig_mesh_name = meta.original_name or obj.name
+                break
+
         material_count = len(obj.material_slots)
         debug_print(f"  Processing: {obj.name} ({material_count} materials)")
 
         if material_count <= 1:
             # Single material or no materials - just track it
             mat_name = _get_material_name(obj)
+
+            # Rename for debugging (format: Mesh Name - Material Name)
+            obj.name = f"{orig_mesh_name} - {mat_name}"
+
             if mat_name not in meshes_by_material:
                 meshes_by_material[mat_name] = []
             meshes_by_material[mat_name].append(obj)
@@ -223,6 +234,10 @@ def _separate_by_material(
                 continue
 
             mat_name = _get_material_name(piece)
+
+            # Rename for debugging (format: Mesh Name - Material Name)
+            piece.name = f"{orig_mesh_name} - {mat_name}"
+
             if mat_name not in meshes_by_material:
                 meshes_by_material[mat_name] = []
             meshes_by_material[mat_name].append(piece)

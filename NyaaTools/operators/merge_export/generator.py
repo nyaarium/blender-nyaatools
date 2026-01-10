@@ -7,9 +7,11 @@ the standalone operator or chained from a batch operator.
 
 import bpy
 import os
+import math
 
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Generator, List, Optional, Any
+from mathutils import Euler
 
 
 from ..bake.generator import create_bake_generator, BakeState
@@ -25,7 +27,6 @@ from ...asset.asset_lookup import get_export_path_from_asset
 from ...asset.merge_layers import (
     merge_single_layer,
     copy_armature_to_collection,
-    apply_armature_modifiers_and_remove,
     get_asset_non_collider_meshes_by_layer,
     process_collider_meshes,
 )
@@ -46,18 +47,19 @@ TEMP_SCENE_NAME = "Temp Merge & Export"
 MERGE_EXPORT_COL_WIDTH_STATUS = 100  # Status column
 MERGE_EXPORT_COL_WIDTH_TIME = 80  # Time column
 MERGE_EXPORT_COL_WIDTH_NAME = 250  # Asset name column
-MERGE_EXPORT_COL_WIDTH_FORMAT = 100  # Format type column (FBX, OBJ, VOTV)
+MERGE_EXPORT_COL_WIDTH_FORMAT = 150  # Format type column (FBX, OBJ, VOTV)
 MERGE_EXPORT_COL_WIDTH_PATH = 500  # Export path column
 
 MERGE_COL_WIDTH_LAYER = 250  # Layer name column (for merge tasks)
 MERGE_COL_WIDTH_MESH_COUNT = 100  # Mesh count column (for merge tasks)
+MERGE_COL_WIDTH_DETAILS = 400  # Details column (for merge tasks)
 
 
 def render_merge_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     """
     Custom render for merge task rows.
 
-    Format: [Status] [Time] [Layer Name] [# meshes]
+    Format: [Status] [Time] [Layer Name] [Details]
     """
     params = task.params
     col_x = x
@@ -68,10 +70,9 @@ def render_merge_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(status_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += MERGE_EXPORT_COL_WIDTH_STATUS
 
-    # Time column (fixed width, only show if done or failed)
-    if task.status in (TaskStatus.DONE, TaskStatus.FAILED) and task.elapsed_seconds > 0:
-        time_text = draw.format_seconds(task.elapsed_seconds)
-        draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
+    # Time column (fixed width, always show)
+    time_text = draw.format_seconds(task.elapsed_seconds)
+    draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += MERGE_EXPORT_COL_WIDTH_TIME
 
     # Layer name column (fixed width)
@@ -79,10 +80,18 @@ def render_merge_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(layer_name, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT)
     col_x += MERGE_COL_WIDTH_LAYER
 
-    # Mesh count column (fixed width, grey)
+    # Details column (fixed width, grey)
     mesh_count = params.get("mesh_count", 0)
-    mesh_count_text = f"{mesh_count} meshes" if mesh_count != 1 else "1 mesh"
-    draw.draw_text(mesh_count_text, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
+    shape_key_count = params.get("shape_key_count", 0)
+    total_applications = params.get("total_applications", 0)
+
+    details_parts = []
+    details_parts.append(f"{mesh_count} meshes")
+    details_parts.append(f"{shape_key_count} shape keys")
+    details_parts.append(f"{total_applications} total to apply")
+
+    details_text = "    ".join(details_parts)
+    draw.draw_text(details_text, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
 
     return LINE_HEIGHT
 
@@ -102,10 +111,9 @@ def render_export_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(status_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += MERGE_EXPORT_COL_WIDTH_STATUS
 
-    # Time column (fixed width, only show if done or failed)
-    if task.status in (TaskStatus.DONE, TaskStatus.FAILED) and task.elapsed_seconds > 0:
-        time_text = draw.format_seconds(task.elapsed_seconds)
-        draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
+    # Time column (fixed width, always show)
+    time_text = draw.format_seconds(task.elapsed_seconds)
+    draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += MERGE_EXPORT_COL_WIDTH_TIME
 
     # Asset name column (fixed width)
@@ -120,6 +128,8 @@ def render_export_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
 
     # Export path column (fixed width, grey)
     export_path = params.get("export_path", "")
+    clean_asset_name = params.get("clean_asset_name")
+    export_path = export_path + clean_asset_name + "/"
     draw.draw_text(export_path, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
 
     return LINE_HEIGHT
@@ -208,10 +218,40 @@ def create_merge_export_generator(
     asset_meshes_layers = get_asset_non_collider_meshes_by_layer(asset_host)
     layer_names = list(asset_meshes_layers.keys())
 
+    # Focus view on objects early so user sees the setup processing
+    yield AddTask(
+        Task(
+            id="focus_view",
+            label="Focus Viewport",
+            execute=lambda ctx: _do_focus_view(state),
+            params={},
+        )
+    )
+
     # Yield merge tasks
     for layer_name in layer_names:
         layer_meshes = asset_meshes_layers[layer_name]
         mesh_count = len(layer_meshes)
+
+        # Count shape keys and modifiers per mesh, calculate total applications
+        total_shape_keys = 0
+        total_applications = 0
+        for mesh_obj in layer_meshes.values():
+            if mesh_obj.type == "MESH":
+                # Count shape keys for this mesh
+                mesh_shape_keys = 0
+                if mesh_obj.data.shape_keys:
+                    mesh_shape_keys = len(mesh_obj.data.shape_keys.key_blocks)
+                total_shape_keys += mesh_shape_keys
+
+                # Count modifiers that will be applied (exclude armature for rigged exports)
+                modifier_count = 0
+                for mod in mesh_obj.modifiers:
+                    if config.export_static or mod.type != "ARMATURE":
+                        modifier_count += 1
+
+                # Total applications = shape_keys * modifiers for this mesh
+                total_applications += mesh_shape_keys * modifier_count
 
         # Capture for closure
         ln = layer_name
@@ -221,14 +261,19 @@ def create_merge_export_generator(
             Task(
                 id=f"merge_{layer_name}",
                 label=f"Merge: {layer_name} ({mesh_count} meshes)",
-                execute=lambda ctx, ln=ln, lm=lm: _do_merge(state, ln, lm, debug_print),
+                execute=lambda ctx, ln=ln, lm=lm: _do_merge(
+                    config, state, ln, lm, debug_print
+                ),
                 render_row=render_merge_row,
                 params={
                     "layer_name": layer_name,
                     "mesh_count": mesh_count,
+                    "shape_key_count": total_shape_keys,
+                    "total_applications": total_applications,
                 },
             )
         )
+
 
     # Yield export task based on target type
     if config.target_type == "collection":
@@ -252,6 +297,11 @@ def create_merge_export_generator(
         if state.export_path:
             export_path_display = state.export_path
 
+        # VotV: Sanitize asset name for subfolder
+        clean_asset_name = None
+        if config.export_format == "votv":
+            clean_asset_name = sanitize_name(config.asset_name, strict=True)
+
         yield AddTask(
             Task(
                 id="export_file",
@@ -262,6 +312,7 @@ def create_merge_export_generator(
                 render_row=render_export_row,
                 params={
                     "asset_name": config.asset_name,
+                    "clean_asset_name": clean_asset_name,
                     "format_type": config.export_format.upper(),
                     "export_path": export_path_display,
                 },
@@ -285,6 +336,7 @@ def create_merge_export_generator(
 
 
 def _do_merge(
+    config: MergeExportConfig,
     state: MergeExportState,
     layer_name: str,
     layer_meshes: List,
@@ -295,8 +347,9 @@ def _do_merge(
         layer_name,
         layer_meshes,
         state.temp_scene.collection,
-        state.armature_copy,
-        debug_print,
+        armature_copy=state.armature_copy,
+        is_static_export=config.export_static,
+        debug_print=debug_print,
     )
     if merged_obj:
         state.merged_layers[layer_name] = merged_obj
@@ -319,11 +372,10 @@ def _do_export_file(
         state.collider_objects.extend(collider_objs)
         state.unrename_info.extend(collider_unrename)
 
-    # Apply armature modifier and remove armature if exporting static
+    # Remove armature if exporting static (modifiers already applied early)
     if config.export_static and state.armature_copy:
-        apply_armature_modifiers_and_remove(
-            state.temp_scene.objects, state.armature_copy, debug_print
-        )
+        bpy.data.objects.remove(state.armature_copy, do_unlink=True)
+        debug_print("Removed armature for static export")
         state.armature_copy = None
 
     # Capture mesh names before export
@@ -361,11 +413,10 @@ def _do_export_collection(
         state.collider_objects.extend(collider_objs)
         state.unrename_info.extend(collider_unrename)
 
-    # Apply armature modifier and remove armature if exporting static
+    # Remove armature if exporting static (modifiers already applied early)
     if config.export_static and state.armature_copy:
-        apply_armature_modifiers_and_remove(
-            state.temp_scene.objects, state.armature_copy, debug_print
-        )
+        bpy.data.objects.remove(state.armature_copy, do_unlink=True)
+        debug_print("Removed armature for static export")
         state.armature_copy = None
 
     # Move objects from temp scene to export collection
@@ -705,6 +756,68 @@ def _cleanup_scene(state: MergeExportState) -> None:
         bpy.ops.outliner.orphans_purge(do_recursive=True)
         if state.unrename_info:
             renamer_restore(state.unrename_info)
+
+
+def _do_focus_view(state: MergeExportState) -> Dict:
+    """Select all meshes and focus view with specific orientation."""
+    # Ensure we are in object mode in the temp scene
+    if bpy.context.scene != state.temp_scene:
+        bpy.context.window.scene = state.temp_scene
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Select all meshes (or armature if no meshes yet)
+    bpy.ops.object.select_all(action="DESELECT")
+    found_any = False
+    first_obj = None
+
+    for obj in state.temp_scene.objects:
+        if obj.type == "MESH":
+            obj.select_set(True)
+            found_any = True
+            if first_obj is None:
+                first_obj = obj
+
+    # Fallback to armature if no meshes copied yet
+    if not found_any and state.armature_copy:
+        state.armature_copy.select_set(True)
+        first_obj = state.armature_copy
+        found_any = True
+
+    if first_obj:
+        state.temp_scene.view_layers[0].objects.active = first_obj
+
+    if not found_any:
+        return {"success": True, "note": "No objects to focus"}
+
+    # Orientation: Facing -Y (Front), angled left 30, angled down 30
+    # Front is (90, 0, 0). Left 30 is Z rotation. Down 30 is X tilting (90-30=60).
+    view_rot = Euler(
+        (math.radians(60), 0, math.radians(30)),
+        "XYZ",
+    ).to_quaternion()
+
+    # Apply viewport changes to all 3D areas
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                rv3d = area.spaces.active.region_3d
+                if rv3d:
+                    rv3d.view_rotation = view_rot
+                    # Need region for view_selected override
+                    region = None
+                    for r in area.regions:
+                        if r.type == "WINDOW":
+                            region = r
+                            break
+
+                    if region:
+                        with bpy.context.temp_override(
+                            window=window, area=area, region=region
+                        ):
+                            bpy.ops.view3d.view_selected()
+
+    return {"success": True}
 
 
 def _finalize_and_export(

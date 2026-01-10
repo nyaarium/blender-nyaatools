@@ -141,6 +141,7 @@ def merge_single_layer(
     layer_meshes,
     target_collection,
     armature_copy=None,
+    is_static_export=False,
     debug_print=None,
 ):
     """
@@ -151,6 +152,7 @@ def merge_single_layer(
         layer_meshes: Dict of {mesh_name: mesh_object} for this layer
         target_collection: Collection to link copied objects to
         armature_copy: Optional copied armature (None for static/mesh-hosted assets)
+        is_static_export: If True, apply all modifiers including armature. If False, skip armature modifiers.
         debug_print: Optional debug print function
 
     Returns:
@@ -186,6 +188,57 @@ def merge_single_layer(
             unrename_info.extend(rename_object(mesh_copy, layer_name))
             first_visit = False
             debug_print(f"📦 Created layer: {layer_name}")
+
+        # Apply all modifiers and shape keys before merging
+        if mesh_copy.type == "MESH":
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.select_all(action="DESELECT")
+            mesh_copy.select_set(True)
+            bpy.context.view_layer.objects.active = mesh_copy
+
+            # Apply all modifiers (except armature for rigged exports)
+            if mesh_copy.data.shape_keys:
+                mesh_copy.active_shape_key_index = 0
+                # Apply all modifiers using Przemir (handles shape keys)
+                # Filter out armature modifiers for rigged exports
+                modifier_names = [
+                    mod.name
+                    for mod in mesh_copy.modifiers
+                    if is_static_export or mod.type != "ARMATURE"
+                ]
+                if modifier_names:
+                    try:
+                        success, error_info = applyModifierForObjectWithShapeKeys(
+                            bpy.context, modifier_names, False
+                        )
+                        if not success:
+                            raise RuntimeError(
+                                f"Failed to apply modifiers on '{mesh_copy.name}': {error_info or 'Unknown error'}"
+                            )
+                        debug_print(
+                            f"Applied all modifiers and shape keys to {mesh_name} before merge"
+                        )
+                    except RuntimeError as e:
+                        raise RuntimeError(
+                            f"Failed to apply modifiers on '{mesh_copy.name}': {e}"
+                        )
+            else:
+                # No shape keys, apply modifiers normally
+                for mod in list(mesh_copy.modifiers):
+                    # Skip armature modifiers for rigged exports
+                    if not is_static_export and mod.type == "ARMATURE":
+                        continue
+                    
+                    mod_name = mod.name
+                    try:
+                        bpy.ops.object.modifier_apply(modifier=mod_name)
+                        debug_print(
+                            f"Applied modifier {mod_name} to {mesh_name} before merge"
+                        )
+                    except RuntimeError as e:
+                        raise RuntimeError(
+                            f"Failed to apply modifier '{mod_name}' on '{mesh_copy.name}': {e}"
+                        )
 
         merge_onto_layer(layer_name, mesh_copy, armature_copy)
         debug_print(f"   Merged: {mesh_name}")
@@ -435,47 +488,3 @@ def copy_armature_to_collection(
     debug_print(f"📦 Copied armature: {armature_copy.name}")
 
     return armature_copy, unrename_info
-
-
-def apply_armature_modifiers_and_remove(objects, armature, debug_print=None):
-    """
-    Apply armature modifiers to objects and remove the armature.
-
-    Used for static exports where the armature should be baked into the mesh.
-
-    Args:
-        objects: Iterable of objects to process
-        armature: The armature to apply and remove
-        debug_print: Optional debug print function
-    """
-    if debug_print is None:
-
-        def debug_print(*args):
-            pass
-
-    for obj in objects:
-        if obj.type != "MESH":
-            continue
-
-        bpy.ops.object.select_all(action="DESELECT")
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
-
-        for mod in list(obj.modifiers):
-            if mod.type == "ARMATURE" and mod.object == armature:
-                try:
-                    success, error_info = applyModifierForObjectWithShapeKeys(
-                        bpy.context, [mod.name], False
-                    )
-                    if not success:
-                        raise RuntimeError(
-                            f"Failed to apply armature modifier '{mod.name}' on '{obj.name}': {error_info or 'Unknown error'}"
-                        )
-                    debug_print(f"Applied armature modifier on {obj.name}")
-                except RuntimeError as e:
-                    raise RuntimeError(
-                        f"Failed to apply armature modifier '{mod.name}' on '{obj.name}': {e}"
-                    )
-
-    bpy.data.objects.remove(armature, do_unlink=True)
-    debug_print("Removed armature for static export")

@@ -95,7 +95,8 @@ class NYAATOOLS_OT_ProgressModalOperator(bpy.types.Operator):
 
         # Timer tick - advance generator
         if event.type == "TIMER":
-            return manager._tick(context)
+            result = manager._tick(context)
+            return result
 
         return {"PASS_THROUGH"}
 
@@ -296,6 +297,8 @@ class ProgressManager:
                     except Exception as e:
                         print(f"[ProgressManager] Cleanup error: {e}")
                 self._generator_stack.pop()
+                if self._overlay:
+                    self._overlay._tag_redraw()
                 return {"RUNNING_MODAL"}
             except Exception as e:
                 # Generator error during cancel - still call cleanup
@@ -305,6 +308,8 @@ class ProgressManager:
                     except Exception as ce:
                         print(f"[ProgressManager] Cleanup error: {ce}")
                 self._generator_stack.pop()
+                if self._overlay:
+                    self._overlay._tag_redraw()
                 return {"RUNNING_MODAL"}
 
         # If we have pending tasks to execute
@@ -320,7 +325,6 @@ class ProgressManager:
             cmd = next(gen)
             self._process_command(cmd)
             return {"RUNNING_MODAL"}
-
         except StopIteration:
             # Current generator exhausted - call its cleanup
             if cleanup:
@@ -337,8 +341,13 @@ class ProgressManager:
                 if self._current_task_index < len(self._queue):
                     # Still have tasks to execute
                     self._pending_execute = True
+                    if self._overlay:
+                        self._overlay._tag_redraw()
                     return {"RUNNING_MODAL"}
                 return self._complete(context)
+            
+            if self._overlay:
+                self._overlay._tag_redraw()
             return {"RUNNING_MODAL"}
 
         except Exception as e:
@@ -348,6 +357,8 @@ class ProgressManager:
         """Process a yield command from the generator."""
         if cmd is None:
             # Bare yield - just give UI a tick
+            if self._overlay:
+                self._overlay._tag_redraw()
             return
 
         # Use duck-typing instead of isinstance to handle class identity issues after hot reload
@@ -357,12 +368,17 @@ class ProgressManager:
         if cmd_type == "AddTask":
             task = cmd.task
             self._queue.add(task)
+            if self._overlay:
+                self._overlay._scroll_to_last_if_needed()
+                self._overlay._tag_redraw()
             # Mark that we should execute on next tick
             self._pending_execute = True
 
         elif cmd_type == "ChainGenerator":
             # Push chained generator with its cleanup
             self._generator_stack.append((cmd.generator, cmd.on_cleanup))
+            if self._overlay:
+                self._overlay._tag_redraw()
 
     def _execute_current_task(self, context) -> Set[str]:
         """Execute the current pending task."""
@@ -486,9 +502,11 @@ class ProgressManager:
             self._overlay = None
 
         # Call any remaining cleanups (shouldn't be any normally, but safety)
+        cleanup_count = 0
         while self._generator_stack:
             _, cleanup = self._generator_stack.pop()
             if cleanup:
+                cleanup_count += 1
                 try:
                     cleanup(self._completion_reason)
                 except Exception as e:
@@ -511,6 +529,6 @@ class ProgressManager:
         if self._timer and context and context.window_manager:
             try:
                 context.window_manager.event_timer_remove(self._timer)
-            except:
+            except Exception:
                 pass
             self._timer = None

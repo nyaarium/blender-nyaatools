@@ -254,10 +254,9 @@ def default_render_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(status_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += COL_WIDTH_STATUS
 
-    # Time column (fixed width, only show if done or failed)
-    if task.status in (TaskStatus.DONE, TaskStatus.FAILED) and task.elapsed_seconds > 0:
-        time_text = draw.format_seconds(task.elapsed_seconds)
-        draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
+    # Time column (fixed width, always show)
+    time_text = draw.format_seconds(task.elapsed_seconds)
+    draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += COL_WIDTH_TIME
 
     # Label (flexible width)

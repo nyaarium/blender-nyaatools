@@ -47,7 +47,7 @@ class BakeState:
 BAKE_COL_WIDTH_STATUS = 100  # Status column
 BAKE_COL_WIDTH_TIME = 80  # Time column
 BAKE_COL_WIDTH_MATERIAL = 250  # Material name column
-BAKE_COL_WIDTH_FORMAT = 100  # DTP format column
+BAKE_COL_WIDTH_FORMAT = 150  # DTP format column
 BAKE_COL_WIDTH_TYPE = 80  # Image type column (PNG, EXR)
 BAKE_COL_WIDTH_RESOLUTION = 100  # Resolution column
 
@@ -67,10 +67,9 @@ def render_bake_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(status_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += BAKE_COL_WIDTH_STATUS
 
-    # Time column (fixed width, only show if done or failed)
-    if task.status in (TaskStatus.DONE, TaskStatus.FAILED) and task.elapsed_seconds > 0:
-        time_text = draw.format_seconds(task.elapsed_seconds)
-        draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
+    # Time column (fixed width, always show)
+    time_text = draw.format_seconds(task.elapsed_seconds)
+    draw.draw_text(time_text, col_x, y, FONT_SIZE_BODY, status_color)
     col_x += BAKE_COL_WIDTH_TIME
 
     # Material name column (fixed width)

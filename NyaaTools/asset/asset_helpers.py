@@ -165,8 +165,8 @@ def get_layer_name_collisions(asset_host):
             # Skip if object is in __Export__ (will be cleared)
             if obj.name in export_objects:
                 continue
-            # Skip if object is part of this asset
-            if obj.name in asset_mesh_names:
+            # Skip if object is part of this asset (including the asset host itself)
+            if obj.name in asset_mesh_names or obj == asset_host:
                 continue
             collisions.append((layer_name, obj.name))
 

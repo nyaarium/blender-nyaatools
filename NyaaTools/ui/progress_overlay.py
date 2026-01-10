@@ -197,7 +197,16 @@ class ProgressOverlay:
         task = self._queue.get_task(task_index)
         if task:
             task.status = TaskStatus.ACTIVE
-            self._current_message = f"Processing: {task.label}"
+            
+            # Check if task has layer name for simplified footer message
+            params = task.params
+            layer_name = params.get("layer_name", "")
+            
+            if layer_name:
+                self._current_message = f'Merging "{layer_name}"'
+            else:
+                self._current_message = f"Processing: {task.label}"
+            
             self._tag_redraw()
 
     def mark_task_done(
@@ -252,13 +261,33 @@ class ProgressOverlay:
         self._scroll_offset = 0
         self._tag_redraw()
 
-    def handle_scroll(self, delta: int):
-        """Handle mouse wheel scroll."""
-        if not self._context or not self._context.region:
-            return
+    def _get_scroll_constraints(self, context=None):
+        """Calculate scroll constraints (available_height, max_scroll)."""
+        # Use provided context or fall back to stored context
+        ctx = context or self._context
+        if not ctx:
+            return None, None
 
-        content_height = self._calculate_content_height()
-        viewport_height = self._context.region.height
+        # Try to get region from context, or find it from screen areas
+        region = None
+        if hasattr(ctx, 'region') and ctx.region:
+            region = ctx.region
+        elif hasattr(ctx, 'screen') and ctx.screen:
+            # Find VIEW_3D area and get its region
+            for area in ctx.screen.areas:
+                if area.type == "VIEW_3D":
+                    # Get the main region (WINDOW type)
+                    for reg in area.regions:
+                        if reg.type == "WINDOW":
+                            region = reg
+                            break
+                    if region:
+                        break
+
+        if not region:
+            return None, None
+
+        viewport_height = region.height
         header_height = 60
         footer_height = 80
         available_height = (
@@ -269,7 +298,36 @@ class ProgressOverlay:
             - PADDING * 2
         )
 
+        content_height = self._calculate_content_height()
         max_scroll = max(0, content_height - available_height)
+
+        # Clamp scroll_offset if queue shrunk (e.g., tasks removed)
+        if self._scroll_offset > max_scroll:
+            self._scroll_offset = max_scroll
+
+        return available_height, max_scroll
+
+    def _scroll_to_last_if_needed(self, context=None):
+        """Auto-scroll to show the last task if it would be off-screen."""
+        if not self._queue or len(self._queue) == 0:
+            return
+
+        _, max_scroll = self._get_scroll_constraints(context)
+        if max_scroll is None:
+            return
+
+        # Check if the last task is off-screen
+        # The last task is visible if scroll_offset >= max_scroll
+        # If current scroll is less than max, the last task is off-screen
+        if self._scroll_offset < max_scroll:
+            self._scroll_offset = max_scroll
+            self._tag_redraw()
+
+    def handle_scroll(self, delta: int):
+        """Handle mouse wheel scroll."""
+        available_height, max_scroll = self._get_scroll_constraints(None)
+        if available_height is None or max_scroll is None:
+            return
 
         scroll_speed = LINE_HEIGHT * 3
         self._scroll_offset += delta * scroll_speed
@@ -283,7 +341,13 @@ class ProgressOverlay:
                 for area in self._context.screen.areas:
                     if area.type == "VIEW_3D":
                         area.tag_redraw()
-            except:
+
+                # Aggressive redraw to fix stale UI elements during heavy operations
+                # Skip redraw_timer during completion/cancellation/error to avoid conflicts
+                # with timer system shutdown
+                if self._state == OverlayState.RUNNING:
+                    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+            except Exception:
                 pass
 
     def _draw_callback(self, context):
@@ -294,6 +358,11 @@ class ProgressOverlay:
         region = context.region
         if not region:
             return
+
+        # Check if we need to auto-scroll (fallback if called from draw callback)
+        # Only check if we have tasks and scroll_offset is 0 (haven't scrolled yet)
+        if len(self._queue) > 0 and self._scroll_offset == 0:
+            self._scroll_to_last_if_needed(context)
 
         width = region.width
         height = region.height

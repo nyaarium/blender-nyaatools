@@ -3,6 +3,7 @@ Migration and legacy operators for NyaaTools panel.
 """
 
 import bpy
+import re
 from bpy.types import Operator
 from bpy.props import StringProperty
 
@@ -105,11 +106,23 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                         profile.export_static = True
 
                         # Apply VotV bake preset
-                        # We need to ensure THIS object is active for the operator to work on it
+                        # We need to ensure THIS object is active and selected for the operator to work on it
                         prev_active = context.view_layer.objects.active
+                        prev_selected = list(context.selected_objects)
                         context.view_layer.objects.active = obj
+                        # Select the object as well (poll() checks selected_objects, not just active)
+                        for o in context.selected_objects:
+                            o.select_set(False)
+                        obj.select_set(True)
+
                         bpy.ops.nyaatools.load_bake_profile(preset="votv")
+
                         context.view_layer.objects.active = prev_active
+
+                        for o in context.selected_objects:
+                            o.select_set(False)
+                        for o in prev_selected:
+                            o.select_set(True)
                     else:
                         profile.format = "fbx"
 
@@ -144,11 +157,35 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                 entry.is_ue_collider = True
                 migrated_meshes += 1
 
+        # Track processed base names to skip duplicates (e.g., skip "Face.001" if "Face" already processed)
+        processed_base_names = set()
+
         for obj in bpy.data.objects:
             if obj.type != "MESH":
                 continue
             if PROP_AVATAR_LAYERS not in obj:
                 continue
+
+            # Check if this is a duplicate (e.g., "Face.001" when "Face" exists)
+            # Prefer non-suffixed objects over suffixed ones
+            base_name_match = re.match(r"^(.+)\.(\d+)$", obj.name)
+            if base_name_match:
+                base_name = base_name_match.group(1)
+                # Check if base name object exists and has PROP_AVATAR_LAYERS
+                base_obj = bpy.data.objects.get(base_name)
+                if (
+                    base_obj
+                    and base_obj.type == "MESH"
+                    and PROP_AVATAR_LAYERS in base_obj
+                ):
+                    # Delete the property and continue
+                    del obj[PROP_AVATAR_LAYERS]
+                    continue
+                # Also check if base name was already processed
+                if base_name in processed_base_names:
+                    # Delete the property and continue
+                    del obj[PROP_AVATAR_LAYERS]
+                    continue
 
             layers_str = obj[PROP_AVATAR_LAYERS]
             if not layers_str:
@@ -184,6 +221,8 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
                 else:
                     entry.layer_name = layer_name
                 migrated_meshes += 1
+                # Track this base name to skip duplicates
+                processed_base_names.add(obj.name)
 
             del obj[PROP_AVATAR_LAYERS]
 
@@ -197,5 +236,3 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
             f"Migrated {migrated_avatars} asset(s) and {migrated_meshes} mesh assignment(s)",
         )
         return {"FINISHED"}
-
-
