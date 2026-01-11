@@ -26,6 +26,8 @@ log_path = os.path.join(tempfile.gettempdir(), ...)
 
 As the agent, you can read the diagnostics from Linux /mnt/ path. Tools like `read_file` or `grep` can access over filesystem boundary at: `/mnt/c/Users/{username}/AppData/Local/Temp/...`.
 
+Don't ever use bash `find` command. Use `ls` if you need to list files.
+
 ### Cleanup logs before next `<reproduction_steps>`
 
 After you read the diagnostics, delete it to reduce bloat during the next debug cycle.

@@ -8,6 +8,9 @@ Draws a fullscreen overlay in the 3D viewport showing:
 """
 
 import bpy
+import blf
+import math
+import time
 
 from .task_system import (
     Task,
@@ -73,7 +76,6 @@ class ProgressOverlay:
         self._scroll_offset = 0
         self._draw = draw_helper
         self._manager = None  # Reference to ProgressManager for error handling
-        self._pending_render_error = None  # Defer render errors to next tick
 
     @property
     def is_active(self) -> bool:
@@ -341,13 +343,18 @@ class ProgressOverlay:
         """Request viewport redraw."""
         if self._context:
             try:
+                # Tag redraw for all VIEW_3D areas and their WINDOW regions
+                # This ensures the draw handler gets called in all states
                 for area in self._context.screen.areas:
                     if area.type == "VIEW_3D":
                         area.tag_redraw()
+                        # Also tag the WINDOW region (where our draw handler is registered)
+                        for region in area.regions:
+                            if region.type == "WINDOW":
+                                region.tag_redraw()
 
-                # Aggressive redraw to fix stale UI elements during heavy operations
-                # Skip redraw_timer during completion/cancellation/error to avoid conflicts
-                # with timer system shutdown
+                # During RUNNING: use redraw_timer for aggressive updates during heavy operations
+                # During confirmation: standard tag_redraw() is enough and avoids cursor flickering
                 if self._state == OverlayState.RUNNING:
                     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
             except Exception:
@@ -403,27 +410,48 @@ class ProgressOverlay:
             self._draw.COLOR_TEXT,
         )
 
-        # Draw state indicator
-        if self._state == OverlayState.RUNNING:
-            hint_text = "Press ESC to cancel"
-            hint_color = self._draw.COLOR_TEXT_DIM
-        elif self._state == OverlayState.COMPLETED:
-            hint_text = "COMPLETED - Press ENTER to close"
-            hint_color = self._draw.COLOR_STATUS_DONE
-        elif self._state == OverlayState.CANCELLED:
-            hint_text = "CANCELLED - Press ENTER to close"
-            hint_color = self._draw.COLOR_STATUS_ACTIVE
-        else:
-            hint_text = "ERROR - Press ENTER to close"
-            hint_color = self._draw.COLOR_STATUS_FAILED
+        # Draw state indicator (HUD Legends)
+        hint_x = x + panel_width - PADDING
+        hint_y = y + panel_height - 38
+        
+        # Calculate pulsing yellow for keys
+        pulse = (math.sin(time.time() * 6) + 1) / 2
+        b = 0.6 + 0.4 * pulse
+        pulsing_yellow = (1.0 * b, 0.85 * b, 0.1 * b, 1.0)
+        white = (1.0, 1.0, 1.0, 1.0)
 
-        self._draw.draw_text(
-            hint_text,
-            x + panel_width - PADDING - 300,
-            y + panel_height - 38,
-            FONT_SIZE_SMALL,
-            hint_color,
-        )
+        def draw_legend(key: str, action: str, cur_x: int) -> int:
+            # Draw from right to left
+            # 1. Action text
+            act_w = int(blf.dimensions(0, action)[0])
+            cur_x -= act_w
+            self._draw.draw_text(action, cur_x, hint_y, FONT_SIZE_SMALL, white)
+            
+            # 2. Spacer
+            cur_x -= 4
+            
+            # 3. Key tag
+            key_tag = f"<{key}>"
+            key_w = int(blf.dimensions(0, key_tag)[0])
+            cur_x -= key_w
+            self._draw.draw_text(key_tag, cur_x, hint_y, FONT_SIZE_SMALL, pulsing_yellow)
+            
+            # 4. Padding for next legend
+            return cur_x - 24
+
+        # Set font for width calculations
+        blf.size(0, FONT_SIZE_SMALL)
+        
+        cur_x = hint_x
+        if self._state == OverlayState.RUNNING:
+            draw_legend("Esc", "Cancel", cur_x)
+        elif self._state in (OverlayState.COMPLETED, OverlayState.CANCELLED, OverlayState.ERROR):
+            # Check if we should show Debug Inspection
+            if self._state in (OverlayState.CANCELLED, OverlayState.ERROR):
+                cur_x = draw_legend("PauseBreak", "Debug Inspection", cur_x)
+            
+            # Everyone gets the Exit button
+            draw_legend("Enter", "Exit", cur_x)
 
         # Content area
         content_top = y + panel_height - header_height - PADDING
@@ -459,8 +487,9 @@ class ProgressOverlay:
                 traceback.print_exc()
                 task.status = TaskStatus.FAILED
                 # Store error to handle on next tick (same as task execution exceptions)
-                if not self._pending_render_error:
-                    self._pending_render_error = RuntimeError(str(e)[:100])
+                if self._manager:
+                    self._manager._report_error(RuntimeError(str(e)[:100]))
+                
                 # Draw task row with "Failed" status (status column will show "Failed")
                 # Don't draw error message in task row - that goes in footer
                 status_color = self._draw.get_status_color(TaskStatus.FAILED)

@@ -81,22 +81,29 @@ class NYAATOOLS_OT_ProgressModalOperator(bpy.types.Operator):
                 manager._overlay.handle_scroll(delta)
             return {"RUNNING_MODAL"}
 
-        # Handle confirmation state - wait for ENTER to close
+        # Timer tick - advance generator (check BEFORE confirmation to keep timer running)
+        if event.type == "TIMER":
+            result = manager._tick(context)
+            return result
+
+        # Handle confirmation state - wait for ENTER to close or PAUSE for debug
         if manager._awaiting_confirmation:
             if event.type in ("RET", "NUMPAD_ENTER") and event.value == "PRESS":
                 manager._finish(context)
                 return {"FINISHED"}
+            
+            # Handle PAUSE BREAK during error/cancel confirmation
+            if event.type == "PAUSE" and event.value == "PRESS":
+                if manager._completion_reason in ("cancel", "error"):
+                    manager._handle_pause_break(context)
+                    return {"FINISHED"}
+                    
             return {"RUNNING_MODAL"}
 
         # Handle ESC to cancel
         if event.type == "ESC" and event.value == "PRESS":
             manager._handle_cancel(context)
             return {"RUNNING_MODAL"}
-
-        # Timer tick - advance generator
-        if event.type == "TIMER":
-            result = manager._tick(context)
-            return result
 
         return {"PASS_THROUGH"}
 
@@ -156,6 +163,7 @@ class ProgressManager:
         self._completion_reason = "success"
         self._cancelled = False
         self._error_occurred = False
+        self._pending_error: Optional[Exception] = None
 
     @property
     def is_running(self) -> bool:
@@ -212,7 +220,9 @@ class ProgressManager:
 
         # Start overlay
         self._overlay.start(context, title, self._queue)
-        self._overlay._manager = self  # Give overlay reference to manager for error handling
+        self._overlay._manager = (
+            self  # Give overlay reference to manager for error handling
+        )
         self._overlay.set_message("Starting...")
 
         # Start internal modal operator
@@ -281,17 +291,20 @@ class ProgressManager:
 
     def _tick(self, context) -> Set[str]:
         """Process one timer tick - advance generator or execute task."""
-        # Check if overlay has a pending render error (deferred from render callback)
-        if self._overlay and self._overlay._pending_render_error and not self._error_occurred:
-            # Handle render error like task execution exception
-            render_error = self._overlay._pending_render_error
-            self._overlay._pending_render_error = None  # Clear it
-            return self._handle_error(context, render_error)
+        # 1. Check for errors from previous ticks or the Overlay render callback
+        if self._pending_error:
+            return self._transition_to_error_state(context, self._pending_error)
+
+        # If we're waiting for user confirmation, just keep the UI alive (for animations)
+        if self._awaiting_confirmation:
+            if self._overlay:
+                self._overlay._tag_redraw()
+            return {"RUNNING_MODAL"}
         
         # If error occurred, don't advance generators or execute tasks
         if self._error_occurred:
             return {"RUNNING_MODAL"}
-        
+
         # If cancelled, don't advance generators or execute tasks
         if self._cancelled:
             # Let generators finish naturally, but don't process new commands
@@ -362,13 +375,14 @@ class ProgressManager:
                         self._overlay._tag_redraw()
                     return {"RUNNING_MODAL"}
                 return self._complete(context)
-            
+
             if self._overlay:
                 self._overlay._tag_redraw()
             return {"RUNNING_MODAL"}
 
         except Exception as e:
-            return self._handle_error(context, e)
+            self._report_error(e)
+            return {"RUNNING_MODAL"}
 
     def _process_command(self, cmd) -> None:
         """Process a yield command from the generator."""
@@ -445,14 +459,15 @@ class ProgressManager:
             task.status = TaskStatus.FAILED
             task.elapsed_seconds = time.perf_counter() - self._task_start_time
             task.result = {"success": False, "error": str(e)}
-            return self._handle_error(context, e)
+            self._report_error(e)
+            return {"RUNNING_MODAL"}
 
     def _complete(self, context) -> Set[str]:
         """Handle successful completion."""
         # Don't complete if an error occurred - error state is already set
         if self._error_occurred:
             return {"RUNNING_MODAL"}
-        
+
         self._completion_reason = "success"
 
         # Count results
@@ -467,32 +482,37 @@ class ProgressManager:
             self._overlay.set_completed(msg)
 
         self._awaiting_confirmation = True
-        self._stop_timer(context)
         return {"RUNNING_MODAL"}
 
-    def _handle_error(self, context, error: Exception) -> Set[str]:
-        """Handle an error during execution."""
+    def _report_error(self, error: Exception) -> None:
+        """
+        Flag an error for handling on the next tick.
+
+        This is safe to call from anywhere, including the GPU draw callback
+        (via the manager reference).
+        """
+        if not self._error_occurred:
+            self._pending_error = error
+            self._error_occurred = True
+
+    def _transition_to_error_state(self, context, error: Exception) -> Set[str]:
+        """
+        Actually transition the manager/UI to an error state.
+
+        Called at the start of a tick if a pending error exists.
+        Does NOT perform cleanup yet - cleanup is deferred until ENTER is pressed.
+        """
+        self._pending_error = None  # Clear the deposit
         self._completion_reason = "error"
         self._error_message = str(error)
-        self._error_occurred = True  # Stop further execution
 
-        print(f"[ProgressManager] Error: {error}")
+        print(f"[ProgressManager] Handling Error: {error}")
         traceback.print_exc()
-
-        # Call all remaining cleanups with error reason
-        while self._generator_stack:
-            _, cleanup = self._generator_stack.pop()
-            if cleanup:
-                try:
-                    cleanup("error")
-                except Exception as e:
-                    print(f"[ProgressManager] Cleanup error during error handling: {e}")
 
         if self._overlay:
             self._overlay.set_error(str(error)[:100])
 
         self._awaiting_confirmation = True
-        self._stop_timer(context)
         return {"RUNNING_MODAL"}
 
     def _handle_cancel(self, context) -> None:
@@ -504,14 +524,36 @@ class ProgressManager:
         if self._queue:
             self._queue.mark_remaining_cancelled()
 
-        # Don't pop generators here - let them finish naturally in _tick()
-        # They'll be cleaned up as they finish with "cancel" reason
-
         if self._overlay:
             self._overlay.set_cancelled("Cancelled.")
 
         self._awaiting_confirmation = True
+
+    def _handle_pause_break(self, context) -> None:
+        """
+        Emergency exit: Stop modal and hide overlay immediately.
+        Does NOT run any cleanups, leaving the scene 'dirty' for inspection.
+        """
+        print("[ProgressManager] Pause Break detected. Exiting without cleanup.")
+        
+        # Stop timer
         self._stop_timer(context)
+
+        # Finish overlay (restores UI)
+        if self._overlay:
+            self._overlay.finish()
+            self._overlay = None
+
+        # Reset state without calling cleanups
+        self._is_running = False
+        self._generator_stack = []
+        self._queue = None
+        self._context = None
+        self._awaiting_confirmation = False
+        self._cancelled = False
+
+        # Clear singleton
+        ProgressManager._instance = None
 
     def _finish(self, context) -> None:
         """Finish the operation and clean up."""

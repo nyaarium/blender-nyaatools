@@ -8,22 +8,32 @@
 
 **Timer**: A 0.05s heartbeat (20 ticks/sec). This is the frequency at which the manager "pumps" its logic—advancing generators or moving tasks through the Split-Tick pipeline—whenever the main thread is free.
 
-**Redraws**: Requested by the manager during a **Timer** tick. It uses `bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)` to "poke" the 3D Viewport. This is necessary because Blender won't redraw the viewport unless something (like a mouse move or a timer) explicitly tells it to, ensuring the overlay doesn't freeze when the user stops moving the mouse.
+**Redraws**: Requested by the manager during a **Timer** tick via `ProgressOverlay._tag_redraw()`. During the `RUNNING` state, it uses `bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)` for aggressive updates during heavy processing. During confirmation states (`ERROR`, `COMPLETED`), it switches to standard `area.tag_redraw()` to allow animations while avoiding cursor flickering. This ensures the overlay doesn't freeze when the user stops moving the mouse.
 
-**Split-Tick**: A technique to ensure UI updates are visible. The manager uses two separate timer ticks for every task:
-1. **Activation Tick**: Marks task as `ACTIVE` and forces a redraw. Returning control to Blender here allows the "Running" status to actually appear on screen.
-2. **Execution Tick**: The actual work begins on this second tick. This prevents the "Heavy Hang" from blocking the UI update that just happened in the first tick.
+**Unified Error Handling**: A "State Transition" system rather than a "Reaction" system.
+1. **Error Deposit**: Errors from Tasks, Generators, or even Render callbacks call `_report_error(e)`. Flags the manager state (sets _pending_error, _error_occurred = True), but does not perform immediate cleanup.
+2. **Sync Point**: At the start of every **Timer** tick, the manager checks for a pending error and transitions the UI to the frozen `ERROR` state if one exists.
+3. **Deferred Cleanup**: Scene cleanup (via generator `on_cleanup` calls) is strictly deferred until the user presses **Enter** to close the overlay or **Pause Break** to dismiss and inspect the broken state.
 
 ## Operation Lifecycle
 
 **Tick 1: Initialization**
 - `ProgressManager.execute()` is called. 
 - UI elements (Panels, Gizmos) are hidden.
-- `ProgressOverlay` initializes with title and empty `TaskQueue`.
-- Generator `create_merge_export_generator` is instantiated but not yet advanced.
+- Internal state reset, `_pending_error` set to `None`.
+- `ProgressOverlay` initializes.
+- Generator `create_merge_export_generator` instantiated.
 - Internal modal operator starts; first `_tick` begins.
 
-**Tick 2: Queue Task 0 (Merge Body)**
+**The Error Tick (Hypothetical Task/Render Failure)**
+- **Error Occurs**: A task crashes or the draw handler throws an exception.
+- **Error Reporting**: `_report_error(e)` is called. `_pending_error` is set and `_error_occurred` is set to `True`.
+- **State Transition (Next Tick)**: `_tick` detects the pending error and calls `_transition_to_error_state()`.
+- **Wait**: Manager sets `_awaiting_confirmation = True`. UI shows the error. The timer remains active to drive UI animations (e.g., pulsing key hints).
+- **Inspection**: The scene remains exactly as it was during the failure.
+- **Resolution**: User presses ENTER. `_finish` runs, popping generators and calling cleanups.
+
+## Split-Tick Lifecycle
 - `next(gen)` yields `AddTask(merge_Body)`.
 - Task is added to the `TaskQueue`. `_pending_execute` set to `True`.
 - `_tag_redraw()` ensures the overlay list updates to show the pending row.
@@ -69,4 +79,5 @@
 - `next(gen)` raises `StopIteration`.
 - `_complete()` marks the state as `COMPLETED`.
 - Overlay displays "Successfully completed! Press ENTER to close".
-- Modal timer is removed; system waits for keyboard input.
+- System waits for keyboard input. The timer remains active to keep the UI "alive" with animations until the user confirms.
+- **Resolution**: User presses ENTER. `_finish` runs, calling `_stop_timer`, popping generators, and calling cleanups.
