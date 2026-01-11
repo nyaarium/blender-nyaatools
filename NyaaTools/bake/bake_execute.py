@@ -290,7 +290,7 @@ def _get_intermediate_bake_configs(
 
     dtp_category_map = {
         "rgba": ["cr", "cg", "cb", "al", "lr", "lg", "lb", "rgba", "rgb"],
-        "normalgl": ["nx", "ny", "nz", "nd", "ng", "normaldx", "normalgl"],
+        "normalgl": ["nx", "nd", "ng", "normaldx", "normalgl"],
         "me-ro-sp": ["me", "ro", "sp", "ao", "sm"],
         "emission": ["er", "eg", "eb", "es", "emission"],
     }
