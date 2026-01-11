@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Set, Tuple
 import bpy
 
 from .task_system import Task, TaskQueue, TaskStatus, DrawHelper
-from .progress_overlay import ProgressOverlay
+from .progress_overlay import ProgressOverlay, OverlayState
 
 
 # =============================================================================
@@ -155,6 +155,7 @@ class ProgressManager:
         self._error_message = ""
         self._completion_reason = "success"
         self._cancelled = False
+        self._error_occurred = False
 
     @property
     def is_running(self) -> bool:
@@ -203,6 +204,7 @@ class ProgressManager:
         self._error_message = ""
         self._completion_reason = "success"
         self._cancelled = False
+        self._error_occurred = False
 
         # Ensure object mode
         if context.active_object and context.active_object.mode != "OBJECT":
@@ -210,6 +212,7 @@ class ProgressManager:
 
         # Start overlay
         self._overlay.start(context, title, self._queue)
+        self._overlay._manager = self  # Give overlay reference to manager for error handling
         self._overlay.set_message("Starting...")
 
         # Start internal modal operator
@@ -278,6 +281,17 @@ class ProgressManager:
 
     def _tick(self, context) -> Set[str]:
         """Process one timer tick - advance generator or execute task."""
+        # Check if overlay has a pending render error (deferred from render callback)
+        if self._overlay and self._overlay._pending_render_error and not self._error_occurred:
+            # Handle render error like task execution exception
+            render_error = self._overlay._pending_render_error
+            self._overlay._pending_render_error = None  # Clear it
+            return self._handle_error(context, render_error)
+        
+        # If error occurred, don't advance generators or execute tasks
+        if self._error_occurred:
+            return {"RUNNING_MODAL"}
+        
         # If cancelled, don't advance generators or execute tasks
         if self._cancelled:
             # Let generators finish naturally, but don't process new commands
@@ -318,6 +332,9 @@ class ProgressManager:
 
         # Try to advance generator
         if not self._generator_stack:
+            # Don't call _complete if an error occurred - error state is already set
+            if self._error_occurred:
+                return {"RUNNING_MODAL"}
             return self._complete(context)
 
         gen, cleanup = self._generator_stack[-1]
@@ -432,6 +449,10 @@ class ProgressManager:
 
     def _complete(self, context) -> Set[str]:
         """Handle successful completion."""
+        # Don't complete if an error occurred - error state is already set
+        if self._error_occurred:
+            return {"RUNNING_MODAL"}
+        
         self._completion_reason = "success"
 
         # Count results
@@ -453,6 +474,7 @@ class ProgressManager:
         """Handle an error during execution."""
         self._completion_reason = "error"
         self._error_message = str(error)
+        self._error_occurred = True  # Stop further execution
 
         print(f"[ProgressManager] Error: {error}")
         traceback.print_exc()

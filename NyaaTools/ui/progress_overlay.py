@@ -72,6 +72,8 @@ class ProgressOverlay:
         self._saved_ui_state = {}
         self._scroll_offset = 0
         self._draw = draw_helper
+        self._manager = None  # Reference to ProgressManager for error handling
+        self._pending_render_error = None  # Defer render errors to next tick
 
     @property
     def is_active(self) -> bool:
@@ -257,7 +259,8 @@ class ProgressOverlay:
         """Mark the operation as failed, waiting for confirmation."""
         self._state = OverlayState.ERROR
         self._error_message = message
-        self._current_message = f"Error: {message}"
+        # Footer shows the error message (without "Error:" prefix - that's in the status)
+        self._current_message = message  # Footer message (full error)
         self._scroll_offset = 0
         self._tag_redraw()
 
@@ -443,10 +446,26 @@ class ProgressOverlay:
             current_y -= LINE_HEIGHT
 
             # Use custom render_row if provided, otherwise use default
-            if task.render_row:
-                task.render_row(task, x + PADDING, current_y, self._draw)
-            else:
-                default_render_row(task, x + PADDING, current_y, self._draw)
+            # Wrap in try/except to catch render exceptions
+            try:
+                if task.render_row:
+                    task.render_row(task, x + PADDING, current_y, self._draw)
+                else:
+                    default_render_row(task, x + PADDING, current_y, self._draw)
+            except Exception as e:
+                # Render exception - defer to next tick (can't call manager methods during GPU draw)
+                import traceback
+                print(f"[ProgressOverlay] Render error for task '{task.id}': {e}")
+                traceback.print_exc()
+                task.status = TaskStatus.FAILED
+                # Store error to handle on next tick (same as task execution exceptions)
+                if not self._pending_render_error:
+                    self._pending_render_error = RuntimeError(str(e)[:100])
+                # Draw task row with "Failed" status (status column will show "Failed")
+                # Don't draw error message in task row - that goes in footer
+                status_color = self._draw.get_status_color(TaskStatus.FAILED)
+                status_text = self._draw.get_status_text(TaskStatus.FAILED)
+                self._draw.draw_text(status_text, x + PADDING, current_y, FONT_SIZE_BODY, status_color)
 
         # Draw footer
         self._draw_footer(x, y, panel_width)

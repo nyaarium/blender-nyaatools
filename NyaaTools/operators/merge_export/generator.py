@@ -30,6 +30,8 @@ from ...asset.merge_layers import (
     get_asset_non_collider_meshes_by_layer,
     process_collider_meshes,
 )
+from ...common.deselect_all import deselect_all
+from ...common.selection_add import selection_add
 from ...asset.export_votv import render_votv_icon, export_votv
 from ...asset.export_collection import (
     get_or_create_export_collection,
@@ -129,7 +131,9 @@ def render_export_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     # Export path column (fixed width, grey)
     export_path = params.get("export_path", "")
     clean_asset_name = params.get("clean_asset_name")
-    export_path = export_path + clean_asset_name + "/"
+    # Only append clean_asset_name if it exists (VotV format only)
+    if clean_asset_name:
+        export_path = export_path + clean_asset_name + "/"
     draw.draw_text(export_path, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
 
     return LINE_HEIGHT
@@ -218,16 +222,6 @@ def create_merge_export_generator(
     asset_meshes_layers = get_asset_non_collider_meshes_by_layer(asset_host)
     layer_names = list(asset_meshes_layers.keys())
 
-    # Focus view on objects early so user sees the setup processing
-    yield AddTask(
-        Task(
-            id="focus_view",
-            label="Focus Viewport",
-            execute=lambda ctx: _do_focus_view(state),
-            params={},
-        )
-    )
-
     # Yield merge tasks
     for layer_name in layer_names:
         layer_meshes = asset_meshes_layers[layer_name]
@@ -273,7 +267,6 @@ def create_merge_export_generator(
                 },
             )
         )
-
 
     # Yield export task based on target type
     if config.target_type == "collection":
@@ -629,6 +622,10 @@ def setup_merge_export(
 
     state.temp_scene = bpy.data.scenes.new(name=TEMP_SCENE_NAME)
     state.original_scene = bpy.context.window.scene
+
+    # Focus viewport on asset meshes in main scene, then copy viewport angle to temp scene
+    _setup_viewport_from_main_scene(asset_host, state.temp_scene, state.original_scene)
+
     bpy.context.window.scene = state.temp_scene
 
     # For armature-based assets, copy armature to temp scene
@@ -758,53 +755,73 @@ def _cleanup_scene(state: MergeExportState) -> None:
             renamer_restore(state.unrename_info)
 
 
-def _do_focus_view(state: MergeExportState) -> Dict:
-    """Select all meshes and focus view with specific orientation."""
-    # Ensure we are in object mode in the temp scene
-    if bpy.context.scene != state.temp_scene:
-        bpy.context.window.scene = state.temp_scene
+def _setup_viewport_from_main_scene(
+    asset_host: Any,
+    temp_scene: Any,
+    original_scene: Any,
+) -> None:
+    """
+    Focus viewport on asset meshes in main scene, capture viewport angle,
+    apply it to temp scene, then restore main scene viewport.
 
-    bpy.ops.object.mode_set(mode="OBJECT")
+    Steps:
+    1. Select all asset layer meshes in main scene
+    2. Focus and angle viewport in main scene (remember original)
+    3. Apply viewport angle to temp scene
+    4. Restore main scene viewport angle
+    """
+    # Get asset layer meshes
+    asset_meshes_layers = get_asset_non_collider_meshes_by_layer(asset_host)
 
-    # Select all meshes (or armature if no meshes yet)
-    bpy.ops.object.select_all(action="DESELECT")
-    found_any = False
+    # Collect all meshes from all layers
+    meshes_to_select = []
+    for layer_meshes in asset_meshes_layers.values():
+        meshes_to_select.extend(layer_meshes.values())
+
+    if not meshes_to_select:
+        return
+
+    # Store original scene context
+    original_active = bpy.context.active_object
+    original_selected = list(bpy.context.selected_objects)
+
+    # Switch to main scene if needed
+    if bpy.context.scene != original_scene:
+        bpy.context.window.scene = original_scene
+
+    # Ensure object mode
+    if bpy.context.active_object and bpy.context.active_object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Select all asset meshes in main scene
+    deselect_all()
     first_obj = None
-
-    for obj in state.temp_scene.objects:
-        if obj.type == "MESH":
-            obj.select_set(True)
-            found_any = True
+    for mesh_obj in meshes_to_select:
+        if mesh_obj and mesh_obj.name in bpy.data.objects:
+            selection_add(mesh_obj)
             if first_obj is None:
-                first_obj = obj
+                first_obj = mesh_obj
 
-    # Fallback to armature if no meshes copied yet
-    if not found_any and state.armature_copy:
-        state.armature_copy.select_set(True)
-        first_obj = state.armature_copy
-        found_any = True
+    if not first_obj:
+        return
 
-    if first_obj:
-        state.temp_scene.view_layers[0].objects.active = first_obj
-
-    if not found_any:
-        return {"success": True, "note": "No objects to focus"}
-
-    # Orientation: Facing -Y (Front), angled left 30, angled down 30
-    # Front is (90, 0, 0). Left 30 is Z rotation. Down 30 is X tilting (90-30=60).
-    view_rot = Euler(
-        (math.radians(60), 0, math.radians(30)),
-        "XYZ",
-    ).to_quaternion()
-
-    # Apply viewport changes to all 3D areas
+    # Store original viewport rotations for all 3D viewports
+    original_view_rotations = {}
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
             if area.type == "VIEW_3D":
                 rv3d = area.spaces.active.region_3d
                 if rv3d:
-                    rv3d.view_rotation = view_rot
-                    # Need region for view_selected override
+                    # Store by window/area for restoration
+                    key = (window, area)
+                    original_view_rotations[key] = rv3d.view_rotation.copy()
+
+    # Focus viewport on selected meshes in main scene
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                rv3d = area.spaces.active.region_3d
+                if rv3d:
                     region = None
                     for r in area.regions:
                         if r.type == "WINDOW":
@@ -817,7 +834,47 @@ def _do_focus_view(state: MergeExportState) -> Dict:
                         ):
                             bpy.ops.view3d.view_selected()
 
-    return {"success": True}
+    # Capture the viewport rotation from main scene (use first 3D viewport)
+    captured_rotation = None
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                rv3d = area.spaces.active.region_3d
+                if rv3d:
+                    captured_rotation = rv3d.view_rotation.copy()
+                    break
+        if captured_rotation:
+            break
+
+    # Restore main scene viewport rotations
+    for (window, area), original_rot in original_view_rotations.items():
+        rv3d = area.spaces.active.region_3d
+        if rv3d:
+            rv3d.view_rotation = original_rot
+
+    # Restore main scene selection
+    deselect_all()
+    for obj in original_selected:
+        if obj and obj.name in bpy.data.objects:
+            selection_add(obj)
+    if original_active and original_active.name in bpy.data.objects:
+        bpy.context.view_layer.objects.active = original_active
+
+    # Apply captured rotation to temp scene viewports
+    if captured_rotation:
+        # Switch to temp scene temporarily to apply rotation
+        temp_context_scene = bpy.context.scene
+        bpy.context.window.scene = temp_scene
+
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == "VIEW_3D":
+                    rv3d = area.spaces.active.region_3d
+                    if rv3d:
+                        rv3d.view_rotation = captured_rotation.copy()
+
+        # Restore context scene
+        bpy.context.window.scene = temp_context_scene
 
 
 def _finalize_and_export(

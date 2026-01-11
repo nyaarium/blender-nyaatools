@@ -191,8 +191,10 @@ def merge_single_layer(
 
         # Apply all modifiers and shape keys before merging
         if mesh_copy.type == "MESH":
-            bpy.ops.object.mode_set(mode="OBJECT")
-            bpy.ops.object.select_all(action="DESELECT")
+            if bpy.context.active_object:
+                bpy.ops.object.mode_set(mode="OBJECT")
+                bpy.ops.object.select_all(action="DESELECT")
+
             mesh_copy.select_set(True)
             bpy.context.view_layer.objects.active = mesh_copy
 
@@ -228,7 +230,7 @@ def merge_single_layer(
                     # Skip armature modifiers for rigged exports
                     if not is_static_export and mod.type == "ARMATURE":
                         continue
-                    
+
                     mod_name = mod.name
                     try:
                         bpy.ops.object.modifier_apply(modifier=mod_name)
