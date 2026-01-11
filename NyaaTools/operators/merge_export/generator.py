@@ -132,8 +132,8 @@ def render_export_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     export_path = params.get("export_path", "")
     clean_asset_name = params.get("clean_asset_name")
     # Only append clean_asset_name if it exists (VotV format only)
-    # if clean_asset_name: # DEBUG STOP
-    export_path = export_path + clean_asset_name + "/"
+    if clean_asset_name:
+        export_path = export_path + clean_asset_name + "/"
     draw.draw_text(export_path, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
 
     return LINE_HEIGHT
