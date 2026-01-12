@@ -120,7 +120,9 @@ def resize_image_to_size(
         width=target_width,
         height=target_height,
         alpha=image.channels == 4,
+        float_buffer=image.is_float,
     )
+    resized_image.colorspace_settings.name = image.colorspace_settings.name
 
     # Write resized data to new image
     _np_to_image_pixels(resized_image, resized_array)

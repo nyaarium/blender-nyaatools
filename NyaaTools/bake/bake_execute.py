@@ -18,16 +18,18 @@ def execute_bake_for_material(
     ctx: BakeContext,
     material_name: str,
     meshes: List[bpy.types.Object],
+    dtp_format: str,
     debug_print: Optional[Callable[..., None]] = None,
     stop_after_node_setup: bool = False,
 ) -> Dict[str, Tuple[int, int]]:
     """
-    Execute baking for a specific material.
+    Execute baking for a specific material and format.
 
     Args:
         ctx: The bake context
         material_name: Name of the material to bake
         meshes: List of mesh objects using this material
+        dtp_format: Format to bake
         debug_print: Optional debug print function
         stop_after_node_setup: If True, stop after node setup (debug mode)
 
@@ -51,6 +53,27 @@ def execute_bake_for_material(
     if not material:
         debug_print(f"  ⚠️ Material '{material_name}' not found")
         return {}
+
+    # Filter bake images to only the requested format
+    bake_images = [img for img in ctx.bake_images if img.format == dtp_format]
+    if not bake_images:
+        debug_print(f"  ⚠️ Format '{dtp_format}' not found in bake images")
+        return {}
+    
+    # Create a temporary context with filtered images
+    from .bake_context import BakeContext
+    filtered_ctx = BakeContext(
+        mesh_metas=ctx.mesh_metas,
+        meshes_by_material=ctx.meshes_by_material,
+        bake_images=bake_images,
+        export_dir=ctx.export_dir,
+        filename_formatter=ctx.filename_formatter,
+        save_to_file=ctx.save_to_file,
+        wait_for_enter=ctx.wait_for_enter,
+        on_cleanup=ctx.on_cleanup,
+        debug_mode=ctx.debug_mode,
+    )
+    ctx = filtered_ctx
 
     if len(meshes) == 1:
         return _bake_single_mesh(ctx, material, meshes[0], debug_print)
@@ -97,6 +120,7 @@ def _bake_single_mesh(
             resolution=resolution,
             max_resolution=max_resolution,
             uv_layer_name=_get_first_uv_name(mesh),  # Use first UV
+            image_type=img_config.image_type,
         )
 
         if not result_image:
@@ -180,6 +204,7 @@ def _bake_multi_mesh(
                 resolution=resolution,
                 max_resolution=max_resolution,
                 uv_layer_name=_get_first_uv_name(mesh),
+                image_type=img_config.image_type,
             )
 
             if result_image:
@@ -248,12 +273,16 @@ def _bake_multi_mesh(
             resolution=resolution,
             max_resolution=max_resolution,
             uv_layer_name="UVMap",
+            image_type=img_config.image_type,
         )
 
         if result_image:
             # Store final resolution
-            resolutions[img_config.format] = (result_image.size[0], result_image.size[1])
-            
+            resolutions[img_config.format] = (
+                result_image.size[0],
+                result_image.size[1],
+            )
+
             if ctx.save_to_file and ctx.export_dir:
                 _save_image_to_file(
                     result_image, ctx, material.name, img_config, debug_print
@@ -327,12 +356,45 @@ def _get_intermediate_bake_configs(
     if not bake_configs:
         return []
 
-    # Use max resolution found across configs to ensure quality
-    max_w = max(cfg.width for cfg in bake_configs)
-    max_h = max(cfg.height for cfg in bake_configs)
+    # Calculate max resolution per intermediate format
+    # Only consider configs that map to each specific intermediate format
+    target_to_configs = {}  # Map intermediate format -> list of original configs that map to it
+    
+    for cfg in bake_configs:
+        fmt = cfg.format.lower()
+        
+        # Find which intermediate format(s) this config maps to
+        for target, keywords in dtp_category_map.items():
+            if target not in targets:
+                continue  # Skip if this intermediate format isn't needed
+            
+            # Check if this config maps to this intermediate format
+            maps_to_target = False
+            if fmt == target:
+                maps_to_target = True
+            else:
+                channels = fmt.split("-")
+                for kw in keywords:
+                    if kw in channels or fmt == kw:
+                        maps_to_target = True
+                        break
+            
+            if maps_to_target:
+                if target not in target_to_configs:
+                    target_to_configs[target] = []
+                target_to_configs[target].append(cfg)
 
     inter_configs = []
     for t in targets:
+        # Calculate max resolution only for configs that map to this intermediate format
+        if t in target_to_configs and target_to_configs[t]:
+            max_w = max(cfg.width for cfg in target_to_configs[t])
+            max_h = max(cfg.height for cfg in target_to_configs[t])
+        else:
+            # Fallback: use max from all configs if somehow no configs map to this target
+            max_w = max(cfg.width for cfg in bake_configs)
+            max_h = max(cfg.height for cfg in bake_configs)
+        
         inter_configs.append(
             BakeImageConfig(
                 format=t,

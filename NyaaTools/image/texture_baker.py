@@ -18,7 +18,7 @@ def _get_bake_margin(resolution: Tuple[int, int]) -> int:
     """
     width, height = resolution
     max_dimension = max(width, height)
-    return max(16, int(max_dimension / 8))
+    return max(16, int(max_dimension / 4))
 
 
 # DTP channel mapping for sockets and texture baking
@@ -63,6 +63,7 @@ def bake_dtp_texture(
     resolution: Optional[Tuple[int, int]] = None,
     max_resolution: Optional[Tuple[int, int]] = None,
     uv_layer_name: Optional[str] = None,
+    image_type: str = "png",
 ) -> Optional[bpy.types.Image]:
     """
     Bake a material to a texture using DTP format specification.
@@ -74,6 +75,7 @@ def bake_dtp_texture(
         resolution: Fixed resolution (width, height). If None, auto-detect.
         max_resolution: Maximum resolution cap (width, height)
         uv_layer_name: Specific UV layer to use. If None, uses first UV layer.
+        image_type: Output image format ("png" or "exr"). Affects float_buffer setting.
 
     Returns:
         The baked image, or None if baking failed
@@ -199,6 +201,8 @@ def bake_dtp_texture(
                 normal_output_node,
                 final_resolution,
                 target_uv_name,
+                channels,
+                image_type,
                 debug_print,
             )
 
@@ -246,6 +250,8 @@ def bake_dtp_texture(
                 alpha_output_node,
                 final_resolution,
                 target_uv_name,
+                channels,
+                image_type,
                 debug_print,
             )
 
@@ -402,22 +408,28 @@ def _stage_emission_nodes(
 
     if len(channels) == 4:
         # Alpha channel detected for RGBA baking
-
         alpha_channel = channels[3]
 
-        alpha_emission = shader_state.add_node(principled_tree, "ShaderNodeEmission")
+        # Skip alpha if channel is 'xx' (unused)
+        if alpha_channel == "xx":
+            # No alpha channel - treat as RGB only
+            pass
+        else:
+            alpha_emission = shader_state.add_node(
+                principled_tree, "ShaderNodeEmission"
+            )
 
-        # Use _make_shader_nodes for alpha channel with scalar flag
-        _make_shader_nodes(
-            [alpha_channel],
-            shader_state,
-            principled_tree,
-            principled_bsdf,
-            separate_nodes,
-            alpha_emission,
-            True,
-            debug_print,
-        )
+            # Use _make_shader_nodes for alpha channel with scalar flag
+            _make_shader_nodes(
+                [alpha_channel],
+                shader_state,
+                principled_tree,
+                principled_bsdf,
+                separate_nodes,
+                alpha_emission,
+                True,
+                debug_print,
+            )
 
     # Determine final resolution (use max of RGB and Alpha if both exist)
     if resolution:
@@ -473,6 +485,8 @@ def _bake_emission_output(
     alpha_output_node: Optional[object],
     resolution: Tuple[int, int],
     uv_layer_name: Optional[str],
+    channels: list,
+    image_type: str,
     debug_print,
 ) -> Optional[bpy.types.Image]:
     # Create temporary Material Output node in the same tree as the emission node
@@ -488,14 +502,27 @@ def _bake_emission_output(
     bake_type = "RGBA" if has_alpha else "RGB"
     debug_print(f"🍞 Baking {bake_type} at {resolution[0]}x{resolution[1]}")
 
+    # Determine if this is utility map data (non-color)
+    is_utility = _is_utility_map(channels)
+
+    # Determine float buffer setting:
+    # - PNG: always 8-bit integer (for compatibility)
+    # - EXR: always 32-bit float (for precision)
+    # This applies to all texture types (color, utility, normals)
+    use_float = image_type == "exr"
+
     # Create RGB target image
     rgb_image = bpy.data.images.new(
         name=f"bake_{material.name}_{dtp_format}_rgb",
         width=resolution[0],
         height=resolution[1],
         alpha=False,
-        float_buffer=False,
+        float_buffer=use_float,
     )
+
+    # Set colorspace: Non-Color for utility maps, sRGB for color data
+    if is_utility:
+        rgb_image.colorspace_settings.name = "Non-Color"
 
     # Create image texture node in ROOT tree
     img_node = shader_state.add_node(root_tree, "ShaderNodeTexImage")
@@ -545,8 +572,12 @@ def _bake_emission_output(
         width=resolution[0],
         height=resolution[1],
         alpha=False,
-        float_buffer=False,
+        float_buffer=use_float,
     )
+
+    # Set colorspace: Non-Color for utility maps, sRGB for color data
+    if is_utility:
+        alpha_image.colorspace_settings.name = "Non-Color"
 
     # Update image texture node for alpha
     img_node.image = alpha_image
@@ -575,7 +606,14 @@ def _bake_emission_output(
 
     # Pack RGB + Alpha together
     final_image = _pack_rgba_images(
-        material, dtp_format, rgb_image, alpha_image, resolution, debug_print
+        material,
+        dtp_format,
+        rgb_image,
+        alpha_image,
+        resolution,
+        use_float,
+        is_utility,
+        debug_print,
     )
 
     # Clean up intermediate images
@@ -594,16 +632,27 @@ def _bake_normal_output(
     normal_output_node: object,
     resolution: Tuple[int, int],
     uv_layer_name: Optional[str],
+    channels: list,
+    image_type: str,
     debug_print,
 ) -> Optional[bpy.types.Image]:
+    # Check if there's a valid 4th channel (not 'xx' unused)
+    has_alpha = len(channels) == 4 and channels[3] != "xx"
+
+    # Determine float buffer setting:
+    # - PNG: always 8-bit integer (for compatibility)
+    # - EXR: always 32-bit float (for precision)
+    use_float = image_type == "exr"
+
     # Create target image
     target_image = bpy.data.images.new(
         name=f"bake_{material.name}_{dtp_format}",
         width=resolution[0],
         height=resolution[1],
-        alpha=False,
-        float_buffer=False,
+        alpha=has_alpha,
+        float_buffer=use_float,
     )
+    target_image.colorspace_settings.name = "Non-Color"
 
     # Create image texture node in ROOT tree
     img_node = shader_state.add_node(root_tree, "ShaderNodeTexImage")
@@ -858,6 +907,8 @@ def _pack_rgba_images(
     rgb_image: bpy.types.Image,
     alpha_image: bpy.types.Image,
     resolution: Tuple[int, int],
+    use_float: bool,
+    is_utility: bool,
     debug_print,
 ) -> Optional[bpy.types.Image]:
     """
@@ -869,6 +920,8 @@ def _pack_rgba_images(
         rgb_image: RGB image
         alpha_image: Alpha image
         resolution: Target resolution for both images
+        use_float: Whether to use float buffer for the final image
+        is_utility: Whether this is utility map data (affects colorspace)
         debug_print: Debug print function
 
     Returns:
@@ -899,8 +952,12 @@ def _pack_rgba_images(
         width=resolution[0],
         height=resolution[1],
         alpha=True,
-        float_buffer=False,
+        float_buffer=use_float,
     )
+
+    # Set colorspace: Non-Color for utility maps, sRGB for color data
+    if is_utility:
+        final_image.colorspace_settings.name = "Non-Color"
 
     # Copy numpy array to image
     _np_to_image_pixels(final_image, rgba_array)
@@ -951,6 +1008,43 @@ def _get_bake_type_for_channels(channels: list) -> str:
         return "NORMAL"
     else:
         return "EMIT"
+
+
+def _is_utility_map(channels: list) -> bool:
+    """
+    Determine if channels represent utility map data (non-color, scalar values).
+
+    Utility maps are grayscale/scalar data like metallic, roughness, specular, etc.
+    They should use Non-Color colorspace and don't contain RGB color channels.
+
+    Args:
+        channels: List of channel codes (e.g., ['me', 'sp', 'ro'])
+
+    Returns:
+        True if this is utility map data, False if it's color data
+    """
+    # Color channels that indicate this is color data
+    color_channels = {"cr", "cg", "cb", "er", "eg", "eb", "lr", "lg", "lb"}
+
+    # Normal channels are handled separately
+    normal_channels = {"nx", "ng", "nd"}
+
+    # Check if any channel is a color channel
+    has_color = any(channel in color_channels for channel in channels)
+
+    # Check if any channel is a normal channel
+    has_normal = any(channel in normal_channels for channel in channels)
+
+    # If it has color channels, it's not a utility map
+    if has_color:
+        return False
+
+    # If it has normal channels, it's not a utility map (normals are handled separately)
+    if has_normal:
+        return False
+
+    # Everything else (me, sp, ro, ao, he, es, sm, al, etc.) is utility data
+    return True
 
 
 def _optimize_baked_image(

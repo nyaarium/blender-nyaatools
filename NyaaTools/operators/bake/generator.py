@@ -288,6 +288,7 @@ def _execute_bake_task(
             bake_ctx,
             mat_name,
             meshes,
+            dtp_format=dtp_format,  # Only bake this specific format
             debug_print=debug_print,
         )
 
