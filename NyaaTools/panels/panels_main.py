@@ -164,6 +164,9 @@ def draw_bake_channels(layout, asset, context):
     """Draw bake channels list with add/edit/remove/run controls."""
     cfg = asset.nyaa_asset
     has_bake_channels = len(cfg.bake_images) > 0
+    has_bake_after_export = any(
+        profile.bake_after_export for profile in cfg.export_profiles
+    )
 
     box = layout.box()
     row = box.row()
@@ -175,12 +178,21 @@ def draw_bake_channels(layout, asset, context):
             list.append(img.format)
         title = "Bake Channels: " + ", ".join(list)
 
+    active_profile = None
+    if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
+        cfg.export_profiles
+    ):
+        active_profile = cfg.export_profiles[cfg.active_export_index]
+
+    if not active_profile or not active_profile.bake_after_export:
+        title += " (Disabled)"
+
     row.prop(
         cfg,
         "show_bake_channels",
         icon="TRIA_DOWN" if cfg.show_bake_channels else "TRIA_RIGHT",
         icon_only=True,
-        emboss=not has_bake_channels,
+        emboss=not has_bake_channels and has_bake_after_export,
     )
     row.label(text=title, icon="OUTPUT")
 
