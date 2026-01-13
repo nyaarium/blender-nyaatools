@@ -376,11 +376,14 @@ class NYAATOOLS_OT_JumpToAsset(Operator):
             self.report({"ERROR"}, f"Asset '{self.asset_name}' not found")
             return {"CANCELLED"}
 
-        bpy.ops.object.select_all(action="DESELECT")
+        # Add asset to selection and make it active
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
-        self.report({"INFO"}, f"Selected asset '{obj.nyaa_asset.asset_name}'")
+        invalidate_selection_cache()
+        tag_view3d_redraw(context)
+
+        self.report({"INFO"}, f"Added asset '{obj.nyaa_asset.asset_name}' to selection")
         return {"FINISHED"}
 
 

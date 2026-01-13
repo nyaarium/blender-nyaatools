@@ -275,32 +275,32 @@ class NYAATOOLS_PT_AssetConfig(Panel):
             )
             return
 
+        # Check if any meshes belong to assets but no assets are selected
+        if len(sel.meshes_belonging_to) > 0 and not sel.has_asset:
+            # Collect unique assets (same asset might appear multiple times if multiple meshes belong to it)
+            unique_assets = {}
+            for asset_obj, layer_name in sel.meshes_belonging_to:
+                if asset_obj not in unique_assets:
+                    unique_assets[asset_obj] = []
+                unique_assets[asset_obj].append(layer_name)
+
+            box = layout.box()
+            box.label(text="Selected meshes belong to:", icon="INFO")
+            for asset_obj in unique_assets.keys():
+                row = box.row(align=True)
+                op = row.operator(
+                    "nyaatools.jump_to_asset",
+                    text=asset_obj.nyaa_asset.asset_name,
+                    icon="FORWARD",
+                )
+                op.asset_name = asset_obj.name
+            return
+
         if len(sel.meshes) == 1 and len(sel.armatures) == 0:
             mesh = sel.meshes[0]
 
             if hasattr(mesh, "nyaa_asset") and mesh.nyaa_asset.is_asset:
                 self._draw_asset_config(layout, mesh, sel)
-                return
-
-            belonging = find_asset_for_mesh(mesh)
-            if belonging:
-                box = layout.box()
-                box.label(text="This mesh belongs to:", icon="INFO")
-                for asset_obj, layer_name in belonging:
-                    row = box.row(align=True)
-                    # desc = get_asset_description(asset_obj)
-                    op = row.operator(
-                        "nyaatools.jump_to_asset",
-                        text=asset_obj.nyaa_asset.asset_name,
-                        icon="FORWARD",
-                    )
-                    op.asset_name = asset_obj.name
-                layout.separator()
-                layout.operator(
-                    "nyaatools.create_asset_from_mesh",
-                    text="Create separate static asset",
-                    icon="ADD",
-                )
                 return
 
             layout.label(text="This mesh is not part of any asset.")
