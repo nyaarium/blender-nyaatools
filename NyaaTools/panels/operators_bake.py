@@ -9,7 +9,7 @@ import bpy
 from bpy.types import Operator
 from bpy.props import BoolProperty, EnumProperty
 
-from .panels_context import SelectionContext
+from .panels_context import SelectionContext, tag_view3d_redraw
 
 
 # =============================================================================
@@ -245,8 +245,7 @@ class NYAATOOLS_OT_LoadBakeProfile(Operator):
             img.width = w
             img.height = h
 
-        for area in context.screen.areas:
-            area.tag_redraw()
+        tag_view3d_redraw(context)
 
         self.report({"INFO"}, f"Loaded bake profile: {preset_data['label']}")
         return {"FINISHED"}
@@ -337,6 +336,8 @@ class NYAATOOLS_OT_AddBakeImage(Operator):
         img.optimize_resolution = self.optimize_resolution
 
         cfg.active_bake_index = len(cfg.bake_images) - 1
+
+        tag_view3d_redraw(context)
 
         self.report({"INFO"}, f"Added bake image: {fmt} ({self.image_type.upper()})")
         return {"FINISHED"}
@@ -445,6 +446,8 @@ class NYAATOOLS_OT_EditBakeImage(Operator):
         img.height = self.height
         img.optimize_resolution = self.optimize_resolution
 
+        tag_view3d_redraw(context)
+
         self.report({"INFO"}, f"Updated bake image: {fmt} ({self.image_type.upper()})")
         return {"FINISHED"}
 
@@ -473,6 +476,8 @@ class NYAATOOLS_OT_RemoveBakeImage(Operator):
 
         if cfg.active_bake_index >= len(cfg.bake_images) and len(cfg.bake_images) > 0:
             cfg.active_bake_index = len(cfg.bake_images) - 1
+
+        tag_view3d_redraw(context)
 
         self.report({"INFO"}, f"Removed bake image: {name}")
         return {"FINISHED"}
