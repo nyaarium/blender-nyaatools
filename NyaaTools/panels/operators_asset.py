@@ -163,18 +163,26 @@ class NYAATOOLS_OT_UnmarkAsset(Operator):
     """Remove asset status from the selected object"""
 
     bl_idname = "nyaatools.unmark_asset"
-    bl_label = "Unmark Asset"
+    bl_label = "Destroy Asset"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
-        if len(context.selected_objects) != 1:
-            return False
-        obj = context.selected_objects[0]
-        return hasattr(obj, "nyaa_asset") and obj.nyaa_asset.is_asset
+        sel = SelectionContext(context)
+        return sel.has_asset
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(
+            self, event, message="This will destroy Asset configuration for this asset"
+        )
 
     def execute(self, context):
-        obj = context.selected_objects[0]
+        sel = SelectionContext(context)
+        obj = sel.asset
+        if not obj:
+            self.report({"ERROR"}, "No asset selected")
+            return {"CANCELLED"}
+
         name = obj.nyaa_asset.asset_name
         obj.nyaa_asset.is_asset = False
         obj.nyaa_asset.is_humanoid = False
@@ -183,6 +191,65 @@ class NYAATOOLS_OT_UnmarkAsset(Operator):
         invalidate_selection_cache()
         tag_view3d_redraw(context)
         self.report({"INFO"}, f"Removed asset status from '{name}'")
+        return {"FINISHED"}
+
+
+class NYAATOOLS_OT_ConfigureAsset(Operator):
+    """Configure asset settings"""
+
+    bl_idname = "nyaatools.configure_asset"
+    bl_label = "Configure Asset"
+    bl_options = {"REGISTER", "UNDO"}
+
+    asset_name: StringProperty(name="Asset Name", default="")
+
+    @classmethod
+    def poll(cls, context):
+        sel = SelectionContext(context)
+        return sel.has_asset
+
+    def invoke(self, context, event):
+        sel = SelectionContext(context)
+        self.asset_name = sel.asset.nyaa_asset.asset_name
+        return context.window_manager.invoke_props_dialog(self, width=350)
+
+    def draw(self, context):
+        layout = self.layout
+        sel = SelectionContext(context)
+
+        # Handle the case where the asset was destroyed via the child operator
+        if not sel.has_asset or not sel.asset.nyaa_asset.is_asset:
+            layout.label(text="Asset configuration has been removed.", icon="TRASH")
+            layout.label(text="Click OK to dismiss this window.")
+            return
+
+        cfg = sel.asset.nyaa_asset
+        layout.prop(self, "asset_name")
+
+        box = layout.box()
+        box.alert = True
+        col = box.column(align=True)
+        col.label(text="Danger Zone", icon="ERROR")
+        col.operator("nyaatools.unmark_asset", text="Destroy Asset", icon="X")
+
+    def execute(self, context):
+        sel = SelectionContext(context)
+
+        # If asset is gone (destroyed via button in this dialog), just finish
+        if not sel.has_asset or not sel.asset.nyaa_asset.is_asset:
+            return {"FINISHED"}
+
+        cfg = sel.asset.nyaa_asset
+        new_name = self.asset_name.strip()
+        if not new_name:
+            self.report({"ERROR"}, "Asset name cannot be empty")
+            return {"CANCELLED"}
+
+        if cfg.asset_name != new_name:
+            cfg.asset_name = new_name
+            self.report({"INFO"}, f"Updated asset name to '{new_name}'")
+            tag_view3d_redraw(context)
+
         return {"FINISHED"}
 
 

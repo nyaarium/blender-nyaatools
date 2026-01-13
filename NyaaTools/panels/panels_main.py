@@ -355,19 +355,14 @@ class NYAATOOLS_PT_AssetConfig(Panel):
         """Draw the full asset configuration UI."""
         cfg = asset.nyaa_asset
 
-        box = layout.box()
-        row = box.row(align=True)
+        # --- Header ---
+        split = layout.split(factor=0.9, align=True)
+        split.label(text=cfg.asset_name, icon="PACKAGE")
+        split.operator(
+            "nyaatools.configure_asset", text="", icon="PREFERENCES", emboss=True
+        )
 
-        row.label(text="", icon="PACKAGE")
-        row.prop(cfg, "asset_name", text="")
-
-        # Show "Destroy Asset" button
-        row = box.row()
-        row.label(text="")
-        row.operator("nyaatools.unmark_asset", text="Destroy Asset", icon="X")
-
-        layout.separator()
-
+        # --- Profiles and Bake ---
         draw_export_profiles(layout, asset, bpy.context)
 
         draw_bake_channels(layout, asset, bpy.context)
