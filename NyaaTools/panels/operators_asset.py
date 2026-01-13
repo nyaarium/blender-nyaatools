@@ -376,6 +376,21 @@ class NYAATOOLS_OT_JumpToAsset(Operator):
             self.report({"ERROR"}, f"Asset '{self.asset_name}' not found")
             return {"CANCELLED"}
 
+        # Auto-show the asset by enabling/unhiding its collections
+        obj.hide_viewport = False
+        obj.hide_set(False)
+
+        for collection in obj.users_collection:
+            collection.hide_viewport = False
+            collection.hide_render = False
+
+            layer_collection = self._find_layer_collection(
+                context.view_layer.layer_collection, collection.name
+            )
+            if layer_collection:
+                layer_collection.exclude = False
+                layer_collection.hide_viewport = False
+
         # Add asset to selection and make it active
         obj.select_set(True)
         context.view_layer.objects.active = obj
@@ -385,6 +400,84 @@ class NYAATOOLS_OT_JumpToAsset(Operator):
 
         self.report({"INFO"}, f"Added asset '{obj.nyaa_asset.asset_name}' to selection")
         return {"FINISHED"}
+
+    def _find_layer_collection(self, layer_collection, name):
+        """Recursively find a LayerCollection by name."""
+        if layer_collection.name == name:
+            return layer_collection
+        for child in layer_collection.children:
+            result = self._find_layer_collection(child, name)
+            if result:
+                return result
+        return None
+
+
+class NYAATOOLS_OT_JumpToMesh(Operator):
+    """Select the active mesh from the asset's mesh list"""
+
+    bl_idname = "nyaatools.jump_to_mesh"
+    bl_label = "Jump to Mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        sel = SelectionContext(context)
+        if not sel.has_asset:
+            return False
+        cfg = sel.asset.nyaa_asset
+        if len(cfg.meshes) == 0:
+            return False
+        if cfg.active_mesh_index < 0 or cfg.active_mesh_index >= len(cfg.meshes):
+            return False
+        entry = cfg.meshes[cfg.active_mesh_index]
+        return entry.mesh_object is not None
+
+    def execute(self, context):
+        sel = SelectionContext(context)
+        cfg = sel.asset.nyaa_asset
+        entry = cfg.meshes[cfg.active_mesh_index]
+
+        if not entry.mesh_object:
+            self.report({"ERROR"}, "Mesh object is None (deleted)")
+            return {"CANCELLED"}
+
+        mesh_obj = entry.mesh_object
+
+        # Auto-show the mesh by enabling/unhiding its collections
+        mesh_obj.hide_viewport = False
+        mesh_obj.hide_set(False)
+
+        for collection in mesh_obj.users_collection:
+            collection.hide_viewport = False
+            collection.hide_render = False
+
+            layer_collection = self._find_layer_collection(
+                context.view_layer.layer_collection, collection.name
+            )
+            if layer_collection:
+                layer_collection.exclude = False
+                layer_collection.hide_viewport = False
+
+        # Deselect all and select the mesh
+        bpy.ops.object.select_all(action="DESELECT")
+        mesh_obj.select_set(True)
+        context.view_layer.objects.active = mesh_obj
+
+        invalidate_selection_cache()
+        tag_view3d_redraw(context)
+
+        self.report({"INFO"}, f"Selected mesh '{mesh_obj.name}'")
+        return {"FINISHED"}
+
+    def _find_layer_collection(self, layer_collection, name):
+        """Recursively find a LayerCollection by name."""
+        if layer_collection.name == name:
+            return layer_collection
+        for child in layer_collection.children:
+            result = self._find_layer_collection(child, name)
+            if result:
+                return result
+        return None
 
 
 def _get_existing_layer_items(self, context):
@@ -941,5 +1034,3 @@ class NYAATOOLS_OT_RenameLayer(Operator):
             self.report({"INFO"}, f"Renamed layer '{current_layer}' to '{new_name}'")
 
         return {"FINISHED"}
-
-

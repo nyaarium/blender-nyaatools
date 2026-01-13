@@ -38,10 +38,11 @@ def draw_asset_meshes_list(layout, asset):
     col = row.column(align=True)
     col.operator("nyaatools.add_selected_meshes", icon="ADD", text="")
     col.operator("nyaatools.remove_mesh", icon="REMOVE", text="")
+    col.operator("nyaatools.rename_layer", icon="OUTLINER_OB_FONT", text="")
     col.separator()
     col.operator("nyaatools.edit_mesh_entry", icon="PREFERENCES", text="")
     col.separator()
-    col.operator("nyaatools.rename_layer", icon="OUTLINER_OB_FONT", text="")
+    col.operator("nyaatools.jump_to_mesh", icon="RESTRICT_SELECT_OFF", text="")
 
 
 def draw_export_profiles(layout, asset, context):
