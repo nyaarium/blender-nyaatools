@@ -198,23 +198,33 @@ def draw_bake_channels(layout, asset, context):
 
     show_bake_channels = cfg.show_bake_channels
     if show_bake_channels:
-        row = box.row()
-        row.template_list(
-            "NYAATOOLS_UL_BakeImages",
-            "",
-            cfg,
-            "bake_images",
-            cfg,
-            "active_bake_index",
-            rows=4,
-        )
-        col = row.column(align=True)
-        col.operator("nyaatools.add_bake_image", icon="ADD", text="")
-        col.operator("nyaatools.remove_bake_image", icon="REMOVE", text="")
-        col.separator()
-        col.operator("nyaatools.edit_bake_image", icon="PREFERENCES", text="")
-        col.separator()
-        col.operator("nyaatools.load_bake_profile", icon="IMPORT", text="")
+        if has_bake_channels:
+            row = box.row()
+            row.template_list(
+                "NYAATOOLS_UL_BakeImages",
+                "",
+                cfg,
+                "bake_images",
+                cfg,
+                "active_bake_index",
+                rows=4,
+            )
+            col = row.column(align=True)
+            col.operator("nyaatools.add_bake_image", icon="ADD", text="")
+            col.operator("nyaatools.remove_bake_image", icon="REMOVE", text="")
+            col.separator()
+            col.operator("nyaatools.edit_bake_image", icon="PREFERENCES", text="")
+            col.separator()
+            col.operator("nyaatools.load_bake_profile", icon="IMPORT", text="")
+        else:
+            col = box.column(align=True)
+            col.label(text="No bake channels configured", icon="INFO")
+            col.operator(
+                "nyaatools.load_bake_profile", text="Load Profile", icon="IMPORT"
+            )
+            col.operator(
+                "nyaatools.add_bake_image", text="Add Bake Channel", icon="ADD"
+            )
 
 
 # =============================================================================
