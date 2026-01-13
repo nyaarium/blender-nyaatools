@@ -12,10 +12,7 @@ from ..asset.asset_helpers import (
     get_layer_name_collisions,
 )
 
-from .panels_context import (
-    get_selection_context,
-    selection_has_legacy_data,
-)
+from .panels_context import get_selection_context
 
 
 # =============================================================================
@@ -264,7 +261,7 @@ class NYAATOOLS_PT_AssetConfig(Panel):
         layout = self.layout
         sel = get_selection_context(context)
 
-        if selection_has_legacy_data(context):
+        if sel.has_legacy_data:
             box = layout.box()
             box.alert = True
             col = box.column(align=True)
@@ -384,7 +381,7 @@ class NYAATOOLS_PT_AssetParts(Panel):
         layout = self.layout
         sel = get_selection_context(context)
 
-        if selection_has_legacy_data(context):
+        if sel.has_legacy_data:
             layout.label(text="Migration required first", icon="ERROR")
             return
 

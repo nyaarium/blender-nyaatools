@@ -7,16 +7,14 @@ import re
 from bpy.types import Operator
 from bpy.props import StringProperty
 
-from ..legacy import (
+from .panels_context import invalidate_selection_cache
+from ..armature.estimate_humanoid_ratio import is_humanoid
+from ..asset.legacy import (
     PROP_AVATAR_EXPORT_PATH,
     PROP_AVATAR_LAYERS,
     PROP_AVATAR_NAME,
-)
-from .panels_context import (
     scene_has_legacy_data,
-    invalidate_selection_cache,
 )
-from ..armature.estimate_humanoid_ratio import is_humanoid
 
 
 def _sort_asset_meshes(meshes_collection):

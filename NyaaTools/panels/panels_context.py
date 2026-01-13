@@ -6,43 +6,8 @@ import time
 
 import bpy
 
-from ..legacy import (
-    PROP_AVATAR_EXPORT_PATH,
-    PROP_AVATAR_LAYERS,
-    PROP_AVATAR_NAME,
-)
 from ..asset.asset_helpers import find_asset_for_mesh
-
-
-# =============================================================================
-# Legacy Data Detection
-# =============================================================================
-
-
-def has_legacy_avatar_data(obj) -> bool:
-    """Check if an object has legacy NyaaTools custom properties."""
-    if obj is None:
-        return False
-    if PROP_AVATAR_NAME in obj:
-        return True
-    if PROP_AVATAR_EXPORT_PATH in obj:
-        return True
-    if PROP_AVATAR_LAYERS in obj:
-        return True
-    return False
-
-
-def selection_has_legacy_data(context) -> bool:
-    """Check if any selected object has legacy data. Uses cached SelectionContext."""
-    return get_selection_context(context).has_legacy_data
-
-
-def scene_has_legacy_data(context) -> bool:
-    """Check if any object in scene has legacy data."""
-    for obj in bpy.data.objects:
-        if has_legacy_avatar_data(obj):
-            return True
-    return False
+from ..asset.legacy import has_legacy_avatar_data
 
 
 # =============================================================================
