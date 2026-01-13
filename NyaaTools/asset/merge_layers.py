@@ -242,7 +242,11 @@ def merge_single_layer(
                             f"Failed to apply modifier '{mod_name}' on '{mesh_copy.name}': {e}"
                         )
 
-        merge_onto_layer(layer_name, mesh_copy, armature_copy)
+        # For static exports, don't add armature modifier back (already applied)
+        merge_onto_layer(
+            layer_name, mesh_copy, armature_copy if not is_static_export else None
+        )
+
         debug_print(f"   Merged: {mesh_name}")
 
     # Get the merged result (named after the layer)
@@ -258,94 +262,6 @@ def merge_single_layer(
         debug_print(f"✅ Cleaned up layer: {layer_name}")
 
     return merged_obj, unrename_info
-
-
-def merge_asset_layers(
-    asset_host,
-    target_collection,
-    armature_copy=None,
-    include_colliders=False,
-    debug_print=None,
-):
-    """
-    Copy and merge meshes by layer into a target collection.
-
-    This is the core merge logic shared between file export and collection export.
-
-    Args:
-        asset_host: The asset host object (armature or mesh)
-        target_collection: Collection to link copied objects to
-        armature_copy: Optional copied armature (None for static/mesh-hosted assets)
-        include_colliders: If True, also process UCX collider meshes
-        debug_print: Optional debug print function
-
-    Returns:
-        tuple: (merged_layer_objects, collider_objects, unrename_info)
-            - merged_layer_objects: dict {layer_name: merged_mesh_object}
-            - collider_objects: list of collider mesh objects (empty if include_colliders=False)
-            - unrename_info: list of rename info for restoration
-    """
-    if debug_print is None:
-
-        def debug_print(*args):
-            pass
-
-    # Get non-collider meshes only
-    asset_meshes_layers = get_asset_non_collider_meshes_by_layer(asset_host)
-    unrename_info = []
-    merged_layer_objects = {}
-    collider_objects = []
-
-    for layer_name in asset_meshes_layers:
-        layer = asset_meshes_layers[layer_name]
-        first_visit = True
-
-        for mesh_name in layer:
-            mesh = layer[mesh_name]
-
-            mesh_copy = mesh.copy()
-            mesh_copy.data = mesh.data.copy()
-            layer[mesh_name] = mesh_copy
-            target_collection.objects.link(mesh_copy)
-
-            # Clear nyaa_asset config on copy (don't want exported objects marked as assets)
-            if hasattr(mesh_copy, "nyaa_asset"):
-                mesh_copy.nyaa_asset.is_asset = False
-                mesh_copy.nyaa_asset.asset_name = ""
-                mesh_copy.nyaa_asset.meshes.clear()
-                mesh_copy.nyaa_asset.export_profiles.clear()
-                mesh_copy.nyaa_asset.bake_images.clear()
-
-            if first_visit:
-                unrename_info.extend(rename_object(mesh_copy, layer_name))
-                first_visit = False
-                debug_print(f"📦 Created layer: {layer_name}")
-
-            merge_onto_layer(layer_name, mesh_copy, armature_copy)
-            debug_print(f"   Merged: {mesh_name}")
-
-        # Get the merged result (named after the layer)
-        merged_obj = None
-        for obj in target_collection.objects:
-            if obj.name == layer_name and obj.type == "MESH":
-                merged_obj = obj
-                break
-
-        if merged_obj:
-            cleanup_mesh(merged_obj)
-            sort_mesh_elements_by_material(merged_obj, debug_print)
-            merged_layer_objects[layer_name] = merged_obj
-            debug_print(f"✅ Cleaned up layer: {layer_name}")
-
-    # Process colliders if requested
-    if include_colliders:
-        collider_objs, collider_unrename = process_collider_meshes(
-            asset_host, target_collection, debug_print
-        )
-        collider_objects.extend(collider_objs)
-        unrename_info.extend(collider_unrename)
-
-    return merged_layer_objects, collider_objects, unrename_info
 
 
 def process_collider_meshes(asset_host, target_collection, debug_print=None):

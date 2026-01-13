@@ -177,7 +177,8 @@ def export_votv(asset_name, temp_scene, export_path, unrename_info, debug_print)
     bpy.ops.mesh.quads_convert_to_tris()
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    # UCX collision objects should already be in temp_scene from merge_asset_layers
+    # UCX collision objects should already be in temp_scene from process_collider_meshes
+    # (called in _do_export_file/_do_export_collection before export_votv)
     # Just ensure they're triangulated
     ucx_objects = [obj for obj in temp_scene.objects if obj.name.startswith("UCX_")]
     if ucx_objects:
