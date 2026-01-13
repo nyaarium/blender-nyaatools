@@ -20,8 +20,8 @@ from .panels_context import get_selection_context
 # =============================================================================
 
 
-def draw_asset_meshes_list(layout, asset):
-    """Draw the UIList for asset meshes with add/remove/edit buttons."""
+def draw_asset_layers_list(layout, asset):
+    """Draw the UIList for asset layers with add/remove/edit buttons."""
     cfg = asset.nyaa_asset
 
     row = layout.row()
@@ -32,7 +32,7 @@ def draw_asset_meshes_list(layout, asset):
         "meshes",
         cfg,
         "active_mesh_index",
-        rows=3,
+        rows=8,
     )
 
     col = row.column(align=True)
@@ -151,7 +151,7 @@ def draw_export_profiles(layout, asset, context):
             "export_profiles",
             cfg,
             "active_export_index",
-            rows=2,
+            rows=4,
         )
 
         col = row.column(align=True)
@@ -208,7 +208,7 @@ def draw_bake_channels(layout, asset, context):
                 "bake_images",
                 cfg,
                 "active_bake_index",
-                rows=4,
+                rows=6,
             )
             col = row.column(align=True)
             col.operator("nyaatools.add_bake_image", icon="ADD", text="")
@@ -226,6 +226,47 @@ def draw_bake_channels(layout, asset, context):
             col.operator(
                 "nyaatools.add_bake_image", text="Add Bake Channel", icon="ADD"
             )
+
+
+def draw_layers(layout, asset, context):
+    """Draw layers list with add/remove/edit controls."""
+    cfg = asset.nyaa_asset
+
+    # Count unique layer names and total meshes (excluding meta objects/colliders)
+    unique_layers = set()
+    mesh_count = 0
+    for mesh_entry in cfg.meshes:
+        # Skip colliders (meta objects)
+        if mesh_entry.is_ue_collider:
+            continue
+        mesh_count += 1
+        if mesh_entry.layer_name:
+            unique_layers.add(mesh_entry.layer_name)
+
+    layer_count = len(unique_layers)
+
+    box = layout.box()
+    row = box.row()
+
+    # Build title summary
+    if mesh_count == 0:
+        title = "Layers: No meshes"
+    else:
+        layer_text = f"{layer_count} layer" + ("s" if layer_count != 1 else "")
+        mesh_text = f"{mesh_count} mesh" + ("es" if mesh_count != 1 else "")
+        title = f"Layers: {layer_text} from {mesh_text}"
+
+    row.prop(
+        cfg,
+        "show_layers",
+        icon="TRIA_DOWN" if cfg.show_layers else "TRIA_RIGHT",
+        icon_only=True,
+        emboss=False,
+    )
+    row.label(text=title, icon="MESH_DATA")
+
+    if cfg.show_layers:
+        draw_asset_layers_list(box, asset)
 
 
 # =============================================================================
@@ -367,41 +408,4 @@ class NYAATOOLS_PT_AssetConfig(Panel):
 
         draw_bake_channels(layout, asset, bpy.context)
 
-
-# =============================================================================
-# Asset Parts Subpanel
-# =============================================================================
-
-
-class NYAATOOLS_PT_AssetParts(Panel):
-    """Meshes assigned to the asset."""
-
-    bl_label = "Asset Parts"
-    bl_idname = "NYAATOOLS_PT_AssetParts"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "NyaaTools"
-    bl_parent_id = "NYAATOOLS_PT_Main"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 2
-
-    @classmethod
-    def poll(cls, context):
-        sel = get_selection_context(context)
-        return sel.has_asset
-
-    def draw_header(self, context):
-        sel = get_selection_context(context)
-        icon = "ARMATURE_DATA" if sel.asset.type == "ARMATURE" else "MESH_DATA"
-        self.layout.label(text="", icon=icon)
-
-    def draw(self, context):
-        layout = self.layout
-        sel = get_selection_context(context)
-
-        if sel.has_legacy_data:
-            layout.label(text="Migration required first", icon="ERROR")
-            return
-
-        layout.label(text="Assigned Meshes:")
-        draw_asset_meshes_list(layout, sel.asset)
+        draw_layers(layout, asset, bpy.context)

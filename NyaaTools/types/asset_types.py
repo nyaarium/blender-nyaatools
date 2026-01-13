@@ -207,5 +207,8 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
         description="Expand export profiles section",
         default=True,
     )
-
-
+    show_layers: BoolProperty(
+        name="Show Layers",
+        description="Expand layers section",
+        default=True,
+    )
