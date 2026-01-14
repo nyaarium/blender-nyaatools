@@ -387,6 +387,12 @@ class NYAATOOLS_PT_AssetConfig(Panel):
             
             return
 
+        # Check if we have exactly one asset in selection (mesh asset + other meshes, or from meshes_belonging_to)
+        # This must come BEFORE the single mesh check to handle the case where meshes belong to an asset
+        if sel.has_asset:
+            self._draw_asset_config(layout, sel.asset, sel)
+            return
+
         if len(sel.meshes) == 1 and len(sel.armatures) == 0:
             mesh = sel.meshes[0]
 

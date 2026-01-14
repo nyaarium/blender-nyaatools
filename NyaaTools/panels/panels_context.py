@@ -183,6 +183,15 @@ class SelectionContext:
             belonging = find_asset_for_mesh(mesh)
             self.meshes_belonging_to.extend(belonging)
 
+        # If meshes belong to exactly one asset, assume that asset
+        if len(self.meshes_belonging_to) > 0:
+            unique_assets = set(asset_obj for asset_obj, _ in self.meshes_belonging_to)
+            if len(unique_assets) == 1:
+                self.asset = next(iter(unique_assets))
+                if hasattr(self.asset, "nyaa_asset"):
+                    self.is_humanoid = self.asset.nyaa_asset.is_humanoid
+                return
+
     @property
     def has_asset(self) -> bool:
         return self.asset is not None
