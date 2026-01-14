@@ -5,10 +5,10 @@ Migration and legacy operators for NyaaTools panel.
 import bpy
 import re
 from bpy.types import Operator
-from bpy.props import StringProperty
 
 from .panels_context import invalidate_selection_cache
 from ..armature.estimate_humanoid_ratio import is_humanoid
+from ..asset.asset_registry import get_registry
 from ..asset.legacy import (
     PROP_AVATAR_EXPORT_PATH,
     PROP_AVATAR_LAYERS,
@@ -70,6 +70,7 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
         migrated_meshes = 0
 
         avatar_armatures = {}
+        registry = get_registry()
 
         for obj in bpy.data.objects:
             if obj.type != "ARMATURE":
@@ -84,6 +85,9 @@ class NYAATOOLS_OT_MigrateLegacyData(Operator):
             obj.nyaa_asset.is_asset = True
             obj.nyaa_asset.asset_name = avatar_name
             obj.nyaa_asset.is_humanoid = is_humanoid(obj)
+
+            # Ensure UUID is assigned
+            registry.register(obj)
 
             if PROP_AVATAR_EXPORT_PATH in obj:
                 export_path = obj[PROP_AVATAR_EXPORT_PATH]

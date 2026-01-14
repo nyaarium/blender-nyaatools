@@ -19,6 +19,8 @@ from bpy.props import (
     PointerProperty,
     StringProperty,
 )
+from NyaaTools.common.show_message_box import show_message_box
+import uuid
 
 
 class NyaaAssetMeshEntry(bpy.types.PropertyGroup):
@@ -169,6 +171,12 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
         name="Asset Name",
         default="",
         description="Display name for this asset",
+    )
+    id: StringProperty(
+        name="Asset ID",
+        default="",
+        description="Unique identifier for this asset",
+        options={"HIDDEN"},
     )
     meshes: CollectionProperty(
         type=NyaaAssetMeshEntry,

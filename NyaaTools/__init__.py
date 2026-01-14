@@ -2,6 +2,7 @@ import inspect
 import bpy
 
 from . import dev_reload
+from .asset import asset_registry
 
 
 bl_info = {
@@ -79,7 +80,10 @@ def _toggle_register(reg: bool):
     )
 
     # All items in registration order (by dependency/importance)
-    # Items can be classes (registered directly) or modules (introspected for NYAATOOLS_ classes)
+    # Items can be:
+    # - Classes (registered directly)
+    # - Modules (introspected for NYAATOOLS_ classes)
+    # - Modules/objects with register()/unregister() methods (called automatically)
     items = [
         # 1. PropertyGroups (must be first - operators reference them)
         NyaaAssetMeshEntry,
@@ -118,16 +122,29 @@ def _toggle_register(reg: bool):
         # 4. Panels (modules - auto-discover NYAATOOLS_PT_ classes)
         panels_main,
         panels_utils,
+        # 5. Registry modules (auto-register/unregister handlers)
+        # Must be called AFTER PropertyGroups are attached (handlers access obj.nyaa_asset).
+        asset_registry,
     ]
 
     # Collect all classes to register (from items list)
     classes_to_register = []
     panel_classes = []  # Collect panels separately to sort by parent dependency
+    registry_items = []  # Collect items with register()/unregister() methods
+    
     for item in items:
         if inspect.isclass(item):
             # Direct class reference
             classes_to_register.append(item)
         elif inspect.ismodule(item):
+            # Check if module has register()/unregister() functions
+            has_register = hasattr(item, "register") and callable(item.register)
+            has_unregister = hasattr(item, "unregister") and callable(item.unregister)
+            
+            if has_register and has_unregister:
+                # Module with registration functions - add to registry_items
+                registry_items.append(item)
+            else:
             # Module - introspect for classes
             module_name = item.__name__.split(".")[-1]
             for name, obj in inspect.getmembers(item, inspect.isclass):
@@ -144,6 +161,13 @@ def _toggle_register(reg: bool):
                     and name == "PrzemirApplyTopModifier"
                 ):
                     classes_to_register.append(obj)
+        else:
+            # Check if object has register()/unregister() methods
+            has_register = hasattr(item, "register") and callable(item.register)
+            has_unregister = hasattr(item, "unregister") and callable(item.unregister)
+            
+            if has_register and has_unregister:
+                registry_items.append(item)
 
     # Sort panels: root panels (no bl_parent_id) first, then child panels
     def panel_sort_key(cls):
@@ -164,8 +188,16 @@ def _toggle_register(reg: bool):
         bpy.types.Scene.nyaa_settings = bpy.props.PointerProperty(
             type=NyaaToolsSettings
         )
+        
+        # Auto-register items with register() methods (after PropertyGroups are attached)
+        for registry_item in registry_items:
+            registry_item.register()
     else:
-        # Remove PropertyGroups from types first
+        # Auto-unregister items with unregister() methods (before PropertyGroups are removed)
+        for registry_item in reversed(registry_items):
+            registry_item.unregister()
+        
+        # Remove PropertyGroups from types
         for attr_name, type_obj in [
             ("nyaa_settings", bpy.types.Scene),
             ("nyaa_prop", bpy.types.Object),

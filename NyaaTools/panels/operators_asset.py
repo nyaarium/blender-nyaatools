@@ -6,6 +6,8 @@ import bpy
 from bpy.types import Operator
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 
+from ..asset.asset_registry import get_registry
+
 
 def _any_mesh_is_ucx(meshes):
     """Check if any mesh in the list has a UCX_ name."""
@@ -132,6 +134,16 @@ class NYAATOOLS_OT_MarkAsAsset(Operator):
             self.asset_name = obj.name
         return context.window_manager.invoke_props_dialog(self, width=300)
 
+    def _check_name_collision(self):
+        """Check if asset_name collides with another asset. Returns conflicting object or None."""
+        new_name = self.asset_name.strip()
+        for obj in bpy.data.objects:
+            if not hasattr(obj, "nyaa_asset") or not obj.nyaa_asset.is_asset:
+                continue
+            if obj.nyaa_asset.asset_name == new_name:
+                return obj
+        return None
+
     def draw(self, context):
         layout = self.layout
         obj = context.selected_objects[0]
@@ -140,10 +152,25 @@ class NYAATOOLS_OT_MarkAsAsset(Operator):
         layout.separator()
         layout.prop(self, "asset_name")
 
+        # Check for name collision
+        conflicting_obj = self._check_name_collision()
+        if conflicting_obj:
+            err_box = layout.box()
+            err_box.alert = True
+            err_box.label(text="Name already in use.", icon="ERROR")
+
     def execute(self, context):
         obj = context.selected_objects[0]
+        new_name = self.asset_name.strip()
+
+        # Check for name collision
+        conflicting_obj = self._check_name_collision()
+        if conflicting_obj:
+            self.report({"ERROR"}, "Name already in use")
+            return {"CANCELLED"}
+
         obj.nyaa_asset.is_asset = True
-        obj.nyaa_asset.asset_name = self.asset_name
+        obj.nyaa_asset.asset_name = new_name
         # Pre-compute humanoid flag for armatures
         if obj.type == "ARMATURE":
             obj.nyaa_asset.is_humanoid = is_humanoid(obj)
@@ -152,6 +179,11 @@ class NYAATOOLS_OT_MarkAsAsset(Operator):
             entry = obj.nyaa_asset.meshes.add()
             entry.mesh_object = obj
             entry.layer_name = "Base"
+
+        # Ensure UUID is assigned
+        registry = get_registry()
+        registry.register(obj)
+
         invalidate_selection_cache()
         tag_view3d_redraw(context)
         desc = get_asset_description(obj)
@@ -213,6 +245,22 @@ class NYAATOOLS_OT_ConfigureAsset(Operator):
         self.asset_name = sel.asset.nyaa_asset.asset_name
         return context.window_manager.invoke_props_dialog(self, width=350)
 
+    def _check_name_collision(self, context):
+        """Check if asset_name collides with another asset. Returns conflicting object or None."""
+        sel = SelectionContext(context)
+        if not sel.has_asset:
+            return None
+
+        new_name = self.asset_name.strip()
+        for obj in bpy.data.objects:
+            if obj == sel.asset:
+                continue
+            if not hasattr(obj, "nyaa_asset") or not obj.nyaa_asset.is_asset:
+                continue
+            if obj.nyaa_asset.asset_name == new_name:
+                return obj
+        return None
+
     def draw(self, context):
         layout = self.layout
         sel = SelectionContext(context)
@@ -225,6 +273,13 @@ class NYAATOOLS_OT_ConfigureAsset(Operator):
 
         cfg = sel.asset.nyaa_asset
         layout.prop(self, "asset_name")
+
+        # Check for name collision
+        conflicting_obj = self._check_name_collision(context)
+        if conflicting_obj:
+            err_box = layout.box()
+            err_box.alert = True
+            err_box.label(text="Name already in use.", icon="ERROR")
 
         box = layout.box()
         box.alert = True
@@ -243,6 +298,12 @@ class NYAATOOLS_OT_ConfigureAsset(Operator):
         new_name = self.asset_name.strip()
         if not new_name:
             self.report({"ERROR"}, "Asset name cannot be empty")
+            return {"CANCELLED"}
+
+        # Check for name collision
+        conflicting_obj = self._check_name_collision(context)
+        if conflicting_obj:
+            self.report({"ERROR"}, "Name already in use")
             return {"CANCELLED"}
 
         if cfg.asset_name != new_name:
@@ -307,11 +368,43 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
 
         return context.window_manager.invoke_props_dialog(self, width=350)
 
+    def _check_name_collision(self, context, exclude_armature=None):
+        """Check if asset_name collides with another asset. Returns conflicting object or None."""
+        new_name = self.asset_name.strip()
+        for obj in bpy.data.objects:
+            if obj == exclude_armature:
+                continue
+            if not hasattr(obj, "nyaa_asset") or not obj.nyaa_asset.is_asset:
+                continue
+            if obj.nyaa_asset.asset_name == new_name:
+                return obj
+        return None
+
     def draw(self, context):
         layout = self.layout
         mesh = context.selected_objects[0]
 
         layout.prop(self, "asset_name")
+
+        # Check for name collision (only if creating new asset, not adding to existing)
+        arm_obj = (
+            bpy.data.objects.get(self.armature_choice)
+            if self.armature_choice != "NONE"
+            else None
+        )
+        is_existing_asset = (
+            arm_obj and hasattr(arm_obj, "nyaa_asset") and arm_obj.nyaa_asset.is_asset
+        )
+
+        if not is_existing_asset:
+            conflicting_obj = self._check_name_collision(
+                context, exclude_armature=arm_obj
+            )
+            if conflicting_obj:
+                err_box = layout.box()
+                err_box.alert = True
+                err_box.label(text="Name already in use.", icon="ERROR")
+
         layout.separator()
         layout.prop(self, "armature_choice")
         layout.separator()
@@ -328,15 +421,9 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
         elif self.armature_choice == "NONE":
             layout.label(text="This will create a static asset", icon="INFO")
         else:
-            arm_obj = bpy.data.objects.get(self.armature_choice)
             if arm_obj:
                 desc = get_asset_description(arm_obj)
-                is_asset = (
-                    arm_obj.nyaa_asset.is_asset
-                    if hasattr(arm_obj, "nyaa_asset")
-                    else False
-                )
-                if is_asset:
+                if is_existing_asset:
                     layout.label(text=f"Will add mesh to existing: {desc}", icon="INFO")
                 else:
                     layout.label(text=f"This will create {desc}", icon="INFO")
@@ -363,6 +450,7 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
     def execute(self, context):
         mesh = context.selected_objects[0]
         is_ucx_mesh = mesh.name.upper().startswith("UCX_")
+        new_name = self.asset_name.strip()
 
         # Block UCX-only static asset creation
         if self.armature_choice == "NONE" and is_ucx_mesh:
@@ -376,15 +464,26 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
             layer_name = mesh.name
 
         if self.armature_choice == "NONE":
+            # Check for name collision
+            conflicting_obj = self._check_name_collision(context)
+            if conflicting_obj:
+                self.report({"ERROR"}, "Name already in use")
+                return {"CANCELLED"}
+
             mesh.nyaa_asset.is_asset = True
-            mesh.nyaa_asset.asset_name = self.asset_name
+            mesh.nyaa_asset.asset_name = new_name
             mesh.nyaa_asset.is_humanoid = False
             # Add host mesh as first entry (implicit "Base" layer)
             entry = mesh.nyaa_asset.meshes.add()
             entry.mesh_object = mesh
             entry.layer_name = "Base"
+
+            # Ensure UUID is assigned
+            registry = get_registry()
+            registry.register(mesh)
+
             invalidate_selection_cache()
-            self.report({"INFO"}, f"Created static asset '{self.asset_name}'")
+            self.report({"INFO"}, f"Created static asset '{new_name}'")
         else:
             arm_obj = bpy.data.objects.get(self.armature_choice)
             if not arm_obj:
@@ -409,17 +508,30 @@ class NYAATOOLS_OT_CreateAssetFromMesh(Operator):
                     {"INFO"}, f"Added mesh to existing asset '{cfg.asset_name}'"
                 )
             else:
+                # Check for name collision when creating new asset
+                conflicting_obj = self._check_name_collision(
+                    context, exclude_armature=arm_obj
+                )
+                if conflicting_obj:
+                    self.report({"ERROR"}, "Name already in use")
+                    return {"CANCELLED"}
+
                 arm_obj.nyaa_asset.is_asset = True
-                arm_obj.nyaa_asset.asset_name = self.asset_name
+                arm_obj.nyaa_asset.asset_name = new_name
                 arm_obj.nyaa_asset.is_humanoid = is_humanoid(arm_obj)
                 entry = arm_obj.nyaa_asset.meshes.add()
                 entry.mesh_object = mesh
                 entry.layer_name = layer_name
                 entry.is_ue_collider = self.is_ue_collider
                 _sort_asset_meshes(arm_obj.nyaa_asset.meshes)
+
+                # Ensure UUID is assigned
+                registry = get_registry()
+                registry.register(arm_obj)
+
                 invalidate_selection_cache()
                 desc = get_asset_description(arm_obj)
-                self.report({"INFO"}, f"Created {desc} '{self.asset_name}' with mesh")
+                self.report({"INFO"}, f"Created {desc} '{new_name}' with mesh")
         tag_view3d_redraw(context)
         return {"FINISHED"}
 
