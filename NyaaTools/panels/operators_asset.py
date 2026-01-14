@@ -570,14 +570,15 @@ class NYAATOOLS_OT_JumpToAsset(Operator):
                 layer_collection.exclude = False
                 layer_collection.hide_viewport = False
 
-        # Add asset to selection and make it active
+        # Add asset to selection and make it active (exclusive selection)
+        bpy.ops.object.select_all(action="DESELECT")
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
         invalidate_selection_cache()
         tag_view3d_redraw(context)
 
-        self.report({"INFO"}, f"Added asset '{obj.nyaa_asset.asset_name}' to selection")
+        self.report({"INFO"}, f"Selected asset '{obj.nyaa_asset.asset_name}'")
         return {"FINISHED"}
 
     def _find_layer_collection(self, layer_collection, name):

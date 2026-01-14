@@ -115,6 +115,7 @@ class SelectionContext:
         "is_humanoid",
         "meshes_belonging_to",
         "has_legacy_data",
+        "selected_assets",
     )
 
     def __init__(self, context):
@@ -138,17 +139,26 @@ class SelectionContext:
         if len(self.armatures) == 1:
             self.armature = self.armatures[0]
 
+        self.selected_assets = []
         self._find_asset()
 
     def _find_asset(self):
         """Determine the current asset context."""
-        # Check for armature asset first (priority when exactly one armature)
-        if self.armature and hasattr(self.armature, "nyaa_asset"):
-            if self.armature.nyaa_asset.is_asset:
-                self.asset = self.armature
-                # Use cached humanoid flag (set during asset creation)
-                self.is_humanoid = self.armature.nyaa_asset.is_humanoid
-                return
+        # Identify all directly selected assets
+        self.selected_assets = []
+        for obj in self.armatures + self.meshes:
+            if hasattr(obj, "nyaa_asset") and obj.nyaa_asset.is_asset:
+                self.selected_assets.append(obj)
+
+        # 1. Active Asset Logic:
+        # If we have exactly one asset selected, that is our context.
+        # This allows selecting [Asset Host] + [Aux Armature] + [Random Meshes]
+        # and still having the panel work for the Host.
+        if len(self.selected_assets) == 1:
+            self.asset = self.selected_assets[0]
+            if hasattr(self.asset, "nyaa_asset"):
+                self.is_humanoid = self.asset.nyaa_asset.is_humanoid
+            return
 
         # Check for mesh assets in selection (even with multiple meshes selected)
         # This allows selecting a mesh asset + other meshes to add

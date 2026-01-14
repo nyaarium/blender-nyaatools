@@ -339,25 +339,52 @@ class NYAATOOLS_PT_AssetConfig(Panel):
             )
             return
 
-        # Check if any meshes belong to assets but no assets are selected
-        if len(sel.meshes_belonging_to) > 0 and not sel.has_asset:
-            # Collect unique assets (same asset might appear multiple times if multiple meshes belong to it)
-            unique_assets = {}
-            for asset_obj, layer_name in sel.meshes_belonging_to:
-                if asset_obj not in unique_assets:
-                    unique_assets[asset_obj] = []
-                unique_assets[asset_obj].append(layer_name)
+        # Check for multiple assets or indirect selections (Navigation Mode)
+        # If we have a single valid asset context, we skip this and show the config below.
+        has_direct_assets = len(sel.selected_assets) > 0
+        has_indirect_assets = len(sel.meshes_belonging_to) > 0
 
-            box = layout.box()
-            box.label(text="Selected meshes belong to:", icon="INFO")
-            for asset_obj in unique_assets.keys():
-                row = box.row(align=True)
-                op = row.operator(
-                    "nyaatools.jump_to_asset",
-                    text=asset_obj.nyaa_asset.asset_name,
-                    icon="FORWARD",
-                )
-                op.asset_name = asset_obj.name
+        if not sel.has_asset and (has_direct_assets or has_indirect_assets):
+            
+            # 1. Direct Selection: Multiple roots selected (Priority)
+            if has_direct_assets:
+                box = layout.box()
+                box.label(text="Multiple Assets Selected", icon="INFO")
+                
+                # Sort for consistent UI
+                sorted_assets = sorted(sel.selected_assets, key=lambda x: x.nyaa_asset.asset_name)
+                for asset_obj in sorted_assets:
+                    row = box.row(align=True)
+                    op = row.operator(
+                        "nyaatools.jump_to_asset",
+                        text=asset_obj.nyaa_asset.asset_name,
+                        icon="FORWARD",
+                    )
+                    op.asset_name = asset_obj.name
+
+            # 2. Indirect Selection: Selected meshes belong to these assets
+            # Only show if not already showing direct assets
+            elif has_indirect_assets:
+                # Collect unique assets
+                unique_indirect = {}
+                for asset_obj, layer_name in sel.meshes_belonging_to:
+                    if asset_obj not in unique_indirect:
+                        unique_indirect[asset_obj] = []
+                    unique_indirect[asset_obj].append(layer_name)
+
+                box = layout.box()
+                box.label(text="Selection Belongs to", icon="INFO")
+                
+                sorted_indirect = sorted(unique_indirect.keys(), key=lambda x: x.nyaa_asset.asset_name)
+                for asset_obj in sorted_indirect:
+                    row = box.row(align=True)
+                    op = row.operator(
+                        "nyaatools.jump_to_asset",
+                        text=asset_obj.nyaa_asset.asset_name,
+                        icon="FORWARD",
+                    )
+                    op.asset_name = asset_obj.name
+            
             return
 
         if len(sel.meshes) == 1 and len(sel.armatures) == 0:
