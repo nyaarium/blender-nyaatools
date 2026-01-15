@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 from .material_analyzer import find_principled_bsdf, detect_best_resolution
 from .node_graph_state import NodeGraphState
 from .dtp_format import is_flag_supported, expand_alias, is_alias
-from .uv.analyze_mip_stats import analyze_mip_stats
+from ...uv.analyze_mip_stats import analyze_mip_stats
 from .texture_utils import resize_image_to_size
 from .texture_utils import _image_to_np, _np_to_image_pixels
 

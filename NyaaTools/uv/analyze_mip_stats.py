@@ -11,7 +11,7 @@ import os
 import time
 
 from .build_coverage_pyramid import build_coverage_pyramid
-from ..save_numpy_image import save_numpy_as_image, save_numpy_as_raw
+from ..image.save_numpy_image import save_numpy_as_image, save_numpy_as_raw
 
 
 # Max color difference for entire texture to be considered uniform
