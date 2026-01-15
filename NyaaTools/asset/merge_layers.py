@@ -11,6 +11,7 @@ from ..common.renamer_rename import rename_object
 from .merge_onto_layer import merge_onto_layer
 from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
 from .asset_lookup import get_asset_meshes_by_layer
+from ..uv.uv_conflict_resolution import resolve_layer_uv_conflicts
 
 
 def get_asset_collider_meshes(asset_host):
@@ -147,6 +148,8 @@ def merge_single_layer(
     """
     Copy and merge meshes for a single layer into a target collection.
 
+    Resolves UV name conflicts before merging by standardizing first UV names.
+
     Args:
         layer_name: Name of the layer
         layer_meshes: Dict of {mesh_name: mesh_object} for this layer
@@ -168,13 +171,15 @@ def merge_single_layer(
     unrename_info = []
     first_visit = True
 
+    # First pass: Copy all meshes to target collection
+    mesh_copies = {}
     for mesh_name in layer_meshes:
         mesh = layer_meshes[mesh_name]
 
         mesh_copy = mesh.copy()
         mesh_copy.data = mesh.data.copy()
-        layer_meshes[mesh_name] = mesh_copy
         target_collection.objects.link(mesh_copy)
+        mesh_copies[mesh_name] = mesh_copy
 
         # Clear nyaa_asset config on copy (don't want exported objects marked as assets)
         if hasattr(mesh_copy, "nyaa_asset"):
@@ -183,6 +188,13 @@ def merge_single_layer(
             mesh_copy.nyaa_asset.meshes.clear()
             mesh_copy.nyaa_asset.export_profiles.clear()
             mesh_copy.nyaa_asset.bake_images.clear()
+
+    # Resolve UV name conflicts before merging
+    resolve_layer_uv_conflicts(layer_name, mesh_copies, debug_print)
+
+    # Second pass: Process and merge meshes
+    for mesh_name in mesh_copies:
+        mesh_copy = mesh_copies[mesh_name]
 
         if first_visit:
             unrename_info.extend(rename_object(mesh_copy, layer_name))

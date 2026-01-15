@@ -345,14 +345,16 @@ class NYAATOOLS_PT_AssetConfig(Panel):
         has_indirect_assets = len(sel.meshes_belonging_to) > 0
 
         if not sel.has_asset and (has_direct_assets or has_indirect_assets):
-            
+
             # 1. Direct Selection: Multiple roots selected (Priority)
             if has_direct_assets:
                 box = layout.box()
                 box.label(text="Multiple Assets Selected", icon="INFO")
-                
+
                 # Sort for consistent UI
-                sorted_assets = sorted(sel.selected_assets, key=lambda x: x.nyaa_asset.asset_name)
+                sorted_assets = sorted(
+                    sel.selected_assets, key=lambda x: x.nyaa_asset.asset_name
+                )
                 for asset_obj in sorted_assets:
                     row = box.row(align=True)
                     op = row.operator(
@@ -374,8 +376,10 @@ class NYAATOOLS_PT_AssetConfig(Panel):
 
                 box = layout.box()
                 box.label(text="Selection Belongs to", icon="INFO")
-                
-                sorted_indirect = sorted(unique_indirect.keys(), key=lambda x: x.nyaa_asset.asset_name)
+
+                sorted_indirect = sorted(
+                    unique_indirect.keys(), key=lambda x: x.nyaa_asset.asset_name
+                )
                 for asset_obj in sorted_indirect:
                     row = box.row(align=True)
                     op = row.operator(
@@ -384,7 +388,7 @@ class NYAATOOLS_PT_AssetConfig(Panel):
                         icon="FORWARD",
                     )
                     op.asset_name = asset_obj.name
-            
+
             return
 
         # Check if we have exactly one asset in selection (mesh asset + other meshes, or from meshes_belonging_to)
