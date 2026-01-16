@@ -9,7 +9,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (5, 0, 1),
-    "version": (2, 2, 1),
+    "version": (2, 3, 1),
     "description": "Various Nyaarium tools for mesh cleanup, merging, and exporting assets",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -47,6 +47,8 @@ def _toggle_register(reg: bool):
     from .operators import PrzemirApplyTopModifier
     from .operators.merge_export import operator as merge_export_op
     from .operators.bake import operator as bake_op
+    from .operators import NyaaToolsAtlasRecombine
+    from .operators import NyaaToolsAtlasStratum
 
     # Panel operators
     from .panels import LinkButton
@@ -112,6 +114,8 @@ def _toggle_register(reg: bool):
         PrzemirApplyTopModifier,  # 3rd Party Operator module (contains PrzemirApplyTopModifier class without prefix)
         merge_export_op,
         bake_op,
+        NyaaToolsAtlasRecombine,
+        NyaaToolsAtlasStratum,
         LinkButton,
         operators_asset,
         operators_export,
@@ -145,22 +149,22 @@ def _toggle_register(reg: bool):
                 # Module with registration functions - add to registry_items
                 registry_items.append(item)
             else:
-            # Module - introspect for classes
-            module_name = item.__name__.split(".")[-1]
-            for name, obj in inspect.getmembers(item, inspect.isclass):
-                # Include NYAATOOLS_ prefixed classes
-                if name.startswith("NYAATOOLS_"):
-                    # Separate panels for sorting
-                    if name.startswith("NYAATOOLS_PT_"):
-                        panel_classes.append(obj)
-                    else:
+                # Module - introspect for classes
+                module_name = item.__name__.split(".")[-1]
+                for name, obj in inspect.getmembers(item, inspect.isclass):
+                    # Include NYAATOOLS_ prefixed classes
+                    if name.startswith("NYAATOOLS_"):
+                        # Separate panels for sorting
+                        if name.startswith("NYAATOOLS_PT_"):
+                            panel_classes.append(obj)
+                        else:
+                            classes_to_register.append(obj)
+                    # Special case: PrzemirApplyTopModifier (3rd party, no prefix)
+                    elif (
+                        module_name == "PrzemirApplyTopModifier"
+                        and name == "PrzemirApplyTopModifier"
+                    ):
                         classes_to_register.append(obj)
-                # Special case: PrzemirApplyTopModifier (3rd party, no prefix)
-                elif (
-                    module_name == "PrzemirApplyTopModifier"
-                    and name == "PrzemirApplyTopModifier"
-                ):
-                    classes_to_register.append(obj)
         else:
             # Check if object has register()/unregister() methods
             has_register = hasattr(item, "register") and callable(item.register)

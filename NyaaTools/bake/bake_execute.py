@@ -168,6 +168,30 @@ def _bake_multi_mesh(
         meshes: List of mesh objects using this material
         debug_print: Debug print function
         stop_after_node_setup: If True, stop after node setup (for debugging)
+    
+    # =========================================================================
+    # ATLAS INTEGRATION POINT
+    # =========================================================================
+    # When atlas mode is enabled, this function could be replaced or augmented
+    # with the atlas recombination pipeline:
+    #
+    # from ..atlas import (
+    #     build_atlas_descriptor,
+    #     capture_material_bakes,
+    #     apply_atlas_transforms,
+    #     execute_atlas_recombination,
+    # )
+    #
+    # Key differences in atlas mode:
+    # - Materials are placed at specific stratum/tile positions
+    # - UVs are transformed to atlas space via "-- Atlas" UV layer
+    # - Face attributes use "atlas_mat_index" instead of "mesh_index"
+    # - Final bake uses atlas UV layer at configured resolution
+    #
+    # Integration would look like:
+    # if ctx.atlas_config and ctx.atlas_config.enabled:
+    #     return _bake_atlas_recombination(ctx, meshes, debug_print)
+    # =========================================================================
     """
     debug_print(f"  Multi-mesh bake: {len(meshes)} meshes")
 

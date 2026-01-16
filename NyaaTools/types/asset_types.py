@@ -220,3 +220,7 @@ class NyaaAssetConfig(bpy.types.PropertyGroup):
         description="Expand layers section",
         default=True,
     )
+    # Atlas configuration (PointerProperty set during registration)
+    # atlas_config: PointerProperty(type=NyaaAtlasConfig)
+    # Note: The atlas_config property is added during registration in __init__.py
+    # after NyaaAtlasConfig is registered. See types/atlas_types.py for the config.
