@@ -17,7 +17,11 @@ from ...image.texture_baker import (
     _get_bake_type_for_channels,
     DTP_SOCKET_MAP,
 )
-from ...image.material_analyzer import find_principled_bsdf, detect_best_resolution
+from ...image.material_analyzer import (
+    find_all_principled_bsdfs,
+    build_tree_stack,
+    detect_best_resolution,
+)
 from ...bake.bake_context import BakeContext, BakeImageConfig
 from ...bake.bake_prepare import prepare_meshes_for_baking
 from ...bake.bake_execute import execute_bake_for_material
@@ -49,7 +53,7 @@ BAKE_COL_WIDTH_TIME = 80  # Time column
 BAKE_COL_WIDTH_MATERIAL = 250  # Material name column
 BAKE_COL_WIDTH_FORMAT = 150  # DTP format column
 BAKE_COL_WIDTH_TYPE = 80  # Image type column (PNG, EXR)
-BAKE_COL_WIDTH_RESOLUTION = 100  # Resolution column
+BAKE_COL_WIDTH_RESOLUTION = 140  # Resolution column
 
 
 def render_bake_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
@@ -87,11 +91,24 @@ def render_bake_row(task: Task, x: int, y: int, draw: DrawHelper) -> int:
     draw.draw_text(img_type, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
     col_x += BAKE_COL_WIDTH_TYPE
 
-    # Resolution column (fixed width)
-    if task.status == TaskStatus.DONE and task.result:
-        res_text = task.result.get("result_resolution", params.get("resolution", ""))
+    # Show arrow if resolution changed
+    original_res = params.get("resolution", "")
+
+    # Compare by value to handle module reload issues (enum identity changes after reload)
+    is_done = (
+        task.status.value == TaskStatus.DONE.value
+        if hasattr(task.status, "value")
+        else task.status == TaskStatus.DONE
+    )
+    if is_done and task.result:
+        final_res = task.result.get("result_resolution", "")
+        if final_res and final_res != original_res:
+            res_text = f"{original_res} → {final_res}"
+        else:
+            res_text = final_res if final_res else original_res
     else:
-        res_text = params.get("resolution", "")
+        res_text = original_res
+
     draw.draw_text(res_text, col_x, y, FONT_SIZE_BODY, draw.COLOR_TEXT_DIM)
 
     return LINE_HEIGHT
@@ -107,17 +124,18 @@ def _detect_render_resolution(
     dtp_format: str,
     max_resolution: Tuple[int, int],
 ) -> Tuple[int, int]:
-    """Detect render resolution for a material based on its shader graph."""
+    """Detect render resolution for a material by scanning all Principled BSDFs."""
 
     if not material or not material.use_nodes:
         return max_resolution
 
-    principled_result = find_principled_bsdf(material)
-    if not principled_result:
+    # Find all Principled BSDFs in the material
+    principled_infos = find_all_principled_bsdfs(material)
+    if not principled_infos:
         return max_resolution
 
-    principled_bsdf = principled_result["principled_bsdf"]
-    tree_stack = principled_result["tree_stack"]
+    # Build tree stack for resolution detection
+    tree_stack = build_tree_stack(material)
 
     try:
         channels = _parse_format_string(dtp_format)
@@ -125,59 +143,71 @@ def _detect_render_resolution(
     except (ValueError, AttributeError):
         return max_resolution
 
-    detected_resolution = None
+    # Collect resolutions from ALL Principled BSDFs
+    all_resolutions = []
 
-    if bake_type == "NORMAL":
-        normal_socket = principled_bsdf.inputs.get("Normal")
-        if normal_socket and normal_socket.is_linked:
-            detected_resolution = detect_best_resolution(normal_socket, tree_stack)
+    for info in principled_infos:
+        principled_bsdf = info["node"]
+
+        if bake_type == "NORMAL":
+            normal_socket = principled_bsdf.inputs.get("Normal")
+            if normal_socket and normal_socket.is_linked:
+                all_resolutions.append(
+                    detect_best_resolution(normal_socket, tree_stack)
+                )
         else:
-            detected_resolution = (1024, 1024)
-    else:
-        resolutions = []
+            # Check Base Color
+            base_color_socket = principled_bsdf.inputs.get("Base Color")
+            if base_color_socket and base_color_socket.is_linked:
+                all_resolutions.append(
+                    detect_best_resolution(base_color_socket, tree_stack)
+                )
 
-        base_color_socket = principled_bsdf.inputs.get("Base Color")
-        if base_color_socket and base_color_socket.is_linked:
-            resolutions.append(detect_best_resolution(base_color_socket, tree_stack))
+            # Check Emission Color
+            emission_color_socket = principled_bsdf.inputs.get("Emission Color")
+            if emission_color_socket and emission_color_socket.is_linked:
+                all_resolutions.append(
+                    detect_best_resolution(emission_color_socket, tree_stack)
+                )
 
-        emission_color_socket = principled_bsdf.inputs.get("Emission Color")
-        if emission_color_socket and emission_color_socket.is_linked:
-            resolutions.append(
-                detect_best_resolution(emission_color_socket, tree_stack)
-            )
+            # Check sockets for each channel
+            for channel in channels:
+                socket_mapping = DTP_SOCKET_MAP.get(channel)
+                if isinstance(socket_mapping, str) and socket_mapping not in (
+                    "__CONSTANT_0__",
+                    "__CONSTANT_1__",
+                    "__UNUSED__",
+                ):
+                    socket = principled_bsdf.inputs.get(socket_mapping)
+                    if socket and socket.is_linked:
+                        all_resolutions.append(
+                            detect_best_resolution(socket, tree_stack)
+                        )
+                elif isinstance(socket_mapping, tuple):
+                    socket_name, _ = socket_mapping
+                    socket = principled_bsdf.inputs.get(socket_name)
+                    if socket and socket.is_linked:
+                        all_resolutions.append(
+                            detect_best_resolution(socket, tree_stack)
+                        )
 
-        for channel in channels:
-            socket_mapping = DTP_SOCKET_MAP.get(channel)
-            if isinstance(socket_mapping, str) and socket_mapping not in (
-                "__CONSTANT_0__",
-                "__CONSTANT_1__",
-                "__UNUSED__",
-            ):
-                socket = principled_bsdf.inputs.get(socket_mapping)
-                if socket and socket.is_linked:
-                    resolutions.append(detect_best_resolution(socket, tree_stack))
-            elif isinstance(socket_mapping, tuple):
-                socket_name, _ = socket_mapping
-                socket = principled_bsdf.inputs.get(socket_name)
-                if socket and socket.is_linked:
-                    resolutions.append(detect_best_resolution(socket, tree_stack))
-
-        if resolutions:
-            detected_resolution = (
-                max(r[0] for r in resolutions),
-                max(r[1] for r in resolutions),
-            )
-        else:
-            detected_resolution = (512, 512)
-
-    if detected_resolution:
-        max_width, max_height = max_resolution
-        return (
-            min(detected_resolution[0], max_width),
-            min(detected_resolution[1], max_height),
+    # Use max resolution from all BSDFs
+    if all_resolutions:
+        detected_resolution = (
+            max(r[0] for r in all_resolutions),
+            max(r[1] for r in all_resolutions),
         )
+    elif bake_type == "NORMAL":
+        detected_resolution = (1024, 1024)
+    else:
+        detected_resolution = (512, 512)
 
-    return max_resolution
+    # Apply max cap
+    max_width, max_height = max_resolution
+    return (
+        min(detected_resolution[0], max_width),
+        min(detected_resolution[1], max_height),
+    )
 
 
 # =============================================================================

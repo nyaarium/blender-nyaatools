@@ -2,14 +2,13 @@
 
 import bpy
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 
-from .material_analyzer import find_principled_bsdf, detect_best_resolution
+from .material_analyzer import detect_best_resolution
 from .node_graph_state import NodeGraphState
 from .dtp_format import is_flag_supported, expand_alias, is_alias
-from ...uv.analyze_mip_stats import analyze_mip_stats
-from .texture_utils import resize_image_to_size
-from .texture_utils import _image_to_np, _np_to_image_pixels
+from ..uv.analyze_mip_stats import analyze_mip_stats
+from .texture_utils import resize_image_to_size, _image_to_np, _np_to_image_pixels
 
 
 def _get_bake_margin(resolution: Tuple[int, int]) -> int:
@@ -68,6 +67,9 @@ def bake_dtp_texture(
     """
     Bake a material to a texture using DTP format specification.
 
+    Replaces ALL Principled BSDFs with Emission nodes inline to preserve shader routing
+    (Mix Shaders, face attributes, etc.). The Material Output is NOT modified.
+
     Args:
         dtp_format: DTP format string (e.g., "rgba", "normalgl", "me-sp-ro")
         obj: The mesh object to bake from
@@ -98,196 +100,301 @@ def bake_dtp_texture(
     # Determine bake type
     bake_type = _get_bake_type_for_channels(channels)
 
-    # Find Principled BSDF and determine which tree it's in
-    principled_result = find_principled_bsdf(material)
-    if not principled_result:
+    # Bake by replacing all Principled BSDFs inline
+    return _bake_with_all_principled_replaced(
+        dtp_format=dtp_format,
+        obj=obj,
+        material=material,
+        channels=channels,
+        bake_type=bake_type,
+        resolution=resolution,
+        max_resolution=max_resolution,
+        uv_layer_name=uv_layer_name,
+        image_type=image_type,
+        debug_print=debug_print,
+    )
+
+
+def _find_all_principled_bsdfs(
+    node_tree: bpy.types.NodeTree,
+    debug_print,
+    visited: set = None,
+) -> List[Dict]:
+    """
+    Find all Principled BSDF nodes in a tree, including inside node groups.
+
+    Returns a list of dicts with:
+        - "node": The Principled BSDF node
+        - "tree": The NodeTree containing the node
+
+    Args:
+        node_tree: The node tree to search
+        debug_print: Debug print function
+        visited: Set of visited tree names (to prevent infinite recursion)
+
+    Returns:
+        List of {"node": Node, "tree": NodeTree} dicts
+    """
+    if visited is None:
+        visited = set()
+
+    # Prevent infinite recursion from circular group references
+    if node_tree.name in visited:
+        return []
+    visited.add(node_tree.name)
+
+    results = []
+
+    for node in node_tree.nodes:
+        if node.type == "BSDF_PRINCIPLED":
+            results.append({"node": node, "tree": node_tree})
+        elif node.type == "GROUP" and node.node_tree:
+            # Recurse into group
+            group_results = _find_all_principled_bsdfs(
+                node.node_tree, debug_print, visited
+            )
+            results.extend(group_results)
+
+    return results
+
+
+def _bake_with_all_principled_replaced(
+    dtp_format: str,
+    obj: bpy.types.Object,
+    material: bpy.types.Material,
+    channels: list,
+    bake_type: str,
+    resolution: Optional[Tuple[int, int]],
+    max_resolution: Optional[Tuple[int, int]],
+    uv_layer_name: Optional[str],
+    image_type: str,
+    debug_print,
+) -> Optional[bpy.types.Image]:
+    """
+    Internal: Bake by replacing ALL Principled BSDFs with Emission nodes inline.
+
+    This preserves shader routing (Mix Shaders, face attributes, etc.) and does NOT
+    modify the Material Output node.
+
+    Args:
+        dtp_format: DTP format string
+        obj: The mesh object to bake from
+        material: The material to bake
+        channels: Parsed channel list
+        bake_type: "EMIT" or "NORMAL"
+        resolution: Fixed resolution (width, height)
+        max_resolution: Maximum resolution cap
+        uv_layer_name: Specific UV layer to use
+        image_type: Output image format
+        debug_print: Debug print function
+
+    Returns:
+        The baked image, or None if baking failed
+    """
+    debug_print(
+        f"[replace_all_principled] Baking {dtp_format} with all Principled BSDFs replaced inline"
+    )
+
+    if not material:
+        debug_print("  ERROR: Material is None")
         return None
 
-    original_material_output = principled_result["material_output"]
-    principled_bsdf = principled_result["principled_bsdf"]
-    tree_stack = principled_result["tree_stack"]
-    principled_tree = tree_stack[
-        -1
-    ]  # Last tree in stack is where principled BSDF is located
+    if not material.use_nodes:
+        debug_print("  ERROR: Material has use_nodes=False")
+        return None
 
-    # Create state tracker for safe node manipulation
-    shader_state = NodeGraphState(material, material.node_tree, principled_tree)
+    tree = material.node_tree
+    if not tree:
+        debug_print("  ERROR: Material.node_tree is None")
+        return None
 
-    # Blender 5.0+: Must fully remove Material Output, not just detach
-    # Store info to recreate it later
-    root_tree = material.node_tree
-    original_output_location = (
-        original_material_output.location.x,
-        original_material_output.location.y,
-    )
-    original_output_surface_link = None
-    surface_input = original_material_output.inputs.get("Surface")
-    if surface_input and surface_input.is_linked:
-        link = surface_input.links[0]
-        original_output_surface_link = (link.from_node.name, link.from_socket.name)
+    nodes = tree.nodes
+    links = tree.links
 
-    # Delete the original Material Output (required for Blender 5.0+ baking)
-    root_tree.nodes.remove(original_material_output)
-    original_material_output = None  # Mark as deleted
+    # Create shader state tracker for safe restoration
+    shader_state = NodeGraphState(material, tree, tree)
+
+    debug_print(f"  Material '{material.name}': {len(nodes)} total nodes")
+
+    # Find all Principled BSDF nodes (including in node groups)
+    principled_infos = _find_all_principled_bsdfs(tree, debug_print)
+    if not principled_infos:
+        debug_print("  ERROR: No Principled BSDF nodes found")
+        # List all node types for debugging
+        all_types = sorted(set(n.type for n in nodes))
+        debug_print(f"  Available node types: {all_types}")
+        return None
+
+    debug_print(f"  Found {len(principled_infos)} Principled BSDF node(s)")
+
+    # Build tree_stack for resolution detection
+    tree_stack = [material.node_tree]
+    for info in principled_infos:
+        if info["tree"] not in tree_stack:
+            tree_stack.append(info["tree"])
+
+    # Detect resolution from first principled's connected textures if not specified
+    detected_resolution = None
+    if resolution is None:
+        for info in principled_infos:
+            principled = info["node"]
+            # Try Base Color socket first (most common)
+            base_color_socket = principled.inputs.get("Base Color")
+            if base_color_socket:
+                detected_resolution = detect_best_resolution(
+                    base_color_socket, tree_stack
+                )
+                if detected_resolution and detected_resolution != (512, 512):
+                    debug_print(f"  Auto-detected resolution: {detected_resolution}")
+                    break
+
+    # Determine final resolution
+    final_resolution = resolution or detected_resolution or (512, 512)
+    if max_resolution:
+        max_width, max_height = max_resolution
+        final_resolution = (
+            min(final_resolution[0], max_width),
+            min(final_resolution[1], max_height),
+        )
+    debug_print(f"  Final resolution: {final_resolution}")
+
+    # Check if alpha is in use (4th channel that's not 'xx')
+    has_alpha = len(channels) == 4 and channels[3] != "xx"
+
+    # Store RGB and Alpha emissions for 2-stage bake if needed
+    rgb_emissions = []
+    alpha_emissions = []
+
+    # Replace each Principled BSDF with Emission inline (in their respective trees)
+    # Use shader_state to track changes for restoration
+    for info in principled_infos:
+        principled = info["node"]
+        principled_tree = info["tree"]
+
+        if bake_type == "NORMAL":
+            # For NORMAL baking, replace with temp Principled BSDF that only has Normal connected
+            rgb_emission, alpha_emission = _replace_principled_for_normal_bake(
+                shader_state,
+                principled_tree,
+                principled,
+                debug_print,
+            )
+        else:
+            # For EMIT baking, replace with Emission nodes
+            rgb_emission, alpha_emission = _replace_principled_with_emission_tracked(
+                shader_state,
+                principled_tree,
+                principled,
+                channels,
+                has_alpha,
+                debug_print,
+            )
+
+        if rgb_emission:
+            rgb_emissions.append((rgb_emission, principled_tree))
+        if has_alpha and alpha_emission:
+            alpha_emissions.append((alpha_emission, principled_tree))
 
     # Ensure UV map exists
     if not _ensure_uv_map(obj):
         debug_print(f"Warning: Could not ensure UV map for object {obj.name}")
+        shader_state.restore()
         return None
 
-    # Set active UV layer for baking
-    # First UV is always the displayable UV
+    # Set up render settings
+    scene = bpy.context.scene
+    original_engine = scene.render.engine
+    original_samples = scene.cycles.samples if hasattr(scene, "cycles") else None
+    original_film_transparent = scene.render.film_transparent
+
+    scene.render.engine = "CYCLES"
+    scene.render.film_transparent = False
+    if hasattr(scene, "cycles"):
+        scene.cycles.samples = 1
+
+    # Setup object selection
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # Ensure OBJECT mode
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Set UV layer
     mesh_data = obj.data
     if mesh_data.uv_layers:
         target_uv_name = uv_layer_name if uv_layer_name else mesh_data.uv_layers[0].name
         target_uv = mesh_data.uv_layers.get(target_uv_name)
         if target_uv:
             mesh_data.uv_layers.active = target_uv
-            debug_print(f"Using UV layer: {target_uv_name}")
+            debug_print(f"  Using UV layer: {target_uv_name}")
+        else:
+            debug_print(f"  ⚠️ UV layer '{target_uv_name}' not found, using first")
+            mesh_data.uv_layers.active = mesh_data.uv_layers[0]
 
-    # Store original render settings
-    scene = bpy.context.scene
-    original_engine = scene.render.engine
-    original_samples = scene.cycles.samples if hasattr(scene, "cycles") else None
-    original_film_transparent = scene.render.film_transparent
+    # Create bake target image
+    use_float = image_type == "exr"
+    is_utility = _is_utility_map(channels)
 
-    # Setup render settings for baking
-    scene.render.engine = "CYCLES"
-    scene.render.film_transparent = False
-    if hasattr(scene, "cycles"):
-        scene.cycles.samples = 1
-
-    # Setup object selection and context
-    bpy.ops.object.select_all(action="DESELECT")
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-
-    # Ensure we're in OBJECT mode
-    if bpy.context.object and bpy.context.object.mode != "OBJECT":
-        bpy.ops.object.mode_set(mode="OBJECT")
+    bake_image = None
 
     try:
         if bake_type == "NORMAL":
-            # Stage normal node and determine resolution
-            normal_output_node, detected_resolution = _stage_normal_node(
-                tree_stack, principled_bsdf, resolution, max_resolution, debug_print
-            )
-            if not normal_output_node:
-                return None
-
-            # Determine final resolution
-            final_resolution = resolution or detected_resolution or (512, 512)
-            if max_resolution:
-                max_width, max_height = max_resolution
-                final_resolution = (
-                    min(final_resolution[0], max_width),
-                    min(final_resolution[1], max_height),
-                )
-
-            # Get UV layer name for UVMap node
-            target_uv_name = (
-                uv_layer_name
-                if uv_layer_name
-                else (mesh_data.uv_layers[0].name if mesh_data.uv_layers else None)
-            )
-
-            # Bake normal
-            result = _bake_normal_output(
-                dtp_format,
+            # Normal baking
+            bake_image = _execute_normal_bake(
                 material,
+                dtp_format,
                 shader_state,
-                material.node_tree,
-                principled_tree,
-                normal_output_node,
+                tree,
                 final_resolution,
-                target_uv_name,
+                mesh_data,
+                uv_layer_name,
                 channels,
-                image_type,
+                use_float,
                 debug_print,
             )
-
-        else:  # EMIT
-            # Stage emission nodes and determine resolution
-            rgb_output_node, alpha_output_node, final_resolution = (
-                _stage_emission_nodes(
-                    tree_stack,
-                    channels,
-                    shader_state,
-                    principled_bsdf,
-                    principled_tree,
-                    resolution,
-                    max_resolution,
-                    debug_print,
-                )
-            )
-            if not rgb_output_node:
-                return None
-
-            # Apply user resolution override and max cap
-            if resolution:
-                final_resolution = resolution
-            elif max_resolution:
-                max_width, max_height = max_resolution
-                final_resolution = (
-                    min(final_resolution[0], max_width),
-                    min(final_resolution[1], max_height),
-                )
-
-            # Get UV layer name for UVMap node
-            target_uv_name = (
-                uv_layer_name
-                if uv_layer_name
-                else (mesh_data.uv_layers[0].name if mesh_data.uv_layers else None)
-            )
-
-            # Bake emission
-            result = _bake_emission_output(
-                dtp_format,
+        elif has_alpha:
+            # 2-stage bake: RGB first, then Alpha, then repack
+            debug_print(f"  Alpha detected: doing 2-stage bake (RGB + Alpha)")
+            bake_image = _execute_two_stage_bake(
                 material,
+                dtp_format,
                 shader_state,
-                material.node_tree,
-                rgb_output_node,
-                alpha_output_node,
+                tree,
                 final_resolution,
-                target_uv_name,
-                channels,
-                image_type,
+                rgb_emissions,
+                alpha_emissions,
+                use_float,
+                is_utility,
                 debug_print,
             )
-
-        if not result:
-            return None
+        else:
+            # Regular single bake (RGB only)
+            bake_image = _execute_emit_bake(
+                material,
+                dtp_format,
+                shader_state,
+                tree,
+                final_resolution,
+                use_float,
+                is_utility,
+                debug_print,
+            )
 
         # Apply optimization if user didn't specify resolution
-        if resolution is None:
-            result = _optimize_baked_image(result, obj, max_resolution)
-
-        return result
+        if bake_image and resolution is None:
+            bake_image = _optimize_baked_image(bake_image, obj, max_resolution)
 
     except Exception as e:
-        debug_print(f"ERROR: Failed to bake DTP texture {dtp_format}: {e}")
+        debug_print(f"  Bake operation failed: {e}")
         import traceback
-
         traceback.print_exc()
-        return None
+        bake_image = None
 
     finally:
-        # Restore shader state (clean up temporary nodes and connections)
+        # Restore shader state (removes temp nodes, restores connections)
         shader_state.restore()
-
-        # Recreate the original Material Output that we deleted
-        restored_output = root_tree.nodes.new("ShaderNodeOutputMaterial")
-        restored_output.location = original_output_location
-        restored_output.is_active_output = True
-
-        # Restore the Surface connection if there was one
-        if original_output_surface_link:
-            from_node_name, from_socket_name = original_output_surface_link
-            from_node = root_tree.nodes.get(from_node_name)
-            if from_node:
-                from_socket = from_node.outputs.get(from_socket_name)
-                if from_socket:
-                    root_tree.links.new(from_socket, restored_output.inputs["Surface"])
 
         # Restore render settings
         scene.render.engine = original_engine
@@ -295,354 +402,362 @@ def bake_dtp_texture(
         if original_samples is not None and hasattr(scene, "cycles"):
             scene.cycles.samples = original_samples
 
+    return bake_image
 
-def _stage_normal_node(
-    tree_stack: list,
-    principled_bsdf: bpy.types.ShaderNode,
-    resolution: Optional[Tuple[int, int]],
-    max_resolution: Optional[Tuple[int, int]],
+
+def _replace_principled_for_normal_bake(
+    shader_state: NodeGraphState,
+    principled_tree: bpy.types.NodeTree,
+    principled: bpy.types.ShaderNode,
     debug_print,
-) -> Tuple[Optional[object], Optional[Tuple[int, int]]]:
-    # Get Normal socket from Principled BSDF
-    normal_socket = principled_bsdf.inputs.get("Normal")
-    if not normal_socket:
-        debug_print("Normal socket not found")
-        return None, None
+) -> Tuple[Optional[bpy.types.Node], None]:
+    """
+    Replace a Principled BSDF with a temporary Principled BSDF that only has Normal connected.
 
-    # Determine resolution
-    if resolution:
-        # User specified resolution
-        final_resolution = resolution
-    else:
-        # Detect from normal socket
-        if normal_socket.is_linked:
-            final_resolution = detect_best_resolution(normal_socket, tree_stack)
-        else:
-            # Unconnected normal socket - use default
-            final_resolution = (1024, 1024)
+    This is used for NORMAL bake type where we need the Principled BSDF for proper
+    normal map baking, but we want to isolate just the normal input.
 
-    # Apply max_resolution cap
-    if max_resolution and final_resolution:
-        max_width, max_height = max_resolution
-        final_resolution = (
-            min(final_resolution[0], max_width),
-            min(final_resolution[1], max_height),
+    Args:
+        shader_state: NodeGraphState tracker for restoration
+        principled_tree: The node tree containing the Principled BSDF
+        principled: The Principled BSDF to bypass
+        debug_print: Debug print function
+
+    Returns:
+        Tuple of (temp principled node, None). Alpha is always None for normals.
+    """
+    links = principled_tree.links
+
+    # Create temporary Principled BSDF (tracked as temporary)
+    temp_principled = shader_state.add_node(principled_tree, "ShaderNodeBsdfPrincipled")
+    temp_principled.location = (principled.location.x + 200, principled.location.y)
+
+    # Connect normal map from original Principled to temp Principled
+    normal_socket = principled.inputs.get("Normal")
+    if normal_socket and normal_socket.is_linked:
+        from_socket = normal_socket.links[0].from_socket
+        links.new(from_socket, temp_principled.inputs["Normal"])
+
+    # Capture where Principled BSDF outputs connect to
+    reconnect_targets = []
+    for output in principled.outputs:
+        if output.name == "BSDF":
+            for link in output.links:
+                reconnect_targets.append({
+                    "node": link.to_node,
+                    "socket": link.to_socket,
+                    "socket_name": link.to_socket.name,
+                })
+
+    # Disconnect original Principled's BSDF output and connect temp Principled
+    for target in reconnect_targets:
+        shader_state.detach_socket(target["socket"])
+
+    # Connect temp Principled to all targets
+    for target in reconnect_targets:
+        shader_state.connect_sockets(
+            principled_tree,
+            temp_principled,
+            "BSDF",
+            target["node"],
+            target["socket_name"],
+            f"Normal bake bypass for {principled.name}",
         )
 
-    # Return the normal socket (will be connected to Material Output during baking)
-    return normal_socket, final_resolution
+    debug_print(f"    {principled.name}: Normal → temp Principled → inline bypass")
+
+    return temp_principled, None
 
 
-def _stage_emission_nodes(
-    tree_stack: list,
-    channels: list,
+def _replace_principled_with_emission_tracked(
     shader_state: NodeGraphState,
-    principled_bsdf: bpy.types.Node,
     principled_tree: bpy.types.NodeTree,
-    resolution: Optional[Tuple[int, int]],
-    max_resolution: Optional[Tuple[int, int]],
+    principled: bpy.types.ShaderNode,
+    channels: list,
+    has_alpha: bool,
     debug_print,
-) -> Tuple[Optional[object], Optional[object], Optional[Tuple[int, int]]]:
-    if len(channels) > 4:
-        debug_print(f"Too many channels for RGB/Alpha: {len(channels)}")
-        return None, None, None
+) -> Tuple[Optional[bpy.types.Node], Optional[bpy.types.Node]]:
+    """
+    Replace a single Principled BSDF with an Emission node inline, tracking changes for restoration.
 
-    # Create RGB emission node
+    Uses NodeGraphState to track all modifications so they can be restored after baking.
+    Does NOT delete the Principled BSDF - just bypasses it inline.
+
+    Args:
+        shader_state: NodeGraphState tracker for restoration
+        principled_tree: The node tree containing the Principled BSDF
+        principled: The Principled BSDF to bypass
+        channels: Parsed DTP channels
+        has_alpha: Whether alpha channel is in use
+        debug_print: Debug print function
+
+    Returns:
+        Tuple of (RGB emission node, Alpha emission node). Alpha will be None if has_alpha is False.
+    """
+    links = principled_tree.links
+
+    # Create RGB Emission node (tracked as temporary)
     rgb_emission = shader_state.add_node(principled_tree, "ShaderNodeEmission")
+    rgb_emission.location = (principled.location.x + 200, principled.location.y)
 
-    # Create Combine Color node for RGB channels
-    combine_rgb_node = shader_state.add_node(principled_tree, "ShaderNodeCombineColor")
-    combine_rgb_node.mode = "RGB"
+    # Create Combine Color node for RGB channels (tracked as temporary)
+    combine = shader_state.add_node(principled_tree, "ShaderNodeCombineColor")
+    combine.mode = "RGB"
+    combine.location = (principled.location.x + 50, principled.location.y)
 
-    # Create Separate Color nodes for all colored DTP channels
+    # Connect Combine Color -> RGB Emission
+    links.new(combine.outputs["Color"], rgb_emission.inputs["Color"])
 
-    # Analyze all channels to determine which sockets need Separate Color nodes
+    # Create Separate Color nodes for all color-based sockets that are linked
     separate_nodes = {}
-    for channel in channels:
+    for channel in channels[:3]:  # Only RGB channels
         socket_mapping = DTP_SOCKET_MAP.get(channel)
         if isinstance(socket_mapping, tuple):
-            socket_name, _ = socket_mapping
-            if socket_name not in separate_nodes:
-                socket = principled_bsdf.inputs.get(socket_name)
-                if socket and socket.is_linked:
-                    # Create Separate Color node once per socket
-                    separate_rgb = shader_state.add_node(
-                        principled_tree, "ShaderNodeSeparateColor"
+            sock_name, _ = socket_mapping
+            if sock_name not in separate_nodes:
+                sock = principled.inputs.get(sock_name)
+                if sock and sock.is_linked:
+                    # Create Separate Color node (tracked as temporary)
+                    sep = shader_state.add_node(principled_tree, "ShaderNodeSeparateColor")
+                    sep.mode = "RGB"
+                    sep.location = (
+                        principled.location.x - 100,
+                        principled.location.y - len(separate_nodes) * 100,
                     )
-                    separate_rgb.mode = "RGB"
-                    from_socket = socket.links[0].from_socket
-                    shader_state.connect_sockets(
-                        principled_tree,
-                        from_socket.node,
-                        from_socket.name,
-                        separate_rgb,
-                        "Color",
-                        f"separate {socket_name}",
-                    )
-                    separate_nodes[socket_name] = separate_rgb
 
-    # Connect RGB channels to Combine Color
-    _make_shader_nodes(
-        channels[:3],
-        shader_state,
-        principled_tree,
-        principled_bsdf,
-        separate_nodes,
-        combine_rgb_node,
-        False,
-        debug_print,
+                    # Connect from the same source as Principled's input
+                    from_socket = sock.links[0].from_socket
+                    links.new(from_socket, sep.inputs["Color"])
+                    separate_nodes[sock_name] = sep
+                    debug_print(f"    Created Separate Color for {sock_name}")
+
+    # Wire RGB channels to Combine Color
+    combine_inputs = ["Red", "Green", "Blue"]
+    for i, channel in enumerate(channels[:3]):
+        _wire_channel_to_combine_tracked(
+            principled_tree,
+            principled,
+            separate_nodes,
+            combine,
+            combine_inputs[i],
+            channel,
+            debug_print,
+        )
+
+    debug_print(
+        f"    {principled.name}: [{'-'.join(channels[:3])}] → Combine → Emission"
     )
 
-    # Connect Combine Color output → RGB Emission Color
-    shader_state.connect_sockets(
-        principled_tree,
-        combine_rgb_node,
-        "Color",
-        rgb_emission,
-        "Color",
-        "combine RGB to emission",
-    )
+    # Capture where Principled BSDF outputs connect to
+    reconnect_targets = []
+    for output in principled.outputs:
+        if output.name == "BSDF":
+            for link in output.links:
+                to_node = link.to_node
+                to_socket = link.to_socket
+                # For Mix Shader, capture the input index
+                input_index = None
+                if to_node.type == "MIX_SHADER":
+                    for idx, inp in enumerate(to_node.inputs):
+                        if inp == to_socket:
+                            input_index = idx
+                            break
 
-    # Handle Alpha channel if present (4th channel)
-    alpha_emission = None
+                reconnect_targets.append({
+                    "node": to_node,
+                    "socket": to_socket,
+                    "socket_name": to_socket.name,
+                    "input_index": input_index,
+                })
 
-    if len(channels) == 4:
-        # Alpha channel detected for RGBA baking
-        alpha_channel = channels[3]
+    # Disconnect original Principled's BSDF output by detaching target sockets
+    for target in reconnect_targets:
+        shader_state.detach_socket(target["socket"])
 
-        # Skip alpha if channel is 'xx' (unused)
-        if alpha_channel == "xx":
-            # No alpha channel - treat as RGB only
-            pass
+    # Connect Emission to all targets (inline bypass)
+    for target in reconnect_targets:
+        to_node = target["node"]
+        to_socket_name = target["socket_name"]
+        input_index = target["input_index"]
+
+        if to_node.type == "MIX_SHADER" and input_index is not None:
+            # Connect to specific input index for Mix Shader
+            target_socket = to_node.inputs[input_index]
+            emission_output = rgb_emission.outputs.get("Emission")
+            if emission_output and target_socket:
+                principled_tree.links.new(emission_output, target_socket)
         else:
-            alpha_emission = shader_state.add_node(
-                principled_tree, "ShaderNodeEmission"
-            )
-
-            # Use _make_shader_nodes for alpha channel with scalar flag
-            _make_shader_nodes(
-                [alpha_channel],
-                shader_state,
+            # Use shader_state.connect_sockets for other node types
+            shader_state.connect_sockets(
                 principled_tree,
-                principled_bsdf,
-                separate_nodes,
-                alpha_emission,
-                True,
-                debug_print,
+                rgb_emission,
+                "Emission",
+                to_node,
+                to_socket_name,
+                f"RGB emission bypass for {principled.name}",
             )
 
-    # Determine final resolution (use max of RGB and Alpha if both exist)
-    if resolution:
-        final_resolution = resolution
-    else:
-        # Check RGB resolution
-        r_connected = combine_rgb_node.inputs["Red"].is_linked
-        g_connected = combine_rgb_node.inputs["Green"].is_linked
-        b_connected = combine_rgb_node.inputs["Blue"].is_linked
-        has_rgb_connected = r_connected or g_connected or b_connected
+    # Create Alpha emission node if alpha is in use
+    alpha_emission = None
+    if has_alpha and len(channels) == 4:
+        alpha_channel = channels[3]
+        alpha_emission = shader_state.add_node(principled_tree, "ShaderNodeEmission")
+        alpha_emission.location = (
+            principled.location.x + 200,
+            principled.location.y - 150,
+        )
 
-        if not has_rgb_connected:
-            rgb_resolution = (8, 8)
+        # Wire alpha channel to Alpha emission
+        socket_mapping = DTP_SOCKET_MAP.get(alpha_channel)
+        if socket_mapping and socket_mapping == "Alpha":
+            alpha_socket = principled.inputs.get("Alpha")
+            if alpha_socket:
+                if alpha_socket.is_linked:
+                    from_socket = alpha_socket.links[0].from_socket
+                    # Convert scalar to RGB (grayscale) using Combine RGB
+                    combine_alpha = shader_state.add_node(
+                        principled_tree, "ShaderNodeCombineColor"
+                    )
+                    combine_alpha.mode = "RGB"
+                    combine_alpha.location = (
+                        alpha_emission.location.x - 150,
+                        alpha_emission.location.y,
+                    )
+
+                    # Connect scalar to all RGB inputs
+                    links.new(from_socket, combine_alpha.inputs["Red"])
+                    links.new(from_socket, combine_alpha.inputs["Green"])
+                    links.new(from_socket, combine_alpha.inputs["Blue"])
+
+                    # Connect Combine RGB to Emission
+                    links.new(
+                        combine_alpha.outputs["Color"], alpha_emission.inputs["Color"]
+                    )
+                else:
+                    # Use default value as grayscale
+                    alpha_val = alpha_socket.default_value
+                    alpha_emission.inputs["Color"].default_value = (
+                        alpha_val,
+                        alpha_val,
+                        alpha_val,
+                        1.0,
+                    )
+
+    return rgb_emission, alpha_emission
+
+
+def _wire_channel_to_combine_tracked(
+    principled_tree: bpy.types.NodeTree,
+    principled: bpy.types.ShaderNode,
+    separate_nodes: dict,
+    combine: bpy.types.ShaderNode,
+    combine_input: str,
+    channel: str,
+    debug_print,
+) -> None:
+    """
+    Wire a single DTP channel to a Combine Color input.
+
+    Args:
+        principled_tree: The node tree
+        principled: Source Principled BSDF
+        separate_nodes: Dict mapping socket_name -> Separate Color node
+        combine: Target Combine Color node
+        combine_input: "Red", "Green", or "Blue"
+        channel: DTP channel code
+        debug_print: Debug function
+    """
+    links = principled_tree.links
+    socket_mapping = DTP_SOCKET_MAP.get(channel)
+
+    if not socket_mapping:
+        debug_print(f"    Unknown channel: {channel}")
+        return
+
+    # Handle constants
+    if socket_mapping in ("__CONSTANT_0__", "__UNUSED__"):
+        combine.inputs[combine_input].default_value = 0.0
+        return
+    elif socket_mapping == "__CONSTANT_1__":
+        combine.inputs[combine_input].default_value = 1.0
+        return
+
+    if isinstance(socket_mapping, tuple):
+        # Color-based channel (cr, cg, cb, er, eg, eb, etc.)
+        socket_name, channel_idx = socket_mapping
+        source_socket = principled.inputs.get(socket_name)
+
+        # Special handling for emission - check if strength is 0
+        if socket_name == "Emission Color":
+            emission_strength = principled.inputs.get("Emission Strength")
+            if emission_strength and not emission_strength.is_linked:
+                if emission_strength.default_value <= 0.0:
+                    combine.inputs[combine_input].default_value = 0.0
+                    return
+
+        if source_socket and source_socket.is_linked:
+            # Use Separate Color node
+            if socket_name in separate_nodes:
+                sep = separate_nodes[socket_name]
+                sep_outputs = ["Red", "Green", "Blue"]
+                links.new(
+                    sep.outputs[sep_outputs[channel_idx]], combine.inputs[combine_input]
+                )
         else:
-            rgb_resolution = detect_best_resolution(
-                rgb_emission.inputs["Color"], tree_stack
-            )
+            # Use default value
+            if source_socket and hasattr(source_socket, "default_value"):
+                default_val = source_socket.default_value
+                if hasattr(default_val, "__getitem__"):
+                    combine.inputs[combine_input].default_value = default_val[
+                        channel_idx
+                    ]
+    else:
+        # Scalar socket (me, sp, ro, al, etc.)
+        socket_name = socket_mapping
+        source_socket = principled.inputs.get(socket_name)
 
-        # Check Alpha resolution if present
-        if alpha_emission:
-            if not alpha_emission.inputs["Color"].is_linked:
-                alpha_resolution = (8, 8)
+        if source_socket:
+            if source_socket.is_linked:
+                from_socket = source_socket.links[0].from_socket
+                links.new(from_socket, combine.inputs[combine_input])
             else:
-                alpha_resolution = detect_best_resolution(
-                    alpha_emission.inputs["Color"], tree_stack
+                combine.inputs[combine_input].default_value = (
+                    source_socket.default_value
                 )
 
-            # Use max of RGB and Alpha
-            final_resolution = (
-                max(rgb_resolution[0], alpha_resolution[0]),
-                max(rgb_resolution[1], alpha_resolution[1]),
-            )
-        else:
-            final_resolution = rgb_resolution
 
-    # Apply max_resolution cap
-    if max_resolution and final_resolution:
-        max_width, max_height = max_resolution
-        final_resolution = (
-            min(final_resolution[0], max_width),
-            min(final_resolution[1], max_height),
-        )
-
-    return rgb_emission, alpha_emission, final_resolution
-
-
-def _bake_emission_output(
-    dtp_format: str,
+def _execute_normal_bake(
     material: bpy.types.Material,
+    dtp_format: str,
     shader_state: NodeGraphState,
-    root_tree: bpy.types.NodeTree,
-    rgb_output_node: object,
-    alpha_output_node: Optional[object],
+    tree: bpy.types.NodeTree,
     resolution: Tuple[int, int],
+    mesh_data: bpy.types.Mesh,
     uv_layer_name: Optional[str],
     channels: list,
-    image_type: str,
+    use_float: bool,
     debug_print,
 ) -> Optional[bpy.types.Image]:
-    # Create temporary Material Output node in the same tree as the emission node
-    emission_tree = rgb_output_node.id_data
+    """
+    Execute a NORMAL bake.
 
-    temp_material_output = shader_state.add_node(
-        emission_tree, "ShaderNodeOutputMaterial"
-    )
-    temp_material_output.is_active_output = True
+    Args:
+        material: The material being baked
+        dtp_format: DTP format string
+        shader_state: NodeGraphState tracker
+        tree: Root node tree
+        resolution: Bake resolution
+        mesh_data: Mesh data for UV layer
+        uv_layer_name: UV layer name
+        channels: Parsed channel list
+        use_float: Whether to use float buffer
+        debug_print: Debug print function
 
-    # Determine if we're baking RGBA or just RGB
-    has_alpha = alpha_output_node is not None
-    bake_type = "RGBA" if has_alpha else "RGB"
-    debug_print(f"🍞 Baking {bake_type} at {resolution[0]}x{resolution[1]}")
-
-    # Determine if this is utility map data (non-color)
-    is_utility = _is_utility_map(channels)
-
-    # Determine float buffer setting:
-    # - PNG: always 8-bit integer (for compatibility)
-    # - EXR: always 32-bit float (for precision)
-    # This applies to all texture types (color, utility, normals)
-    use_float = image_type == "exr"
-
-    # Create RGB target image
-    rgb_image = bpy.data.images.new(
-        name=f"bake_{material.name}_{dtp_format}_rgb",
-        width=resolution[0],
-        height=resolution[1],
-        alpha=False,
-        float_buffer=use_float,
-    )
-
-    # Set colorspace: Non-Color for utility maps, sRGB for color data
-    if is_utility:
-        rgb_image.colorspace_settings.name = "Non-Color"
-
-    # Create image texture node in ROOT tree
-    img_node = shader_state.add_node(root_tree, "ShaderNodeTexImage")
-    img_node.image = rgb_image
-    img_node.select = True
-    root_tree.nodes.active = img_node
-
-    # Add UVMap node and connect to Image Texture (1st UV is always displayable UV)
-    if uv_layer_name:
-        uv_node = shader_state.add_node(root_tree, "ShaderNodeUVMap")
-        uv_node.uv_map = uv_layer_name
-        uv_node.location = (img_node.location.x - 200, img_node.location.y)
-        shader_state.connect_sockets(
-            root_tree,
-            uv_node,
-            "UV",
-            img_node,
-            "Vector",
-            "UV map to image texture",
-        )
-
-    # Connect RGB emission to Material Output
-    shader_state.connect_sockets(
-        emission_tree,
-        rgb_output_node,
-        "Emission",
-        temp_material_output,
-        "Surface",
-        "RGB emission to material output",
-    )
-
-    # Perform RGB bake
-    bake_start_time = time.time()
-    margin = _get_bake_margin(resolution)
-    bpy.ops.object.bake(type="EMIT", margin=margin, use_selected_to_active=False)
-    bake_end_time = time.time()
-    rgb_duration = int(bake_end_time - bake_start_time)
-
-    if not alpha_output_node:
-        # RGB-only baking
-        debug_print(f"    ✔️ RGB:   {rgb_duration} seconds")
-        return rgb_image
-
-    # Create Alpha target image
-    alpha_image = bpy.data.images.new(
-        name=f"bake_{material.name}_{dtp_format}_alpha",
-        width=resolution[0],
-        height=resolution[1],
-        alpha=False,
-        float_buffer=use_float,
-    )
-
-    # Set colorspace: Non-Color for utility maps, sRGB for color data
-    if is_utility:
-        alpha_image.colorspace_settings.name = "Non-Color"
-
-    # Update image texture node for alpha
-    img_node.image = alpha_image
-
-    # Connect Alpha emission to Material Output
-    shader_state.detach_socket(temp_material_output.inputs["Surface"])
-    shader_state.connect_sockets(
-        emission_tree,
-        alpha_output_node,
-        "Emission",
-        temp_material_output,
-        "Surface",
-        "Alpha emission to material output",
-    )
-
-    # Perform Alpha bake
-    bake_start_time = time.time()
-    margin = _get_bake_margin(resolution)
-    bpy.ops.object.bake(type="EMIT", margin=margin, use_selected_to_active=False)
-    bake_end_time = time.time()
-    alpha_duration = int(bake_end_time - bake_start_time)
-
-    # Display timing results with checkmarks
-    debug_print(f"    ✔️ RGB:   {rgb_duration} seconds")
-    debug_print(f"    ✔️ Alpha: {alpha_duration} seconds")
-
-    # Pack RGB + Alpha together
-    final_image = _pack_rgba_images(
-        material,
-        dtp_format,
-        rgb_image,
-        alpha_image,
-        resolution,
-        use_float,
-        is_utility,
-        debug_print,
-    )
-
-    # Clean up intermediate images
-    bpy.data.images.remove(rgb_image)
-    bpy.data.images.remove(alpha_image)
-
-    return final_image
-
-
-def _bake_normal_output(
-    dtp_format: str,
-    material: bpy.types.Material,
-    shader_state: NodeGraphState,
-    root_tree: bpy.types.NodeTree,
-    principled_tree: bpy.types.NodeTree,
-    normal_output_node: object,
-    resolution: Tuple[int, int],
-    uv_layer_name: Optional[str],
-    channels: list,
-    image_type: str,
-    debug_print,
-) -> Optional[bpy.types.Image]:
+    Returns:
+        Baked image or None
+    """
     # Check if there's a valid 4th channel (not 'xx' unused)
     has_alpha = len(channels) == 4 and channels[3] != "xx"
-
-    # Determine float buffer setting:
-    # - PNG: always 8-bit integer (for compatibility)
-    # - EXR: always 32-bit float (for precision)
-    use_float = image_type == "exr"
 
     # Create target image
     target_image = bpy.data.images.new(
@@ -655,54 +770,22 @@ def _bake_normal_output(
     target_image.colorspace_settings.name = "Non-Color"
 
     # Create image texture node in ROOT tree
-    img_node = shader_state.add_node(root_tree, "ShaderNodeTexImage")
+    img_node = shader_state.add_node(tree, "ShaderNodeTexImage")
     img_node.image = target_image
     img_node.select = True
-    root_tree.nodes.active = img_node
+    tree.nodes.active = img_node
 
-    # Add UVMap node and connect to Image Texture (1st UV is always displayable UV)
-    if uv_layer_name:
-        uv_node = shader_state.add_node(root_tree, "ShaderNodeUVMap")
-        uv_node.uv_map = uv_layer_name
+    # Add UVMap node and connect to Image Texture
+    target_uv_name = (
+        uv_layer_name
+        if uv_layer_name
+        else (mesh_data.uv_layers[0].name if mesh_data.uv_layers else None)
+    )
+    if target_uv_name:
+        uv_node = shader_state.add_node(tree, "ShaderNodeUVMap")
+        uv_node.uv_map = target_uv_name
         uv_node.location = (img_node.location.x - 200, img_node.location.y)
-        shader_state.connect_sockets(
-            root_tree,
-            uv_node,
-            "UV",
-            img_node,
-            "Vector",
-            "UV map to image texture",
-        )
-
-    # Create temporary Principled BSDF for normal baking in the same tree as the normal output
-    temp_principled = shader_state.add_node(principled_tree, "ShaderNodeBsdfPrincipled")
-
-    # Create temporary Material Output node in the same tree as the Principled BSDF
-    temp_material_output = shader_state.add_node(
-        principled_tree, "ShaderNodeOutputMaterial"
-    )
-
-    # Connect normal map texture to temp Principled BSDF's Normal input
-    if hasattr(normal_output_node, "is_linked") and normal_output_node.is_linked:
-        from_socket = normal_output_node.links[0].from_socket
-        shader_state.connect_sockets(
-            principled_tree,
-            from_socket.node,
-            from_socket.name,
-            temp_principled,
-            "Normal",
-            "normal map to temp principled",
-        )
-
-    # Connect temp Principled BSDF to Material Output (both in principled_tree)
-    shader_state.connect_sockets(
-        principled_tree,
-        temp_principled,
-        "BSDF",
-        temp_material_output,
-        "Surface",
-        "temp principled to material output",
-    )
+        tree.links.new(uv_node.outputs["UV"], img_node.inputs["Vector"])
 
     # Perform the bake
     debug_print(f"🍞 Baking Normal at {resolution[0]}x{resolution[1]}")
@@ -721,184 +804,215 @@ def _bake_normal_output(
     return target_image
 
 
-############################
-# Helper functions
-############################
-
-
-def _make_shader_nodes(
-    channels: list,
+def _execute_emit_bake(
+    material: bpy.types.Material,
+    dtp_format: str,
     shader_state: NodeGraphState,
-    principled_tree: bpy.types.NodeTree,
-    principled_bsdf: bpy.types.Node,
-    separate_nodes: dict,
-    target_node: bpy.types.Node,
-    scalar: bool,
+    tree: bpy.types.NodeTree,
+    resolution: Tuple[int, int],
+    use_float: bool,
+    is_utility: bool,
     debug_print,
-) -> None:
+) -> Optional[bpy.types.Image]:
     """
-    Connect channels to target node (Combine Color or Emission).
+    Execute an EMIT bake (single stage, no alpha).
 
     Args:
-        channels: List of channel codes (e.g., ['cr', 'cg', 'cb'])
-        shader_state: Node graph state tracker
-        principled_tree: The node tree containing the nodes
-        principled_bsdf: The Principled BSDF node
-        separate_nodes: Dict mapping socket_name -> Separate Color node
-        target_node: The target node to connect to (Combine Color or Emission)
-        scalar: If True, the channel is not part of a Color socket. False, the channel represents part of a Color socket.
+        material: The material being baked
+        dtp_format: DTP format string
+        shader_state: NodeGraphState tracker
+        tree: Root node tree
+        resolution: Bake resolution
+        use_float: Whether to use float buffer
+        is_utility: Whether this is utility map data
         debug_print: Debug print function
+
+    Returns:
+        Baked image or None
     """
+    # Create bake target image
+    bake_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
 
-    for i, channel in enumerate(channels):
-        socket_mapping = DTP_SOCKET_MAP.get(channel)
-        if not socket_mapping:
-            debug_print(f"Could not resolve channel: {channel}")
-            continue
+    # Set colorspace
+    if is_utility:
+        bake_image.colorspace_settings.name = "Non-Color"
 
-        if scalar:
-            # For scalar (single channel), always use 'Color' input
-            input_name = "Color"
-        else:
-            # For RGB channels, use Red/Green/Blue inputs
-            input_name = ["Red", "Green", "Blue"][i]
+    # Create image texture node for bake target
+    img_node = shader_state.add_node(tree, "ShaderNodeTexImage")
+    img_node.image = bake_image
+    img_node.select = True
+    tree.nodes.active = img_node
 
-        # Handle constant values (0, 1) and unused (xx)
-        # Note: 'xx' (unused) should only appear in alpha position and typically
-        # gets stripped from the format string before reaching the baker.
-        # If it somehow gets here, treat as 0.0 for safety.
-        if socket_mapping in ("__CONSTANT_0__", "__UNUSED__"):
-            if scalar:
-                target_node.inputs[input_name].default_value = (0.0, 0.0, 0.0, 1.0)
-            else:
-                target_node.inputs[input_name].default_value = 0.0
-            continue
-        elif socket_mapping == "__CONSTANT_1__":
-            if scalar:
-                target_node.inputs[input_name].default_value = (1.0, 1.0, 1.0, 1.0)
-            else:
-                target_node.inputs[input_name].default_value = 1.0
-            continue
+    # Execute bake
+    debug_print(f"🍞 Baking EMIT at {resolution[0]}x{resolution[1]}")
 
-        if isinstance(socket_mapping, tuple):
-            # Color based channel (cr, cg, cb, er, eg, eb, etc.)
-            socket_name, channel_index = socket_mapping
-            socket = principled_bsdf.inputs.get(socket_name)
+    try:
+        margin = _get_bake_margin(resolution)
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_end_time = time.time()
+        bake_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"    ✔️ RGB: {bake_duration} seconds")
 
-            # Special handling for emission channels - check emission strength
-            # This check is here because Principled BSDF default emission to white.
-            # Try to guess if it's unused, and set it to black.
-            if socket_name == "Emission Color":
-                # Get emission strength socket
-                emission_strength_socket = principled_bsdf.inputs.get(
-                    "Emission Strength"
-                )
-                if emission_strength_socket and not emission_strength_socket.is_linked:
-                    strength_value = emission_strength_socket.default_value
-                    if strength_value <= 0.0:
-                        # Emission is unused, set black value directly on Combine Color
-                        debug_print(
-                            f"🔧 Emission strength <= 0, using black for channel {channel}"
-                        )
-                        # Set black value directly to target node
-                        if scalar:
-                            # For scalar, convert to RGB color
-                            target_node.inputs[input_name].default_value = (
-                                0.0,
-                                0.0,
-                                0.0,
-                                1.0,
-                            )
-                        else:
-                            # For RGB, use single value
-                            target_node.inputs[input_name].default_value = 0.0
-                        continue
+    except Exception as e:
+        debug_print(f"  Bake failed: {e}")
+        bpy.data.images.remove(bake_image)
+        return None
 
-            if socket and socket.is_linked:
-                # Connect from separate
-                separate_rgb = separate_nodes[socket_name]
-                channel_names = ["Red", "Green", "Blue"]
-                if scalar:
-                    # For scalar, this shouldn't happen - scalar channels are not color-based
-                    debug_print(
-                        f"ERROR: Scalar channel {channel} should not be color-based"
-                    )
-                    continue
-                else:
-                    # For RGB, connect single channel
-                    target_node.inputs[input_name].default_value = separate_rgb.outputs[
-                        channel_names[channel_index]
-                    ].default_value
-                    shader_state.connect_sockets(
-                        principled_tree,
-                        separate_rgb,
-                        channel_names[channel_index],
-                        target_node,
-                        input_name,
-                        f"channel {channel} to {input_name}",
-                    )
-            else:
-                # Not socketed, copy value directly
-                if hasattr(socket, "default_value") and hasattr(
-                    socket.default_value, "__getitem__"
-                ):
-                    # It's a color array, extract the specific channel
-                    if scalar:
-                        # For scalar, this shouldn't happen - scalar channels are not color-based
-                        debug_print(
-                            f"ERROR: Scalar channel {channel} should not be color-based"
-                        )
-                        continue
-                    else:
-                        # For RGB, use single channel value
-                        target_node.inputs[input_name].default_value = (
-                            socket.default_value[channel_index]
-                        )
-                else:
-                    # It's already a single float value
-                    if scalar:
-                        # For scalar, convert to RGB color
-                        target_node.inputs[input_name].default_value = (
-                            socket.default_value,
-                            socket.default_value,
-                            socket.default_value,
-                            1.0,
-                        )
-                    else:
-                        # For RGB, use single value
-                        target_node.inputs[input_name].default_value = (
-                            socket.default_value
-                        )
-        else:
-            # Not color based (me, sp, ro, al, etc.)
-            socket_name = socket_mapping
-            socket = principled_bsdf.inputs.get(socket_name)
+    return bake_image
 
-            if socket and socket.is_linked:
-                # Connect from socket
-                from_socket = socket.links[0].from_socket
-                # Don't set default_value when socket is linked - just connect
+
+def _execute_two_stage_bake(
+    material: bpy.types.Material,
+    dtp_format: str,
+    shader_state: NodeGraphState,
+    tree: bpy.types.NodeTree,
+    resolution: Tuple[int, int],
+    rgb_emissions: list,
+    alpha_emissions: list,
+    use_float: bool,
+    is_utility: bool,
+    debug_print,
+) -> Optional[bpy.types.Image]:
+    """
+    Execute a 2-stage bake: RGB first, then Alpha, then repack.
+
+    Args:
+        material: The material being baked
+        dtp_format: DTP format string
+        shader_state: NodeGraphState tracker
+        tree: Root node tree
+        resolution: Bake resolution
+        rgb_emissions: List of (rgb_emission_node, tree) tuples
+        alpha_emissions: List of (alpha_emission_node, tree) tuples
+        use_float: Whether to use float buffer
+        is_utility: Whether this is utility map data
+        debug_print: Debug print function
+
+    Returns:
+        Packed RGBA image or None
+    """
+    nodes = tree.nodes
+
+    # Stage 1: Bake RGB
+    rgb_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}_rgb",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+
+    if is_utility:
+        rgb_image.colorspace_settings.name = "Non-Color"
+
+    img_node = shader_state.add_node(tree, "ShaderNodeTexImage")
+    img_node.image = rgb_image
+    img_node.select = True
+    nodes.active = img_node
+
+    debug_print(f"🍞 Baking RGB at {resolution[0]}x{resolution[1]}...")
+    try:
+        margin = _get_bake_margin(resolution)
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_end_time = time.time()
+        rgb_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"    ✔️ RGB:   {rgb_duration} seconds")
+    except Exception as e:
+        debug_print(f"  RGB bake failed: {e}")
+        bpy.data.images.remove(rgb_image)
+        return None
+
+    # Stage 2: Disconnect RGB emissions and connect Alpha emissions
+    # Swap all RGB emissions with their corresponding Alpha emissions
+    for (rgb_emission, rgb_tree), (alpha_emission, alpha_tree) in zip(
+        rgb_emissions, alpha_emissions
+    ):
+        # Find what RGB emission is connected to
+        rgb_output = rgb_emission.outputs.get("Emission")
+        if rgb_output and rgb_output.links:
+            for link in list(rgb_output.links):
+                to_socket = link.to_socket
+                # Disconnect RGB emission
+                shader_state.detach_socket(to_socket)
+                # Connect Alpha emission to the same target
                 shader_state.connect_sockets(
-                    principled_tree,
-                    from_socket.node,
-                    from_socket.name,
-                    target_node,
-                    input_name,
-                    f"channel {channel} to {input_name}",
+                    alpha_tree,
+                    alpha_emission,
+                    "Emission",
+                    to_socket.node,
+                    to_socket.name,
+                    "Alpha emission bypass",
                 )
-            else:
-                # Not socketed, copy value directly
-                if scalar:
-                    # For scalar, convert single value to RGB color
-                    target_node.inputs[input_name].default_value = (
-                        socket.default_value,
-                        socket.default_value,
-                        socket.default_value,
-                        1.0,
-                    )
-                else:
-                    # For RGB, use single value
-                    target_node.inputs[input_name].default_value = socket.default_value
+
+    # Stage 3: Bake Alpha
+    alpha_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}_alpha",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+
+    if is_utility:
+        alpha_image.colorspace_settings.name = "Non-Color"
+
+    img_node.image = alpha_image
+
+    debug_print(f"🍞 Baking Alpha at {resolution[0]}x{resolution[1]}...")
+    try:
+        margin = _get_bake_margin(resolution)
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_end_time = time.time()
+        alpha_duration = int(bake_end_time - bake_start_time)
+        debug_print(f"    ✔️ Alpha: {alpha_duration} seconds")
+    except Exception as e:
+        debug_print(f"  Alpha bake failed: {e}")
+        bpy.data.images.remove(rgb_image)
+        bpy.data.images.remove(alpha_image)
+        return None
+
+    # Stage 4: Pack RGB + Alpha together
+    debug_print("📦 Packing RGB + A")
+    bake_image = _pack_rgba_images(
+        material,
+        dtp_format,
+        rgb_image,
+        alpha_image,
+        resolution,
+        use_float,
+        is_utility,
+        debug_print,
+    )
+
+    # Clean up intermediate images
+    bpy.data.images.remove(rgb_image)
+    bpy.data.images.remove(alpha_image)
+
+    return bake_image
 
 
 def _pack_rgba_images(
@@ -927,8 +1041,6 @@ def _pack_rgba_images(
     Returns:
         Packed RGBA image or None if failed
     """
-    debug_print("📦 Packing RGB + A")
-
     # Convert images to numpy arrays
     rgb_array = _image_to_np(rgb_image)
     alpha_array = _image_to_np(alpha_image)

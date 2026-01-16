@@ -1,171 +1,98 @@
-# Version Auto
-
 """Material analysis utilities for extracting texture information from Blender materials."""
 
 import bpy
 import math
-from typing import Optional, Tuple, Dict, Set
+from typing import Optional, Tuple, List, Dict
 
 
-def find_principled_bsdf(material: bpy.types.Material) -> Optional[Dict]:
+def find_all_principled_bsdfs(
+    material: bpy.types.Material,
+) -> List[Dict]:
     """
-    Find the Principled BSDF node connected to the material output.
+    Find all Principled BSDF nodes in a material, including inside node groups.
 
     Args:
         material: The Blender material to search
 
     Returns:
-        Dict with 'material_output' (Material Output node), 'principled_bsdf' (Principled BSDF), 'tree_stack' (list of trees), or None
+        List of dicts, each with:
+            - "node": The Principled BSDF node
+            - "tree": The NodeTree containing the node
+        Returns empty list if no nodes found.
     """
-    if not material.use_nodes:
-        return None
+    if not material or not material.use_nodes:
+        return []
 
     node_tree = material.node_tree
     if not node_tree:
-        return None
+        return []
 
-    return _find_principled_bsdf_in_tree(node_tree)
+    return _scan_for_principled_bsdfs(node_tree)
 
 
-def _find_principled_bsdf_in_tree(node_tree: bpy.types.NodeTree) -> Optional[Dict]:
+def _scan_for_principled_bsdfs(
+    node_tree: bpy.types.NodeTree,
+    visited: set = None,
+) -> List[Dict]:
     """
-    Find the Principled BSDF node connected to the material output.
+    Recursively scan a node tree for all Principled BSDF nodes.
 
     Args:
         node_tree: The node tree to search
+        visited: Set of visited tree names (prevents infinite recursion)
 
     Returns:
-        Dict with 'material_output' (Material Output node), 'principled_bsdf' (Principled BSDF), 'tree_stack' (list of trees), or None
+        List of {"node": Node, "tree": NodeTree} dicts
     """
+    if visited is None:
+        visited = set()
 
-    def debug_print(*msgs):
-        print("        ", *msgs)
-        return
+    # Prevent infinite recursion from circular group references
+    if node_tree.name in visited:
+        return []
+    visited.add(node_tree.name)
 
-    if not node_tree:
-        return None
+    results = []
 
-    # Find material output node
-    output_node = None
     for node in node_tree.nodes:
-        if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
-            output_node = node
-            break
+        if node.type == "BSDF_PRINCIPLED":
+            results.append({"node": node, "tree": node_tree})
+        elif node.type == "GROUP" and node.node_tree:
+            # Recurse into group
+            group_results = _scan_for_principled_bsdfs(node.node_tree, visited)
+            results.extend(group_results)
 
-    # Fallback to any output if no active output found
-    if not output_node:
-        for node in node_tree.nodes:
-            if node.type == "OUTPUT_MATERIAL":
-                output_node = node
-                break
-
-    if not output_node:
-        debug_print("No Material Output node found in tree")
-        return None
-
-    surface_input = output_node.inputs.get("Surface")
-    if not surface_input or not surface_input.is_linked:
-        debug_print("Material Output has no connected Surface input")
-        return None
-
-    visited_nodes = set()
-    tree_stack = [node_tree]  # Start with root tree
-    result = _trace_to_principled_bsdf(
-        surface_input.links[0].from_node, visited_nodes, tree_stack
-    )
-    if result:
-        return {
-            "material_output": output_node,
-            "principled_bsdf": result,
-            "tree_stack": tree_stack,
-        }
-    return None
+    return results
 
 
-def _trace_to_principled_bsdf(
-    node: bpy.types.Node, visited_nodes: set, tree_stack: list
-) -> Optional[bpy.types.ShaderNode]:
+def build_tree_stack(material: bpy.types.Material) -> List[bpy.types.NodeTree]:
     """
-    Trace through the node tree to find a Principled BSDF node.
+    Build a list of all node trees in a material (root + all nested groups).
+
+    Used for resolution detection which needs to traverse across tree boundaries.
 
     Args:
-        node: Current node to examine
-        visited_nodes: Set of already visited nodes to prevent infinite loops
-        tree_stack: List of trees we've traversed through
+        material: The Blender material
 
     Returns:
-        Principled BSDF node if found, None otherwise
+        List of NodeTrees, starting with root, then all nested groups
     """
+    if not material or not material.use_nodes or not material.node_tree:
+        return []
 
-    def debug_print(*msgs):
-        print("        ", *msgs)
-        return
+    tree_stack = [material.node_tree]
+    visited = {material.node_tree.name}
 
-    # Prevent infinite loops
-    node_id = str(node.name) + str(id(node))
-    if node_id in visited_nodes:
-        return None
-    visited_nodes.add(node_id)
+    def collect_groups(node_tree: bpy.types.NodeTree):
+        for node in node_tree.nodes:
+            if node.type == "GROUP" and node.node_tree:
+                if node.node_tree.name not in visited:
+                    visited.add(node.node_tree.name)
+                    tree_stack.append(node.node_tree)
+                    collect_groups(node.node_tree)
 
-    if node.type == "BSDF_PRINCIPLED":
-        return node
-
-    if node.type == "GROUP":
-        if not node.node_tree:
-            return None
-
-        # Add this group's tree to the stack
-        tree_stack.append(node.node_tree)
-
-        # Find group output node
-        group_output = None
-        for group_node in node.node_tree.nodes:
-            if group_node.type == "GROUP_OUTPUT" and group_node.is_active_output:
-                group_output = group_node
-                break
-
-        if not group_output:
-            for group_node in node.node_tree.nodes:
-                if group_node.type == "GROUP_OUTPUT":
-                    group_output = group_node
-                    break
-
-        if not group_output:
-            return None
-
-        # Trace from group output inputs
-        for input_socket in group_output.inputs:
-            if input_socket.is_linked:
-                for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(
-                        link.from_node, visited_nodes, tree_stack
-                    )
-                    if result:
-                        return result
-
-    elif node.type in ["MIX_SHADER", "ADD_SHADER", "SHADER_TO_RGB"]:
-        # Check all shader inputs
-        for input_socket in node.inputs:
-            if input_socket.is_linked:
-                for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(
-                        link.from_node, visited_nodes, tree_stack
-                    )
-                    if result:
-                        return result
-
-    else:
-        # Check all inputs for other node types
-        for input_socket in node.inputs:
-            if input_socket.is_linked:
-                for link in input_socket.links:
-                    result = _trace_to_principled_bsdf(
-                        link.from_node, visited_nodes, tree_stack
-                    )
-                    if result:
-                        return result
-
-    return None
+    collect_groups(material.node_tree)
+    return tree_stack
 
 
 def has_socket_input(socket: bpy.types.NodeSocket) -> bool:
