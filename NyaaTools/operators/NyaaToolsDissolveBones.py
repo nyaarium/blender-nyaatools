@@ -1,9 +1,11 @@
 import traceback
 import bpy
 
+from ..asset.asset_lookup import get_asset_meshes_by_layer
+
 
 class NYAATOOLS_OT_DissolveBones(bpy.types.Operator):
-    """Dissolve a selection of bones and combine the vertex groups of affected meshes. Good for reducing hair bones. Important: Only affects meshes that have this armature as the deform modifier."""
+    """Dissolve a selection of bones and combine the vertex groups. Affects meshes from the Asset's layer config (if asset) plus any other meshes using this armature modifier."""
 
     bl_idname = "nyaa.dissolve_bones"
     bl_label = "Dissolve Bones"
@@ -106,16 +108,28 @@ def perform_dissolve_bones():
         if bone.parent and bone.parent in selected_bones:
             bone.use_connect = True
 
-    # Step 3: Loop over all mesh objects and include if it is affected by armature.
-    meshes_affected_by_armature = []
+    # Step 3: Collect meshes from both Asset layers and armature modifier references.
+    # This ensures we affect: (1) All meshes in the Asset's layer config, and
+    # (2) Any non-tracked meshes that happen to use this armature.
+    meshes_affected = set()
+
+    # Source 1: Asset system layers (if this armature is an asset)
+    if hasattr(obj, "nyaa_asset") and obj.nyaa_asset.is_asset:
+        layer_dict = get_asset_meshes_by_layer(obj)
+        for layer_meshes in layer_dict.values():
+            for mesh in layer_meshes.values():
+                meshes_affected.add(mesh)
+
+    # Source 2: Any mesh with an armature modifier pointing to this armature
     for mesh in bpy.data.objects:
         if mesh.type == "MESH":
             for mod in mesh.modifiers:
-                if mod.type == "ARMATURE":
-                    meshes_affected_by_armature.append(mesh)
+                if mod.type == "ARMATURE" and mod.object == obj:
+                    meshes_affected.add(mesh)
+                    break
 
     # Step 4: Loop over meshes and combine the affected vertex group weights.
-    for mesh in meshes_affected_by_armature:
+    for mesh in meshes_affected:
         vg_names_to_remove = []
 
         for bone in selected_bones:
