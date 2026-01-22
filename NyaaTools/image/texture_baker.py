@@ -4,7 +4,7 @@ import bpy
 import time
 from typing import Optional, Tuple, List, Dict
 
-from .material_analyzer import detect_best_resolution
+from .material_analyzer import detect_best_resolution, build_tree_stack
 from .node_graph_state import NodeGraphState
 from .dtp_format import is_flag_supported, expand_alias, is_alias
 from ..uv.analyze_mip_stats import analyze_mip_stats
@@ -227,26 +227,55 @@ def _bake_with_all_principled_replaced(
 
     debug_print(f"  Found {len(principled_infos)} Principled BSDF node(s)")
 
-    # Build tree_stack for resolution detection
-    tree_stack = [material.node_tree]
-    for info in principled_infos:
-        if info["tree"] not in tree_stack:
-            tree_stack.append(info["tree"])
+    tree_stack = build_tree_stack(material)
 
-    # Detect resolution from first principled's connected textures if not specified
+    # Detect resolution from all principled's connected textures if not specified
     detected_resolution = None
     if resolution is None:
+        all_resolutions = []
+
         for info in principled_infos:
             principled = info["node"]
-            # Try Base Color socket first (most common)
-            base_color_socket = principled.inputs.get("Base Color")
-            if base_color_socket:
-                detected_resolution = detect_best_resolution(
-                    base_color_socket, tree_stack
-                )
-                if detected_resolution and detected_resolution != (512, 512):
-                    debug_print(f"  Auto-detected resolution: {detected_resolution}")
-                    break
+
+            # Helper to check socket
+            def check_socket(socket_name):
+                socket = principled.inputs.get(socket_name)
+                if socket and socket.is_linked:
+                    res = detect_best_resolution(socket, tree_stack)
+                    if res != (512, 512):  # Only keep non-default results
+                        all_resolutions.append(res)
+
+            if bake_type == "NORMAL":
+                check_socket("Normal")
+            else:
+                # Check standard heavy sockets
+                check_socket("Base Color")
+                check_socket("Emission Color")
+
+                # Check sockets specific to this DTP format
+                for channel in channels:
+                    socket_mapping = DTP_SOCKET_MAP.get(channel)
+                    if isinstance(socket_mapping, str) and socket_mapping not in (
+                        "__CONSTANT_0__",
+                        "__CONSTANT_1__",
+                        "__UNUSED__",
+                    ):
+                        check_socket(socket_mapping)
+                    elif isinstance(socket_mapping, tuple):
+                        socket_name, _ = socket_mapping
+                        check_socket(socket_name)
+
+        if all_resolutions:
+            # Find max resolution
+            max_w = max(r[0] for r in all_resolutions)
+            max_h = max(r[1] for r in all_resolutions)
+            detected_resolution = (max_w, max_h)
+            debug_print(
+                f"  Auto-detected resolution: {detected_resolution} (from {len(all_resolutions)} sources)"
+            )
+        else:
+            detected_resolution = (512, 512)
+            debug_print("  Auto-detected resolution: (512, 512) (fallback)")
 
     # Determine final resolution
     final_resolution = resolution or detected_resolution or (512, 512)
@@ -389,6 +418,7 @@ def _bake_with_all_principled_replaced(
     except Exception as e:
         debug_print(f"  Bake operation failed: {e}")
         import traceback
+
         traceback.print_exc()
         bake_image = None
 
@@ -443,11 +473,13 @@ def _replace_principled_for_normal_bake(
     for output in principled.outputs:
         if output.name == "BSDF":
             for link in output.links:
-                reconnect_targets.append({
-                    "node": link.to_node,
-                    "socket": link.to_socket,
-                    "socket_name": link.to_socket.name,
-                })
+                reconnect_targets.append(
+                    {
+                        "node": link.to_node,
+                        "socket": link.to_socket,
+                        "socket_name": link.to_socket.name,
+                    }
+                )
 
     # Disconnect original Principled's BSDF output and connect temp Principled
     for target in reconnect_targets:
@@ -518,7 +550,9 @@ def _replace_principled_with_emission_tracked(
                 sock = principled.inputs.get(sock_name)
                 if sock and sock.is_linked:
                     # Create Separate Color node (tracked as temporary)
-                    sep = shader_state.add_node(principled_tree, "ShaderNodeSeparateColor")
+                    sep = shader_state.add_node(
+                        principled_tree, "ShaderNodeSeparateColor"
+                    )
                     sep.mode = "RGB"
                     sep.location = (
                         principled.location.x - 100,
@@ -563,12 +597,14 @@ def _replace_principled_with_emission_tracked(
                             input_index = idx
                             break
 
-                reconnect_targets.append({
-                    "node": to_node,
-                    "socket": to_socket,
-                    "socket_name": to_socket.name,
-                    "input_index": input_index,
-                })
+                reconnect_targets.append(
+                    {
+                        "node": to_node,
+                        "socket": to_socket,
+                        "socket_name": to_socket.name,
+                        "input_index": input_index,
+                    }
+                )
 
     # Disconnect original Principled's BSDF output by detaching target sockets
     for target in reconnect_targets:
