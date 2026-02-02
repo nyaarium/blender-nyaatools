@@ -10,24 +10,20 @@ Command: `./dev_deploy.sh | grep ".py"`
 After making changes:
 
 1. Auto-run the command to deploy to Blender.
-2. Delete old diagnostics to reduce bloat
+2. Delete old logs to reduce bloat
 3. Inform the user to reload the addon.
 
 ## Debugging across Windows/WSL filesystem boundaries
 
 Blender runs on Windows, code workspace is in WSL.
 
-### Write diagnostics as Windows paths
+### Write diagnostics from Windows into WSL
 
-In Blender Python, have instrumentation write diagnostics to Windows %TEMP% path.
+In Blender Python, write diagnostics to the workspace via the WSL network path so the agent can read them on Linux. Use `\\wsl$\Ubuntu-24.04\`.
 
 ```python
-# Writes to: C:\Users\{username}\AppData\Local\Temp\...
-log_path = os.path.join(tempfile.gettempdir(), ...)
+# Example: write to project .cursor/debug.log from Blender on Windows
+log_path = r"\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug.log"
+with open(log_path, "a", encoding="utf-8") as f:
+    f.write(...)
 ```
-
-### Read diagnostics as Linux paths
-
-As the agent, you can read the diagnostics from Linux /mnt/ path. Tools like `read_file` or `grep` can access over filesystem boundary at: `/mnt/c/Users/{username}/AppData/Local/Temp/...`.
-
-Don't ever use bash `find` command. Use `ls` if you need to list files.
