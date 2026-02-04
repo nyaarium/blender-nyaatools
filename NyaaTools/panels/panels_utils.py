@@ -95,7 +95,8 @@ class NYAATOOLS_PT_MeshTools(Panel):
 
         box = layout.box()
         box.label(text="Modifier with Shape Keys", icon="SHAPEKEY_DATA")
-        box.operator("przemir.apply_top_modifier", text="Apply Top Modifier")
+        box.operator("nyaa.fix_vortex_uvs", text="Fix Vortex UVs")
+        box.operator("przemir.apply_top_modifier", text="Przemir (Legacy)")
 
 
 # =============================================================================

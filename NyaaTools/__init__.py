@@ -49,6 +49,7 @@ def _toggle_register(reg: bool):
     from .operators.bake import operator as bake_op
     from .operators import NyaaToolsAtlasRecombine
     from .operators import NyaaToolsAtlasStratum
+    from .operators import NyaaToolsFixVortexUVs
 
     # Panel operators
     from .panels import LinkButton
@@ -116,6 +117,7 @@ def _toggle_register(reg: bool):
         bake_op,
         NyaaToolsAtlasRecombine,
         NyaaToolsAtlasStratum,
+        NyaaToolsFixVortexUVs,
         LinkButton,
         operators_asset,
         operators_export,
