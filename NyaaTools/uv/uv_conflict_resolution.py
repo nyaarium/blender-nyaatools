@@ -88,6 +88,7 @@ def standardize_uvs_for_merge(
         if first_uv.name != "UVMap":
             old_name = first_uv.name
             first_uv.name = "UVMap"
+            print(f"UV renamed '{old_name}' → 'UVMap' on {mesh.name}")
             debug_print(f"    Renamed '{old_name}' → 'UVMap' on {mesh.name}")
 
     debug_print("  ✅ UV standardization complete")
@@ -103,6 +104,10 @@ def resolve_layer_uv_conflicts(
 
     Checks for conflicting first UV names and standardizes them by renaming
     the first UV to "UVMap".
+
+    Note: Renaming the first UV can cause bake or shader failures if a node
+    (e.g. Texture Coordinate or UV Map) references that layer by name and
+    no longer matches after the rename.
 
     Args:
         layer_name: Name of the layer

@@ -9,7 +9,7 @@ import bpy
 from ..mesh.cleanup_mesh import cleanup_mesh
 from ..common.renamer_rename import rename_object
 from .merge_onto_layer import merge_onto_layer
-from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
+from ..operators.ApplyModifierShapeKeysViaUV import apply_modifiers_with_shape_keys
 from .asset_lookup import get_asset_meshes_by_layer
 from ..uv.uv_conflict_resolution import resolve_layer_uv_conflicts
 
@@ -213,7 +213,7 @@ def merge_single_layer(
             # Apply all modifiers (except armature for rigged exports)
             if mesh_copy.data.shape_keys:
                 mesh_copy.active_shape_key_index = 0
-                # Apply all modifiers using Przemir (handles shape keys)
+                # Apply all modifiers using UV projection (handles shape keys)
                 # Filter out armature modifiers for rigged exports
                 modifier_names = [
                     mod.name
@@ -222,7 +222,7 @@ def merge_single_layer(
                 ]
                 if modifier_names:
                     try:
-                        success, error_info = applyModifierForObjectWithShapeKeys(
+                        success, error_info = apply_modifiers_with_shape_keys(
                             bpy.context, modifier_names, False
                         )
                         if not success:
