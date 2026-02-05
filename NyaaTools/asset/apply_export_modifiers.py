@@ -5,7 +5,7 @@ Modifier application for asset export.
 import bpy
 
 from .list_asset_armatures import list_asset_armatures
-from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
+from ..operators.ApplyModifierShapeKeysViaUV import apply_modifiers_with_shape_keys
 from ..common.deselect_all import deselect_all
 from ..common.selection_add import selection_add
 
@@ -21,7 +21,9 @@ def apply_export_modifiers(obj):
     - Applies transforms
     """
     if obj is None:
-        raise BaseException("apply_export_modifiers() :: Expected a mesh object, got: None")
+        raise BaseException(
+            "apply_export_modifiers() :: Expected a mesh object, got: None"
+        )
 
     selection_add(obj)
 
@@ -46,9 +48,9 @@ def apply_export_modifiers(obj):
             if armature.name in asset_names:
                 bpy.ops.object.modifier_remove(modifier=modifier.name)
             else:
-                applyModifierForObjectWithShapeKeys(bpy.context, [modifier.name], False)
+                apply_modifiers_with_shape_keys(bpy.context, [modifier.name], False)
         else:
-            applyModifierForObjectWithShapeKeys(bpy.context, [modifier.name], False)
+            apply_modifiers_with_shape_keys(bpy.context, [modifier.name], False)
 
     try:
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)

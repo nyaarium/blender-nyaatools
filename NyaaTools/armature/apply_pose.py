@@ -1,6 +1,6 @@
 import bpy
 
-from .._external.przemir.helper import applyModifierForObjectWithShapeKeys
+from ..operators.ApplyModifierShapeKeysViaUV import apply_modifier_with_shape_keys
 
 
 def apply_pose(armature, mesh_modifier_pairs, callback_progress_tick=None):
@@ -28,12 +28,11 @@ def apply_pose(armature, mesh_modifier_pairs, callback_progress_tick=None):
         modifier_copy.object = modifier.object
         modifier_copy.use_deform_preserve_volume = True
 
-        # If shape keys exist (note that shape_keys may be None)
-        if mesh.data.shape_keys != None:
-            applyModifierForObjectWithShapeKeys(
-                bpy.context, [modifier_copy.name], True, callback_progress_tick
+        # If shape keys exist, use UV projection path; otherwise apply directly
+        if mesh.data.shape_keys is not None:
+            apply_modifier_with_shape_keys(
+                bpy.context, mesh, modifier_copy, uv_map_index=0
             )
-
         else:
             bpy.ops.object.modifier_apply(modifier=modifier_copy.name)
 

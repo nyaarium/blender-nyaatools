@@ -45,12 +45,11 @@ def _toggle_register(reg: bool):
     from .operators import NyaaToolsRenamePackedImage
     from .operators import NyaaSelectStandardBones
     from .operators import PrzemirApplyTopModifier
+    from .operators import ApplyModifierShapeKeysViaUV
     from .operators.merge_export import operator as merge_export_op
     from .operators.bake import operator as bake_op
     from .operators import NyaaToolsAtlasRecombine
     from .operators import NyaaToolsAtlasStratum
-    from .operators import NyaaToolsFixVortexUVs
-
     # Panel operators
     from .panels import LinkButton
     from .panels import operators_asset
@@ -113,11 +112,11 @@ def _toggle_register(reg: bool):
         NyaaToolsRenamePackedImage,
         NyaaSelectStandardBones,
         PrzemirApplyTopModifier,  # 3rd Party Operator module (contains PrzemirApplyTopModifier class without prefix)
+        ApplyModifierShapeKeysViaUV,
         merge_export_op,
         bake_op,
         NyaaToolsAtlasRecombine,
         NyaaToolsAtlasStratum,
-        NyaaToolsFixVortexUVs,
         LinkButton,
         operators_asset,
         operators_export,
@@ -137,7 +136,7 @@ def _toggle_register(reg: bool):
     classes_to_register = []
     panel_classes = []  # Collect panels separately to sort by parent dependency
     registry_items = []  # Collect items with register()/unregister() methods
-    
+
     for item in items:
         if inspect.isclass(item):
             # Direct class reference
@@ -146,7 +145,7 @@ def _toggle_register(reg: bool):
             # Check if module has register()/unregister() functions
             has_register = hasattr(item, "register") and callable(item.register)
             has_unregister = hasattr(item, "unregister") and callable(item.unregister)
-            
+
             if has_register and has_unregister:
                 # Module with registration functions - add to registry_items
                 registry_items.append(item)
@@ -171,7 +170,7 @@ def _toggle_register(reg: bool):
             # Check if object has register()/unregister() methods
             has_register = hasattr(item, "register") and callable(item.register)
             has_unregister = hasattr(item, "unregister") and callable(item.unregister)
-            
+
             if has_register and has_unregister:
                 registry_items.append(item)
 
@@ -194,7 +193,7 @@ def _toggle_register(reg: bool):
         bpy.types.Scene.nyaa_settings = bpy.props.PointerProperty(
             type=NyaaToolsSettings
         )
-        
+
         # Auto-register items with register() methods (after PropertyGroups are attached)
         for registry_item in registry_items:
             registry_item.register()
@@ -202,7 +201,7 @@ def _toggle_register(reg: bool):
         # Auto-unregister items with unregister() methods (before PropertyGroups are removed)
         for registry_item in reversed(registry_items):
             registry_item.unregister()
-        
+
         # Remove PropertyGroups from types
         for attr_name, type_obj in [
             ("nyaa_settings", bpy.types.Scene),
