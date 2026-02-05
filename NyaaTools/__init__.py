@@ -9,7 +9,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (5, 0, 1),
-    "version": (2, 3, 1),
+    "version": (2, 4, 1),
     "description": "Various Nyaarium tools for mesh cleanup, merging, and exporting assets",
     "location": "N-Panel > NyaaTools",
     "category": "Object",
@@ -49,6 +49,7 @@ def _toggle_register(reg: bool):
     from .operators.bake import operator as bake_op
     from .operators import NyaaToolsAtlasRecombine
     from .operators import NyaaToolsAtlasStratum
+
     # Panel operators
     from .panels import LinkButton
     from .panels import operators_asset

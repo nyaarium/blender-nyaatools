@@ -23,7 +23,10 @@ from ..common.uv_projection import (
     validate_uvs,
     extract_shape_key_metadata,
     extract_vertex_group_weights,
-    project_positions_via_uv,
+    extract_verts_3d_bulk,
+    extract_final_uvs_bulk,
+    write_shape_key_coords_bulk,
+    _project_positions_cached_target,
 )
 from ..uv.auto_fix_uvs import auto_fix_uvs_for_projection, cleanup_temp_uv_layer
 
@@ -112,6 +115,7 @@ def apply_with_uv_projection(context, mesh_obj, modifier, uv_map_index):
     7. Swap mesh data onto original object
     8. Cleanup temp scene
     """
+
     # Store references
     original_scene = context.window.scene
     original_object = mesh_obj
@@ -204,11 +208,12 @@ def apply_with_uv_projection(context, mesh_obj, modifier, uv_map_index):
         basis_result = sk_results[basis_name]
         n_verts = len(basis_result.data.vertices)
 
-        # Extract Basis vertex positions
-        basis_positions = [v.co.copy() for v in basis_result.data.vertices]
+        # Extract target data ONCE (cached for all shape key projections)
+        basis_positions = extract_verts_3d_bulk(basis_result.data)  # (N, 3)
+        basis_uvs = extract_final_uvs_bulk(basis_result.data, projection_uv_index)  # (N, 2)
 
         # Phase 5: Compute deltas for each non-Basis shape key
-        computed_deltas = {}  # {sk_name: [Vector3 per vertex]}
+        computed_deltas = {}  # {sk_name: (N, 3) np.ndarray}
 
         for sk_name in shape_key_names:
             if sk_name == basis_name:
@@ -216,21 +221,16 @@ def apply_with_uv_projection(context, mesh_obj, modifier, uv_map_index):
 
             sk_result = sk_results[sk_name]
 
-            # Project positions from SK result onto Basis result via UV
-            # This gives us "where would each Basis vertex be if it were in SK state?"
-            projected_positions = project_positions_via_uv(
+            # Project positions using cached target data (no re-extraction)
+            projected_positions = _project_positions_cached_target(
                 sk_result,  # source: has SK-state positions
-                basis_result,  # target: we want positions at each Basis vertex's UV
                 projection_uv_index,
+                basis_uvs,       # cached target UVs
+                basis_positions, # cached target positions
             )
 
-            # Compute deltas: projected_position - basis_position
-            deltas = []
-            for i in range(n_verts):
-                delta = projected_positions[i] - basis_positions[i]
-                deltas.append(delta)
-
-            computed_deltas[sk_name] = deltas
+            # Vectorized delta computation: one array op instead of N subtractions
+            computed_deltas[sk_name] = projected_positions - basis_positions
 
         # Phase 6: Build shape keys on Basis result
         # Switch to temp scene to work on basis_result
@@ -241,7 +241,7 @@ def apply_with_uv_projection(context, mesh_obj, modifier, uv_map_index):
         # Add Basis shape key
         basis_result.shape_key_add(name="Basis", from_mix=False)
 
-        # Add other shape keys with computed deltas
+        # Add other shape keys with computed deltas (bulk write)
         for meta in shape_metadata:
             if meta["name"] == basis_name:
                 continue
@@ -249,9 +249,9 @@ def apply_with_uv_projection(context, mesh_obj, modifier, uv_map_index):
             new_key = basis_result.shape_key_add(name=meta["name"], from_mix=False)
 
             if meta["name"] in computed_deltas:
-                deltas = computed_deltas[meta["name"]]
-                for i, delta in enumerate(deltas):
-                    new_key.data[i].co = basis_positions[i] + delta
+                # Compute final coords and write in bulk
+                final_coords = basis_positions + computed_deltas[meta["name"]]
+                write_shape_key_coords_bulk(new_key, final_coords)
 
         # Restore shape key metadata
         for i, meta in enumerate(shape_metadata):

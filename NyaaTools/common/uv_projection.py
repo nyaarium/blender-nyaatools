@@ -23,6 +23,359 @@ EPSILON_FLOOR = 1e-30
 # Tolerance for point-in-triangle tests (handles float precision in UV coords)
 POINT_IN_TRI_TOLERANCE = 1e-5
 
+# Default grid size for UV spatial index (1024x1024 = 1048576 cells)
+UV_GRID_SIZE = 1024
+
+
+# =============================================================================
+# UV Spatial Index
+# =============================================================================
+
+
+def build_uv_grid(triangles, query_points, grid_size=UV_GRID_SIZE):
+    """
+    Build spatial index for UV triangles using CSR (Compressed Sparse Row) format.
+
+    Computes bounding box, bins triangles, and returns a flattened index array
+    optimized for fast lookups.
+
+    Args:
+        triangles: (M, 3, 2) triangle UV coords
+        query_points: (N, 2) query point UV coords
+        grid_size: Number of cells per axis (default 1024)
+
+    Returns:
+        grid_indices: (TotalEntries,) int32 - concatenated triangle indices
+        grid_offsets: (GridSize*GridSize + 1,) int32 - start/end indices for each cell
+        uv_min: (2,) bounding box min
+        uv_max: (2,) bounding box max
+        cell_size: (2,) size of each cell
+        grid_size: int
+    """
+    M = triangles.shape[0]
+
+    # Compute bounding box over ALL UVs (triangles + points)
+    tri_flat = triangles.reshape(-1, 2)
+    all_uvs = np.vstack([tri_flat, query_points])
+    
+    uv_min = all_uvs.min(axis=0)
+    uv_max = all_uvs.max(axis=0)
+    
+    # Add small padding
+    padding = 1e-6
+    uv_min = uv_min - padding
+    uv_max = uv_max + padding
+    
+    uv_range = uv_max - uv_min
+    cell_size = uv_range / grid_size
+    cell_size = np.maximum(cell_size, 1e-10)
+
+    # Vectorized cell bounds for all triangles
+    tri_min = triangles.min(axis=1) # (M, 2)
+    tri_max = triangles.max(axis=1) # (M, 2)
+    
+    cell_min = ((tri_min - uv_min) / cell_size).astype(np.int32)
+    cell_max = ((tri_max - uv_min) / cell_size).astype(np.int32)
+    
+    cell_min = np.clip(cell_min, 0, grid_size - 1)
+    cell_max = np.clip(cell_max, 0, grid_size - 1)
+
+    # We need to flatten the (cell, tri_idx) pairs.
+    # Since fully vectorizing dynamic range expansion in NumPy is hard,
+    # we use a fast pre-allocated strategy or list comprehension.
+    # Given typical M=100k, Python loop is acceptable if we avoid appended lists.
+    
+    # Estimate total entries
+    counts_u = cell_max[:, 0] - cell_min[:, 0] + 1
+    counts_v = cell_max[:, 1] - cell_min[:, 1] + 1
+    counts = counts_u * counts_v
+    total_entries = np.sum(counts)
+
+    # Allocate flat arrays
+    # We will build (cell_idx, tri_idx) pairs then sort by cell_idx
+    all_cell_indices = np.empty(total_entries, dtype=np.int32)
+    all_tri_indices = np.empty(total_entries, dtype=np.int32)
+
+    # Fill arrays (Numba would be great, but standard Python for portability)
+    # Using a flat loop with pre-calc offsets is faster than append
+    
+    # Create offsets for insertion
+    offsets = np.zeros(M + 1, dtype=np.int32)
+    np.cumsum(counts, out=offsets[1:])
+    
+    # Fill loop
+    # We can perform a slightly optimized loop
+    for i in range(M):
+        start = offsets[i]
+        end = offsets[i+1]
+        
+        c_min_x, c_min_y = cell_min[i]
+        c_max_x, c_max_y = cell_max[i]
+        
+        # Grid meshgrid for this triangle's bounds
+        # Note: strict row-major order for cells is not required for correctness,
+        # but consistency helps.
+        # Generating indices:
+        x_range = np.arange(c_min_x, c_max_x + 1, dtype=np.int32)
+        y_range = np.arange(c_min_y, c_max_y + 1, dtype=np.int32)
+        
+        # Tile/Repeat to form grid
+        # e.g. x=[0,1], y=[0,1] -> (0,0), (1,0), (0,1), (1,1)
+        grid_x = np.tile(x_range, len(y_range))
+        grid_y = np.repeat(y_range, len(x_range))
+        
+        cells = grid_y * grid_size + grid_x
+        
+        all_cell_indices[start:end] = cells
+        all_tri_indices[start:end] = i
+
+    # Sort by cell index to create CSR structure
+    sort_order = np.argsort(all_cell_indices)
+    sorted_cells = all_cell_indices[sort_order]
+    sorted_tris = all_tri_indices[sort_order]
+    
+    # grid_indices is the sorted triangle list
+    grid_indices = sorted_tris
+    
+    # grid_offsets: where does each cell start?
+    # np.searchsorted finds insertion points
+    # We need offsets for ALL cells 0..grid_size*grid_size
+    # unique_cells, counts = np.unique(sorted_cells) ... but we need missing zeros
+    
+    # Searchsorted is robust
+    all_possible_cells = np.arange(grid_size * grid_size + 1, dtype=np.int32)
+    grid_offsets = np.searchsorted(sorted_cells, all_possible_cells[:-1], side='left')
+    
+    # Append total count as the last offset
+    grid_offsets = np.append(grid_offsets, total_entries).astype(np.int32)
+
+    return grid_indices, grid_offsets, uv_min, uv_max, cell_size, grid_size
+
+
+def barycentric_single(point, tri_verts):
+    """
+    Compute barycentric coordinates for a single point in a single triangle.
+
+    Args:
+        point: (2,) UV coordinate
+        tri_verts: (3, 2) triangle vertices
+
+    Returns:
+        (w, v, u): barycentric coordinates, or None if degenerate
+        inside: bool - whether point is inside triangle
+    """
+    A = tri_verts[0]
+    B = tri_verts[1]
+    C = tri_verts[2]
+
+    v0 = C - A
+    v1 = B - A
+    v2 = point - A
+
+    dot00 = np.dot(v0, v0)
+    dot01 = np.dot(v0, v1)
+    dot02 = np.dot(v0, v2)
+    dot11 = np.dot(v1, v1)
+    dot12 = np.dot(v1, v2)
+
+    denom = dot00 * dot11 - dot01 * dot01
+    scale = dot00 * dot11
+    threshold = max(scale * RELATIVE_DEGEN_TOLERANCE, EPSILON_FLOOR)
+
+    if abs(denom) < threshold:
+        return None, False
+
+    inv_denom = 1.0 / denom
+    u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+    v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+    w = 1.0 - u - v
+
+    tol = POINT_IN_TRI_TOLERANCE
+    inside = (w >= -tol) and (v >= -tol) and (u >= -tol)
+
+    return (w, v, u), inside
+
+
+def barycentric_batch_indexed(
+    points, triangles, grid_indices, grid_offsets, uv_min, cell_size, grid_size,
+    final_verts_3d=None, tri_centroids_3d=None
+):
+    """
+    Compute barycentric coordinates using fully vectorized flattened approach with CSR grid.
+
+    1. Map all points to cells.
+    2. Build giant arrays of all (point_index, triangle_index) pairs using CSR lookups.
+    3. Perform ONE massive vectorized barycentric calculation.
+    4. Reduce results (pick best match per point).
+
+    Eliminates all Python loop overhead for grid access.
+
+    Args:
+        points: (N, 2) query points
+        triangles: (M, 3, 2) UV triangles
+        grid_indices: (TotalEntries,) int32 CSR triangle indices
+        grid_offsets: (GridSize*GridSize+1,) int32 CSR offsets
+        uv_min: (2,) grid bound min
+        cell_size: (2,) cell size
+        grid_size: int resolution of grid
+
+    Returns:
+        bary: (N, 3) barycentric coords
+        tri_idx: (N,) triangle indices (-1 if none)
+    """
+    N = points.shape[0]
+    result_bary = np.zeros((N, 3), dtype=np.float64)
+    result_tri = np.full(N, -1, dtype=np.int32)
+
+    use_3d_tiebreaker = final_verts_3d is not None and tri_centroids_3d is not None
+
+    # Step 1: Assign points to cells
+    cell_coords = ((points - uv_min) / cell_size).astype(np.int32)
+    cell_coords = np.clip(cell_coords, 0, grid_size - 1)
+    pt_cell_indices = cell_coords[:, 1] * grid_size + cell_coords[:, 0]  # (N,)
+
+    # Sort points by cell index to group them
+    sort_sched = np.argsort(pt_cell_indices)
+    sorted_points_indices = sort_sched
+    sorted_cell_indices = pt_cell_indices[sort_sched]
+
+    # Find unique cells and counts of points in each
+    unique_cells, unique_counts = np.unique(sorted_cell_indices, return_counts=True)
+
+    # Step 2: Build giant pair arrays
+    # Using CSR: Number of triangles in each cell is (offset[c+1] - offset[c])
+    
+    # Get offsets for unique cells
+    # We need start and end offsets for each unique cell
+    cell_starts = grid_offsets[unique_cells]
+    cell_ends = grid_offsets[unique_cells + 1]
+    tri_counts = cell_ends - cell_starts
+    
+    # Total pairs
+    pair_counts = (unique_counts.astype(np.int64) * tri_counts.astype(np.int64)).astype(np.int64)
+    total_pairs = np.sum(pair_counts)
+
+    if total_pairs == 0:
+        return result_bary, result_tri
+
+    # Allocate giant arrays
+    all_pt_indices = np.empty(total_pairs, dtype=np.int32)
+    all_tri_indices = np.empty(total_pairs, dtype=np.int32)
+
+    # Fill arrays
+    # Pre-calculate write offsets
+    write_offsets = np.zeros(len(unique_cells) + 1, dtype=np.int64)
+    np.cumsum(pair_counts, out=write_offsets[1:])
+    
+    # Point read offsets
+    pt_read_offsets = np.zeros(len(unique_cells) + 1, dtype=np.int64)
+    np.cumsum(unique_counts, out=pt_read_offsets[1:])
+    
+    # This loop is now very fast because it accesses array slices directly
+    # no list object overhead.
+    for i in range(len(unique_cells)):
+        n_pts = unique_counts[i]
+        n_tris = tri_counts[i]
+        if n_tris == 0:
+            continue
+            
+        w_start = write_offsets[i]
+        w_end = write_offsets[i+1]
+        
+        # Points in this cell
+        p_start = pt_read_offsets[i]
+        p_end = pt_read_offsets[i+1]
+        pts_in_cell = sorted_points_indices[p_start:p_end]
+        
+        # Triangles in this cell (direct slice from CSR indices)
+        # grid_indices is valid here because build_uv_grid returns it
+        t_start = cell_starts[i]
+        t_end = cell_ends[i]
+        tris_in_cell = grid_indices[t_start:t_end]
+        
+        # Cartesian product
+        all_pt_indices[w_start:w_end] = np.repeat(pts_in_cell, n_tris)
+        all_tri_indices[w_start:w_end] = np.tile(tris_in_cell, n_pts)
+
+    # Step 3: Massive Vectorized Computation
+    # Gather coordinates
+    P = points[all_pt_indices]      # (Total, 2)
+    A = triangles[all_tri_indices, 0] # (Total, 2)
+    B = triangles[all_tri_indices, 1] 
+    C = triangles[all_tri_indices, 2]
+
+    v0 = C - A
+    v1 = B - A
+    v2 = P - A
+
+    dot00 = np.sum(v0 * v0, axis=1) # (Total,)
+    dot01 = np.sum(v0 * v1, axis=1)
+    dot02 = np.sum(v0 * v2, axis=1)
+    dot11 = np.sum(v1 * v1, axis=1)
+    dot12 = np.sum(v1 * v2, axis=1)
+
+    denom = dot00 * dot11 - dot01 * dot01
+    scale = dot00 * dot11
+    threshold = np.maximum(scale * RELATIVE_DEGEN_TOLERANCE, EPSILON_FLOOR)
+    
+    valid_denom = np.abs(denom) > threshold
+
+    denom_safe = np.where(valid_denom, denom, 1.0)
+    inv_denom = 1.0 / denom_safe
+
+    u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+    v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+    w = 1.0 - u - v
+
+    tol = POINT_IN_TRI_TOLERANCE
+    inside = (w >= -tol) & (v >= -tol) & (u >= -tol) & valid_denom
+
+    # Step 4: Reduction via Sorting
+    # Filter only valid hits
+    valid_indices = np.where(inside)[0]
+    
+    if len(valid_indices) == 0:
+        return result_bary, result_tri
+
+    # Reduce arrays to valid hits only
+    valid_pt_indices = all_pt_indices[valid_indices]
+    valid_tri_indices = all_tri_indices[valid_indices]
+    
+    if use_3d_tiebreaker:
+        # Compute distances for valid hits
+        hit_pos = final_verts_3d[valid_pt_indices]
+        hit_centroids = tri_centroids_3d[valid_tri_indices]
+        dists = np.sum((hit_centroids - hit_pos)**2, axis=1) # (V,)
+        
+        # Sort by point_idx (asc), then distance (asc)
+        sort_order = np.lexsort((dists, valid_pt_indices))
+    else:
+        # Sort by point_idx
+        sort_order = np.argsort(valid_pt_indices)
+
+    # Apply sort
+    sorted_v_pts = valid_pt_indices[sort_order]
+    
+    # Unique points: keep FIRST occurrence (which is best due to sort)
+    unique_pts, first_indices = np.unique(sorted_v_pts, return_index=True)
+    
+    # Indices into valid_indices array
+    best_hit_indices = sort_order[first_indices]
+    
+    # Map back to pairs array
+    final_indices = valid_indices[best_hit_indices]
+    
+    # Write results
+    kept_pt_indices = all_pt_indices[final_indices]
+    kept_tri_indices = all_tri_indices[final_indices]
+    
+    result_tri[kept_pt_indices] = kept_tri_indices
+    result_bary[kept_pt_indices, 0] = w[final_indices]
+    result_bary[kept_pt_indices, 1] = v[final_indices]
+    result_bary[kept_pt_indices, 2] = u[final_indices]
+
+    return result_bary, result_tri
+
 
 def validate_uvs(mesh_obj, uv_layer_index):
     """
@@ -142,21 +495,71 @@ def extract_triangles_numpy(mesh_obj, uv_layer_index):
     return tri_uvs, tri_verts
 
 
-def extract_verts_3d_numpy(mesh_obj):
+def extract_verts_3d_bulk(mesh_data):
     """
-    Extract 3D vertex positions from mesh into NumPy array.
+    Bulk extract vertex positions using foreach_get.
+
+    Args:
+        mesh_data: Blender mesh data (mesh_obj.data)
 
     Returns:
-        verts_3d: (N_vertices, 3) - 3D positions
+        verts_3d: (N_vertices, 3) - 3D positions as float32
     """
-    mesh_data = mesh_obj.data
     n_verts = len(mesh_data.vertices)
-    verts_3d = np.zeros((n_verts, 3), dtype=np.float64)
+    coords = np.empty(n_verts * 3, dtype=np.float32)
+    mesh_data.vertices.foreach_get("co", coords)
+    return coords.reshape(-1, 3)
 
-    for i, v in enumerate(mesh_data.vertices):
-        verts_3d[i] = [v.co.x, v.co.y, v.co.z]
 
-    return verts_3d
+def write_shape_key_coords_bulk(shape_key, coords_array):
+    """
+    Bulk write shape key coordinates using foreach_set.
+
+    Args:
+        shape_key: Blender shape key to write to
+        coords_array: (N, 3) NumPy array of coordinates (should be float32)
+    """
+    # Ensure contiguous array and flatten
+    flat = np.ascontiguousarray(coords_array).ravel()
+    shape_key.data.foreach_set("co", flat)
+
+
+def extract_final_uvs_bulk(mesh_data, uv_layer_index):
+    """
+    Bulk extract per-vertex UVs using foreach_get.
+    For seam vertices with multiple UVs, picks the first one found.
+
+    Args:
+        mesh_data: Blender mesh data (mesh_obj.data)
+        uv_layer_index: Index of UV layer to extract
+
+    Returns:
+        uvs: (N_vertices, 2) - UV coords per vertex as float32
+    """
+    n_loops = len(mesh_data.loops)
+    n_verts = len(mesh_data.vertices)
+    uv_layer = mesh_data.uv_layers[uv_layer_index]
+
+    # Bulk extract loop -> vertex mapping
+    loop_vert_indices = np.empty(n_loops, dtype=np.int32)
+    mesh_data.loops.foreach_get("vertex_index", loop_vert_indices)
+
+    # Bulk extract UV coordinates
+    loop_uvs = np.empty(n_loops * 2, dtype=np.float32)
+    uv_layer.data.foreach_get("uv", loop_uvs)
+    loop_uvs = loop_uvs.reshape(-1, 2)
+
+    # Build per-vertex UV array (first occurrence wins)
+    # Initialize with NaN to detect unassigned vertices
+    uvs = np.full((n_verts, 2), np.nan, dtype=np.float32)
+
+    # Process in order - first assignment wins
+    for i in range(n_loops):
+        vert_idx = loop_vert_indices[i]
+        if np.isnan(uvs[vert_idx, 0]):
+            uvs[vert_idx] = loop_uvs[i]
+
+    return uvs
 
 
 def extract_final_uvs_numpy(mesh_obj, uv_layer_index):
@@ -459,8 +862,8 @@ def project_uvs_numpy(
     n_orig = len(original_mesh.data.vertices)
 
     # Extract 3D vertex positions for tie-breaking overlapping UVs
-    orig_verts_3d = extract_verts_3d_numpy(original_mesh)
-    final_verts_3d = extract_verts_3d_numpy(final_mesh)
+    orig_verts_3d = extract_verts_3d_bulk(original_mesh.data)
+    final_verts_3d = extract_verts_3d_bulk(final_mesh.data)
 
     # Compute triangle 3D centroids from original mesh vertex positions
     # tri_verts: (M, 3) vertex indices -> use to gather 3D positions
@@ -548,19 +951,16 @@ def project_uvs_numpy(
     return projected_deltas, projected_weights
 
 
-def project_positions_via_uv(
+def _project_positions_via_uv_numpy(
     source_mesh,
     target_mesh,
     uv_layer_index,
 ):
     """
-    Project 3D positions from source mesh to target mesh via UV coordinates.
+    Internal: Project 3D positions via UV, returning NumPy array.
 
     For each vertex in target_mesh, finds its UV in source_mesh's triangles
     and interpolates the 3D position using barycentric coordinates.
-
-    This is used for the per-shape-key algorithm: apply modifier to each SK state,
-    then project positions from each result back to the Basis result to compute deltas.
 
     Args:
         source_mesh: Blender mesh object (has 3D positions to sample from)
@@ -568,17 +968,15 @@ def project_positions_via_uv(
         uv_layer_index: UV layer to use for projection
 
     Returns:
-        projected_positions: list of Vector3 (one per target vertex)
-        - For each target vertex, the interpolated 3D position from source
+        result_positions: (N, 3) NumPy array of interpolated 3D positions
     """
     # Extract data to NumPy
     tri_uvs, tri_verts = extract_triangles_numpy(source_mesh, uv_layer_index)
     target_uvs = extract_final_uvs_numpy(target_mesh, uv_layer_index)
-    n_target = len(target_uvs)
 
     # Extract 3D vertex positions from source mesh
-    source_verts_3d = extract_verts_3d_numpy(source_mesh)
-    target_verts_3d = extract_verts_3d_numpy(target_mesh)
+    source_verts_3d = extract_verts_3d_bulk(source_mesh.data)
+    target_verts_3d = extract_verts_3d_bulk(target_mesh.data)
 
     # Compute triangle 3D centroids for tie-breaking overlapping UVs
     tri_positions_3d = source_verts_3d[tri_verts]  # (M, 3, 3)
@@ -621,8 +1019,98 @@ def project_positions_via_uv(
         interpolated = p0 * b[:, 0:1] + p1 * b[:, 1:2] + p2 * b[:, 2:3]
         result_positions[valid_mask] = interpolated
 
-    # Convert to list of Vectors
-    return [Vector(result_positions[j]) for j in range(n_target)]
+    return result_positions
+
+
+def _project_positions_cached_target(
+    source_mesh,
+    uv_layer_index,
+    target_uvs,
+    target_verts_3d,
+):
+    """
+    Project 3D positions with pre-cached target data.
+
+    This avoids redundant extraction when projecting multiple source meshes
+    onto the same target mesh (e.g., multiple shape keys onto Basis).
+
+    Uses spatial indexing to dramatically reduce barycentric computation cost.
+
+    Args:
+        source_mesh: Blender mesh object (has 3D positions to sample from)
+        uv_layer_index: UV layer to use for projection
+        target_uvs: (N, 2) pre-extracted target UV coordinates
+        target_verts_3d: (N, 3) pre-extracted target 3D positions
+
+    Returns:
+        result_positions: (N, 3) NumPy array of interpolated 3D positions
+    """
+    # Extract source data (changes per call)
+    tri_uvs, tri_verts = extract_triangles_numpy(source_mesh, uv_layer_index)
+    source_verts_3d = extract_verts_3d_bulk(source_mesh.data)
+
+    # Compute triangle 3D centroids for tie-breaking overlapping UVs
+    tri_positions_3d = source_verts_3d[tri_verts]  # (M, 3, 3)
+    tri_centroids_3d = tri_positions_3d.mean(axis=1)  # (M, 3)
+
+    grid_indices, grid_offsets, uv_min, uv_max, cell_size, grid_size = build_uv_grid(
+        tri_uvs, target_uvs
+    )
+
+    bary, tri_idx = barycentric_batch_indexed(
+        target_uvs, tri_uvs, grid_indices, grid_offsets, uv_min, cell_size, grid_size,
+        target_verts_3d, tri_centroids_3d
+    )
+
+    missing_mask = tri_idx < 0
+    n_missing = np.sum(missing_mask)
+    if n_missing > 0:
+        bary_nearest, tri_nearest = find_nearest_triangles_numpy(
+            target_uvs, tri_uvs, missing_mask
+        )
+        bary[missing_mask] = bary_nearest[missing_mask]
+        tri_idx[missing_mask] = tri_nearest[missing_mask]
+
+    valid_mask = tri_idx >= 0
+    valid_indices = np.where(valid_mask)[0]
+    result_positions = target_verts_3d.copy()
+    if len(valid_indices) > 0:
+        matched_tri_verts = tri_verts[tri_idx[valid_mask]]  # (N_valid, 3)
+        p0 = source_verts_3d[matched_tri_verts[:, 0]]  # (N_valid, 3)
+        p1 = source_verts_3d[matched_tri_verts[:, 1]]
+        p2 = source_verts_3d[matched_tri_verts[:, 2]]
+        b = bary[valid_mask]  # (N_valid, 3)
+        interpolated = p0 * b[:, 0:1] + p1 * b[:, 1:2] + p2 * b[:, 2:3]
+        result_positions[valid_mask] = interpolated
+
+    return result_positions
+
+
+def project_positions_via_uv(
+    source_mesh,
+    target_mesh,
+    uv_layer_index,
+):
+    """
+    Project 3D positions from source mesh to target mesh via UV coordinates.
+
+    For each vertex in target_mesh, finds its UV in source_mesh's triangles
+    and interpolates the 3D position using barycentric coordinates.
+
+    This is used for the per-shape-key algorithm: apply modifier to each SK state,
+    then project positions from each result back to the Basis result to compute deltas.
+
+    Args:
+        source_mesh: Blender mesh object (has 3D positions to sample from)
+        target_mesh: Blender mesh object (has UVs to look up)
+        uv_layer_index: UV layer to use for projection
+
+    Returns:
+        projected_positions: list of Vector3 (one per target vertex)
+        - For each target vertex, the interpolated 3D position from source
+    """
+    result = _project_positions_via_uv_numpy(source_mesh, target_mesh, uv_layer_index)
+    return [Vector(result[j]) for j in range(len(result))]
 
 
 # =============================================================================
