@@ -13,11 +13,6 @@ import bpy
 from .descriptors import MaterialDescriptor, AtlasDescriptor
 
 
-def _debug_log(*args, **kwargs):
-    """No-op debug log function (instrumentation removed)."""
-    pass
-
-
 def capture_material_bakes(
     atlas: AtlasDescriptor,
     bake_formats: List[str],

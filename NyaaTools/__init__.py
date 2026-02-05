@@ -44,7 +44,6 @@ def _toggle_register(reg: bool):
     from .operators import NyaaToolsNormalizeArmatureRetarget
     from .operators import NyaaToolsRenamePackedImage
     from .operators import NyaaSelectStandardBones
-    from .operators import PrzemirApplyTopModifier
     from .operators import ApplyModifierShapeKeysViaUV
     from .operators.merge_export import operator as merge_export_op
     from .operators.bake import operator as bake_op
@@ -111,7 +110,6 @@ def _toggle_register(reg: bool):
         NyaaToolsNormalizeArmatureRetarget,
         NyaaToolsRenamePackedImage,
         NyaaSelectStandardBones,
-        PrzemirApplyTopModifier,  # 3rd Party Operator module (contains PrzemirApplyTopModifier class without prefix)
         ApplyModifierShapeKeysViaUV,
         merge_export_op,
         bake_op,
@@ -151,7 +149,6 @@ def _toggle_register(reg: bool):
                 registry_items.append(item)
             else:
                 # Module - introspect for classes
-                module_name = item.__name__.split(".")[-1]
                 for name, obj in inspect.getmembers(item, inspect.isclass):
                     # Include NYAATOOLS_ prefixed classes
                     if name.startswith("NYAATOOLS_"):
@@ -160,12 +157,6 @@ def _toggle_register(reg: bool):
                             panel_classes.append(obj)
                         else:
                             classes_to_register.append(obj)
-                    # Special case: PrzemirApplyTopModifier (3rd party, no prefix)
-                    elif (
-                        module_name == "PrzemirApplyTopModifier"
-                        and name == "PrzemirApplyTopModifier"
-                    ):
-                        classes_to_register.append(obj)
         else:
             # Check if object has register()/unregister() methods
             has_register = hasattr(item, "register") and callable(item.register)
