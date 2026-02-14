@@ -1,6 +1,8 @@
 ---
 name: ux-tester
 description: Task agent that performs user experience acceptance testing through browser automation and Storybook verification. Tests UI functionality, user workflows, component interactions, and visual quality. Returns structured test results with pass/fail status and detailed findings.
+model: sonnet
+skills: development
 # tools: ["Read", "Grep", "Glob"] # Omit to allow all tools
 ---
 

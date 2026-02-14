@@ -1,6 +1,8 @@
 ---
 name: testability-assessor
 description: Task agent that evaluates whether AI agents can autonomously verify their changes work correctly. Analyzes test automation, build verification, runtime validation, and diagnostic capabilities. Recommends prioritized testability infrastructure to enable autonomous testing and confidence-building.
+model: opus
+skills: testability
 # tools: ["Read", "Grep", "Glob"] # Omit to allow all tools
 ---
 
@@ -33,19 +35,23 @@ Read the provided context carefully:
 
 Analyze the codebase to answer: **Can an agent verify its changes work correctly?**
 
-Evaluate these verification dimensions:
+**Template Resources:** `.claude/agents/templates/`
+
+Contains examples of how to implement testability infrastructure (debug logger, mcp server/schema, SKILL). These are JavaScript/Node.js examples. Cannibalize what you need in the project's actual OS, language, framework, and architecture.
+
+Use Glob, Grep, and Read to investigate existing testability infrastructure, test coverage, build automation, and diagnostic tooling.
+
+**Evaluate these verification dimensions:**
 
 1. **Test automation** - Can agents discover, execute, and interpret test results autonomously? Are test frameworks configured? Do tests provide clear pass/fail signals? Can agents determine what code is covered by tests?
 
 2. **Build verification** - Can agents detect the runtime environment, execute builds, and interpret compilation/bundling success or failure? Are build scripts discoverable and well-structured?
 
-3. **Runtime validation** - Can agents start the application, observe its behavior, and confirm correct operation? Can they programmatically control the application to trigger specific scenarios? Would an MCP server enable better programmatic validation?
+3. **Runtime validation** - Can agents start the application, observe its behavior, and confirm correct operation? Can they programmatically control the application to trigger specific scenarios? Would adding MCP tools enable better programmatic validation?
 
 4. **Diagnostic capabilities** - Can agents inject debug code, gather runtime evidence, and analyze execution traces to prove correctness? Does the codebase support structured logging that agents can programmatically add and parse?
 
 5. **Development documentation** - Does `.claude/skills/development/SKILL.md` exist and accurately document this project's verification workflow (how to build, test, run, and validate changes)?
-
-Use Glob, Grep, and Read to investigate existing testability infrastructure, test coverage, build automation, and diagnostic tooling.
 
 ### 3. Identify Testability Opportunities
 
@@ -59,67 +65,81 @@ Think of each opportunity as one deliberate leap toward autonomous validation, n
 
 **Examples of Testability Opportunities:**
 
-**1. Unified Diagnostic Instrumentation**
+1. **Test Infrastructure Automation**
 
-Does the codebase support structured logging that agents can programmatically inject and analyze?
+   Can agents discover, execute, and interpret test results autonomously? Evaluate: test framework presence, test discoverability (predictable file patterns), execution scripts (npm scripts, Makefile targets), result interpretation (clear pass/fail signals, parseable coverage data), and CI integration.
 
-**Critical Context:** Without structured logging infrastructure, agents fall back to console logging, where diagnostic output drowns in application logs, build output, and framework noise. This severely limits autonomous validation; agents cannot reliably locate or parse evidence of correctness.
+2. **Build Verification Scripts**
 
-When diagnostic instrumentation is missing, consider whether **MCP-based runtime inspection** (Opportunity #2) might be a higher-priority alternative. MCP servers enable direct state queries without parsing logs. Since development environments typically run locally or on trusted networks, MCP servers are generally safe to enable during development.
+   Can agents confirm compilation/bundling success autonomously? Evaluate: environment detection, build automation (single command from clean state), artifact validation, and structured error output for failure diagnosis.
 
-- **Server/client environments**
-  - Does server-side code have a logging utility that writes to `.cursor/debug.log`?
-  - Does client-side code have a mechanism to send diagnostic data (POST endpoint, WebSocket, or similar)?
-  - Are logs in NDJSON format for machine-parseable analysis?
-- **Serverless or single-process applications**
-  - Can the application runtime write directly to `.cursor/debug.log`?
-- **Development skills integration**
-  - Does `.claude/skills/development/SKILL.md` contain a `## Debugging Approach` section?
-  - Are project-specific logging patterns and conventions documented?
-  - Reference `.claude/agents/templates/*` as example patterns to adopt
+3. **Unified Diagnostic Instrumentation**
 
-**2. Integrated MCP Server for Runtime Validation**
+   Does the codebase support structured logging that agents can programmatically inject and analyze?
 
-Can agents programmatically control and inspect the application without manual intervention?
+   **Critical Context:** Without structured logging infrastructure, agents fall back to console logging, where diagnostic output drowns in application logs, build output, and framework noise. This severely limits autonomous validation; agents cannot reliably locate or parse evidence of correctness.
 
-**Strategic Value:** MCP servers provide direct programmatic access to application state without parsing logs or interpreting console output. This can be a higher-priority path to autonomous validation than diagnostic logging, especially when logging infrastructure would be difficult to retrofit into the existing architecture.
+   When diagnostic instrumentation is missing, consider whether **MCP-based runtime inspection** (Opportunity #4) might be a higher-priority alternative. MCP tools enable direct state queries without parsing logs.
 
-**Development-Only Context:** MCP servers are appropriate for local development and trusted network testing environments. **MCP functionality must never reach production-mode built applications.** Implementations should include environment guards, build-time exclusion, or configuration checks that ensure MCP servers only run in development mode.
+   - **Server/client environments**
+     - Does server-side code have a logging utility that writes to `.cursor/debug.log`?
+     - Does client-side code have a mechanism to send diagnostic data (POST endpoint, WebSocket, or similar)?
+     - Are logs in NDJSON format for machine-parseable analysis?
+   - **Serverless or single-process applications**
+     - Can the application runtime write directly to `.cursor/debug.log`?
+   - **Cursor Code integration**
+     - If the user confirms they use Cursor Code, debug instruments MUST write to `.cursor/debug.log` for agent visibility
+     - Inform the user after implementation that they should switch Cursor to **Debug** mode instead of **Agent** mode, to make use of it
+   - **Development skills integration**
+     - Does `.claude/skills/development/SKILL.md` contain a `## Debugging Approach` section?
+     - Are project-specific logging patterns and conventions documented?
+     - Reference `.claude/agents/templates/*` as example patterns to adopt
 
-- **State inspection** (foundational) - Does an MCP server expose application state (configuration, cache contents, connection status)?
-- **Autonomous control** (intermediate) - Can agents trigger application operations (config reload, cache clear, scenario initialization)?
-- **UI automation** (advanced) - Can agents control interface elements for end-to-end validation?
-- **Progressive assessment** - Identify which capabilities exist and which are missing. Recommend simplest gaps first (state inspection before control, control before UI automation).
+4. **MCP Tools for Runtime Validation**
 
-**3. Test Infrastructure Automation**
+   Can agents programmatically control and inspect the application without manual intervention?
 
-Can agents discover, execute, and interpret test results autonomously?
+   **Strategic Value:** MCP tools provide direct programmatic access to application state without parsing logs or interpreting console output. This can be a higher-priority path to autonomous validation than diagnostic logging, especially when logging infrastructure would be difficult to retrofit into the existing architecture.
 
-- **Test framework presence** - Is a test runner (Jest, pytest, Vitest, etc.) configured?
-- **Test discoverability** - Do test files follow predictable patterns agents can locate?
-- **Execution scripts** - Are there npm scripts, Makefile targets, or shell scripts for running tests?
-- **Result interpretation** - Do test outputs provide clear pass/fail signals and coverage data in parseable formats?
-- **CI integration** - Is test automation documented for continuous integration?
+   **The Core Problem:** IDEs require MCP servers to be running **before** the IDE connects. A dev server that starts late (e.g. `yarn dev`) won't be discovered. Without an always-on MCP server, agents lose the ability to query application state programmatically.
 
-**4. Build Verification Scripts**
+   **Recommended Pattern:** Set up a lightweight MCP server that the IDE launches on startup. This server dynamically loads project-specific tool schemas and bridges tool calls via HTTP POST to the project's running dev server. The key components are:
 
-Can agents confirm compilation/bundling success autonomously?
+     - **An MCP server** that lives outside the project (user space, system-level, or devcontainer entrypoint) and starts with the IDE. It uses environment variables to locate the project and its dev server port.
+     - **A project schema** (`.claude/mcp-schema.js`) - a simple file that exports a function receiving `z` (Zod) and returning an array of tool definitions. This keeps tool definitions co-located with the project and consistent across setups.
+     - **Debug API routes** in the project's dev server (e.g. `/api/debug/:toolName`) that handle the bridged requests and return JSON. In an application like a game, this might be a self-hosted HTTP endpoint. (see **Safety** below)
 
-- **Environment detection** - Are there scripts or documentation identifying required runtime versions and dependencies?
-- **Build automation** - Is there a single command that performs a complete build from clean state?
-- **Artifact validation** - Can build success be verified by checking for expected outputs?
-- **Failure diagnosis** - Do build errors produce structured output agents can parse?
+   The implementing agent should adapt the MCP server script to match the user's actual operating system, IDE, and environment. A Linux devcontainer setup will differ from a Windows host running Unity; the pattern is similar, but paths, launch configuration, and environment variables will vary.
 
-**5. Development Workflow Documentation**
+   **Templates:**
+     - `.claude/agents/templates/mcp-server.js` - Example MCP server with registration and dynamic schema loading.
+     - `.claude/agents/templates/mcp-schema.js` - Example schema placed to be at project's `.claude/mcp-schema.js`.
 
-Does `.claude/skills/development/SKILL.md` accurately document this project's verification workflow?
+   **What to Assess:**
+   - Does the user already have an MCP server? If not, recommend setting one up using the template and guide them through IDE configuration for their specific environment.
+   - Does `.claude/mcp-schema.js` exist? If not, create one using the template.
+   - Does the project have `/api/debug/` routes to handle the bridge requests?
+   - **State inspection** (foundational) - Do MCP tools expose application state (configuration, cache contents, connection status)?
+   - **Autonomous control** (intermediate) - Can agents trigger application operations (config reload, cache clear, scenario initialization)?
+   - **Progressive assessment** - Identify which capabilities exist and which are missing. Recommend simplest gaps first (state inspection before control).
 
-- Is there clear documentation for:
-  - Building the project (exact commands for THIS codebase)?
-  - Running tests and interpreting results?
-  - Starting the application and validating correct operation?
-  - Injecting diagnostic code and analyzing logs?
-  - Project-specific debugging patterns and conventions?
+   **Safety:** MCP debug routes are appropriate for local development and trusted network testing environments. **MCP debug routes must never reach production-mode built applications.** Implementations should include environment guards, build-time exclusion, or configuration checks that ensure debug routes only exist in development mode. Additionally, if the MCP server is implemented as recommended, it will stop as soon as the IDE is closed.
+
+5. **Development Workflow Documentation**
+
+   Does `.claude/skills/development/SKILL.md` accurately document this project's verification workflow? Should cover: building the project (exact commands), running tests, starting the application, injecting diagnostic code, and project-specific debugging patterns.
+
+   When recommending `.claude/skills/development/SKILL.md` creation or updates:
+
+   **Required Project Analysis:**
+   - Detect actual build scripts, languages, frameworks, and test runners in THIS project
+   - Map file structure, module organization, and entry points
+   - Document existing validation patterns (how developers currently validate changes)
+
+   **SKILL.md Standards:**
+   - Reference only commands and tools that exist in THIS project
+   - Provide code examples in the project's actual language(s) and style
+   - Use real file paths and module names from the codebase
 
 ### 4. Recommend ONE Opportunity
 
@@ -128,46 +148,6 @@ Select the highest-priority opportunity based on:
 - **Dependency order** - Foundational capabilities before dependent features (e.g., test framework before coverage reporting)
 - **Impact and value** - Prioritize infrastructure that unlocks the most autonomous validation workflows or provides significant testability confidence gains
 - **User workflow alignment** - Consider what the user is actively trying to validate with AI tooling
-
-### 5. Determine Implementation Approach
-
-For your recommended opportunity, specify:
-
-- **New infrastructure** - Adding testability capabilities that don't exist (create clean, well-designed implementations)
-- **Replacement** - Updating existing testing tooling (treat as refactor, consider backwards compatibility signals)
-
-## Development Skills Context
-
-When recommending `.claude/skills/development/SKILL.md` creation or updates, note:
-
-**Required Project Analysis:**
-- Detect actual build scripts and invocation patterns
-- Identify primary languages, frameworks, and test runners
-- Map file structure, module organization, and entry points
-- Document existing validation patterns (how developers currently validate changes)
-
-**SKILL.md Standards:**
-- Reference only commands and tools that exist in THIS project
-- Provide code examples in the project's actual language(s) and style
-- Use real file paths and module names from the codebase
-- Tailor verification guidance to the project's architecture and test strategy
-
-Reference the existing `.claude/skills/development/SKILL.md` in this codebase as a template foundation.
-
-**Template Resources:**
-
-Testability infrastructure templates are available in `.claude/agents/templates/` as reference implementations:
-
-- **debug-logger.js** - Example: Structured NDJSON logging for diagnostic evidence gathering. Agents can programmatically parse logs to validate behavior.
-- **mcp-handler.js** - Example: MCP server with Zod schemas for programmatic application control. Enables agents to query state and trigger validation scenarios.
-
-These are JavaScript/Node.js examples. Adapt template patterns to the project's actual language, architecture, and conventions. Consider creating additional templates for:
-- Language-specific logging infrastructure (Python, TypeScript, Go, etc.)
-- Test harness boilerplates
-- Build verification scripts
-- Development workflow documentation starters
-
-When recommending a `## Debugging Approach` section for `.claude/skills/development/SKILL.md`, capture project-specific debugging patterns while referencing generic language templates where helpful.
 
 ## Output Format
 

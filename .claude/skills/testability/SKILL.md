@@ -46,40 +46,39 @@ Based on the assessor's recommended opportunity, determine implementation approa
 
 ### 3. Execution Loop
 
+If problems are found, invoke `code-analyst` to assess the impact and return to step 1 to fix the problem.
+
 **Invoke Task agents for implementation:**
 
-1. **Architecture analysis** - Invoke `code-analyst` to understand current architecture and integration points
-
-2. **Implementation** - Invoke `refactor-worker` with clear instructions:
+1. **Implementation** - Invoke `refactor-worker` with clear instructions:
    - What to build and how it should integrate
    - For development skills, specify exact project context (languages, build tools, environment, file paths)
 
-3. **Automated Verification** - Ensure `refactor-worker` has run:
-   - Build verification (confirm project still compiles)
-   - Test suite execution (ensure no regressions)
-   - Linting and type checking where applicable
+2. **Automated Verification** - Ensure `refactor-worker` has run:
+   - Linting and type checking
+   - Build verification
+   - Test suite execution
+   - Invoke `ux-tester` if refactoring affects UI components or user workflows
 
-4. **Testability Infrastructure Validation** - YOU validate agent usability:
+3. **Testability Infrastructure Validation** - YOU validate agent usability:
    - **For test infrastructure**: Run sample tests, verify agents can interpret results and understand coverage
    - **For diagnostic capabilities**: Write sample debug statements, verify output is structured and parseable
    - **For MCP servers**: Execute validation operations (query state, trigger scenarios, verify responses)
+      - You may need to pause and instruct the user how to configure or refresh MCP server on VS/Cursor/Claude Code
    - **For development skills**: Read generated SKILL.md, verify it accurately describes this project's validation workflow
 
-5. **User Acceptance** - Present validation results to user:
+4. **User Acceptance** - Present results to user:
    - Example usage of new testability infrastructure
    - Any limitations discovered
-   - Request confirmation that it meets their needs
+   - Request manual testing for workflows requiring human judgment
 
-6. **Cleanup & Commit** - Once user confirms it's working:
+5. **Cleanup & Commit** - Once user confirms it's working:
    - Clean up temporary test code or validation examples
    - Ensure documentation is complete and accurate
    - **Encourage the user to commit** - this locks in stable testability capability progress
 
-7. **Reassess & Continue** - After successful commit:
-   - Invoke `testability-assessor` again to identify remaining opportunities
-   - The assessor performs incremental reassessment (reviewing completed items, checking unlocked dependencies)
-   - Present the next recommended opportunity
-   - Return to step 2 (Determine Approach)
+6. **Reassess & Continue** - After successful commit:
+   - Return to **Assessment Phase** and invoke `testability-assessor` again to reassess the next opportunity
 
 This creates an iterative loop where each cycle adds tangible, testable capabilities without expensive re-analysis.
 

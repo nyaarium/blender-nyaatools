@@ -47,37 +47,32 @@ Based on the assessor's recommended opportunity, determine backwards compatibili
 
 ### 3. Execution Loop
 
+If problems are found, invoke `code-analyst` to assess the impact and return to step 1 to fix the problem.
+
 **Invoke Task agents for implementation:**
 
-1. **Additional analysis** (optional) - Invoke `code-analyst` if you need impact assessment before refactoring
-
-2. **Refactoring** - Invoke `refactor-worker` with clear instructions:
+1. **Refactoring** - Invoke `refactor-worker` with clear instructions:
    - What to improve and why
    - Whether to preserve backwards compatibility
    - Affected areas and constraints
 
-3. **Automated Verification** - Ensure `refactor-worker` has run:
+2. **Automated Verification** - Ensure `refactor-worker` has run:
+   - Linting and type checking
    - Build verification
    - Test suite execution
-   - Linting and type checking
-   - Review verification results for failures
+   - Invoke `ux-tester` if refactoring affects UI components or user workflows
 
-4. **UI Testing** (if applicable) - Invoke `ux-tester` if refactoring affects UI components or user workflows
-
-5. **User Acceptance** - Present results to user:
+3. **User Acceptance** - Present results to user:
    - Summary of changes made
    - Automated verification status
    - Request manual testing for workflows requiring human judgment
 
-6. **Cleanup & Commit** - Once user confirms it's working:
+4. **Cleanup & Commit** - Once user confirms it's working:
    - Have `refactor-worker` remove temporary diagnostics
    - **Encourage the user to commit** - this locks in stable quality progress
 
-7. **Reassess & Continue** - After successful commit:
-   - Invoke `quality-assessor` again to identify remaining opportunities
-   - The assessor performs incremental reassessment (reviewing completed items, checking unlocked improvements)
-   - Present the next recommended opportunity
-   - Return to step 2 (Determine Approach)
+5. **Reassess & Continue** - After successful commit:
+   - Return to **Assessment Phase** and invoke `quality-assessor` again to reassess the next opportunity
 
 This creates an iterative loop where each cycle delivers tangible, tested, committable quality improvements.
 
