@@ -4,16 +4,24 @@ from pathlib import Path
 
 from ..common.file_stuff import deleteFile
 
-from .dtp_format import is_filename_dtp_formatted, is_filename_color_encoded
+from .dtp_format import is_ext_supported, is_filename_color_encoded
+
+
+def _extension_ok(filename: str) -> bool:
+    """True if the filename has a supported image extension (last segment)."""
+    name = filename.replace("\\", "/").split("/")[-1]
+    parts = name.split(".")
+    if len(parts) < 2:
+        return False
+    return is_ext_supported(parts[-1])
 
 
 def renamePackedImage(image: bpy.types.Image):
     """Rename a packed image to the DTP name format."""
 
     if image.source == "FILE" and image.packed_file:
-        supported = is_filename_dtp_formatted(image.name)
-        if not supported:
-            return {"result": "not_dtp_formatted", "name": image.name}
+        if not _extension_ok(image.name):
+            return {"result": "error", "name": image.name}
 
         # Strip paths
         orig_name = image.filepath.replace("\\", "/").split("/")[-1]
@@ -27,9 +35,8 @@ def renamePackedImage(image: bpy.types.Image):
         return repackImage(image, image.name)
 
     elif image.source == "GENERATED":
-        supported = is_filename_dtp_formatted(image.name)
-        if not supported:
-            return {"result": "not_dtp_formatted", "name": image.name}
+        if not _extension_ok(image.name):
+            return {"result": "error", "name": image.name}
 
         # Save and repack
         return repackImage(image)

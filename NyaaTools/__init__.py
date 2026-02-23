@@ -9,7 +9,7 @@ bl_info = {
     "name": "NyaaTools",
     "author": "Nyaarium",
     "blender": (5, 0, 1),
-    "version": (2, 4, 1),
+    "version": (2, 4, 2),
     "description": "Various Nyaarium tools for mesh cleanup, merging, and exporting assets",
     "location": "N-Panel > NyaaTools",
     "category": "Object",

@@ -1,3 +1,7 @@
+## v2.4.2
+
+Relaxed Fix Name requirements. Only checks if it's a real supported image extension.
+
 ## v2.4.1
 
 Created a new operator to apply modifiers on objects with shape keys (closes #77)
