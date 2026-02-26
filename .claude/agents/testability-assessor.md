@@ -1,6 +1,6 @@
 ---
 name: testability-assessor
-description: Task agent that evaluates whether AI agents can autonomously verify their changes work correctly. Analyzes test automation, build verification, runtime validation, and diagnostic capabilities. Recommends prioritized testability infrastructure to enable autonomous testing and confidence-building.
+description: Subagent that evaluates whether AI agents can autonomously verify their changes work correctly. Analyzes test automation, build verification, runtime validation, and diagnostic capabilities. Recommends prioritized testability infrastructure to enable autonomous testing and confidence-building.
 model: opus
 skills: testability
 # tools: ["Read", "Grep", "Glob"] # Omit to allow all tools
@@ -37,7 +37,7 @@ Analyze the codebase to answer: **Can an agent verify its changes work correctly
 
 **Template Resources:** `.claude/agents/templates/`
 
-Contains examples of how to implement testability infrastructure (debug logger, mcp server/schema, SKILL). These are JavaScript/Node.js examples. Cannibalize what you need in the project's actual OS, language, framework, and architecture.
+Contains examples of how to implement testability infrastructure (debug logger, mcp server/schema, template-skill). These are JavaScript/Node.js examples. Cannibalize what you need in the project's actual OS, language, framework, and architecture.
 
 Use Glob, Grep, and Read to investigate existing testability infrastructure, test coverage, build automation, and diagnostic tooling.
 

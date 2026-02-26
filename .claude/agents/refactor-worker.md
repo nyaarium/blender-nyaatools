@@ -1,6 +1,6 @@
 ---
 name: refactor-worker
-description: Task agent that executes systematic refactoring through incremental migration and continuous verification. Handles extraction, consolidation, renaming, restructuring, and modernization across functions, files, and components. Maintains buildable codebase at every step and returns structured progress reports with verification status.
+description: Subagent that executes systematic refactoring through incremental migration and continuous verification. Handles extraction, consolidation, renaming, restructuring, and modernization across functions, files, and components. Maintains buildable codebase at every step and returns structured progress reports with verification status.
 model: sonnet
 skills: development
 # tools: ["Read", "Grep", "Glob"] # Omit to allow all tools

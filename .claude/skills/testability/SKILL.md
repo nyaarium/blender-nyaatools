@@ -1,6 +1,6 @@
 ---
 name: testability
-description: Orchestrates systematic addition of autonomous testability infrastructure using specialized Task agents. Progressively slipstreams testing, build automation, diagnostic capabilities, and programmatic control into untestable projects. Core mission is to enable AI agents to independently verify their changes work correctly.
+description: Orchestrates systematic addition of autonomous testability infrastructure using specialized subagents. Progressively slipstreams testing, build automation, diagnostic capabilities, and programmatic control into untestable projects. Core mission is to enable AI agents to independently verify their changes work correctly.
 ---
 
 # Testability Infrastructure Orchestration Skill
@@ -8,6 +8,10 @@ description: Orchestrates systematic addition of autonomous testability infrastr
 **Core Mission: Enable AI agents to autonomously verify that their changes work correctly.**
 
 You orchestrate systematic testability infrastructure additions to untestable projects. Your role is to manage the testability workflow, communicate with the user, and coordinate agent work to progressively build autonomous validation capabilities.
+
+## Spawning Subagents
+
+When this skill instructs you to delegate to a subagent, spawn it using whichever tool your environment provides — `Task`, `mcp_task`, `runSubagent`, or equivalent. Always delegate to a subagent rather than performing the work yourself. Pass the relevant context (goal, constraints, affected files) as explicit instructions to the subagent.
 
 ## Understanding the Request
 
@@ -23,7 +27,7 @@ If no specific request is given, proceed with a comprehensive assessment of test
 
 ### 1. Assessment Phase
 
-Invoke the `testability-assessor` Task agent to evaluate current autonomous testability capabilities and identify gaps.
+Delegate to the `testability-assessor` subagent to evaluate current autonomous testability capabilities and identify gaps.
 
 The assessor will:
 - Evaluate test automation (can agents discover, run, and interpret tests?)
@@ -46,11 +50,11 @@ Based on the assessor's recommended opportunity, determine implementation approa
 
 ### 3. Execution Loop
 
-If problems are found, invoke `code-analyst` to assess the impact and return to step 1 to fix the problem.
+If problems are found, delegate to the `code-analyst` subagent to assess the impact and return to step 1 to fix the problem.
 
-**Invoke Task agents for implementation:**
+**Delegate to subagents for implementation:**
 
-1. **Implementation** - Invoke `refactor-worker` with clear instructions:
+1. **Implementation** - Delegate to the `refactor-worker` subagent with clear instructions:
    - What to build and how it should integrate
    - For development skills, specify exact project context (languages, build tools, environment, file paths)
 
@@ -58,7 +62,7 @@ If problems are found, invoke `code-analyst` to assess the impact and return to 
    - Linting and type checking
    - Build verification
    - Test suite execution
-   - Invoke `ux-tester` if refactoring affects UI components or user workflows
+   - Delegate to the `ux-tester` subagent if refactoring affects UI components or user workflows
 
 3. **Testability Infrastructure Validation** - YOU validate agent usability:
    - **For test infrastructure**: Run sample tests, verify agents can interpret results and understand coverage
@@ -78,7 +82,7 @@ If problems are found, invoke `code-analyst` to assess the impact and return to 
    - **Encourage the user to commit** - this locks in stable testability capability progress
 
 6. **Reassess & Continue** - After successful commit:
-   - Return to **Assessment Phase** and invoke `testability-assessor` again to reassess the next opportunity
+   - Return to **Assessment Phase** and delegate to the `testability-assessor` subagent again to reassess the next opportunity
 
 This creates an iterative loop where each cycle adds tangible, testable capabilities without expensive re-analysis.
 

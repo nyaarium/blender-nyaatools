@@ -1,11 +1,15 @@
 ---
 name: quality
-description: Orchestrates iterative code quality improvements using specialized Task agents. Manages assessment, prioritization, execution, and verification workflows for systematic quality enhancement.
+description: Orchestrates iterative code quality improvements using specialized subagents. Manages assessment, prioritization, execution, and verification workflows for systematic quality enhancement.
 ---
 
 # Quality Improvement Orchestration Skill
 
-You orchestrate iterative code quality improvements through specialized Task agents. Your role is to manage the quality improvement workflow, communicate with the user, and coordinate agent work to deliver committable enhancements.
+You orchestrate iterative code quality improvements through specialized subagents. Your role is to manage the quality improvement workflow, communicate with the user, and coordinate agent work to deliver committable enhancements.
+
+## Delegate to Subagents
+
+When this skill instructs you to delegate to a subagent, spawn it using whichever tool your environment provides — `Task`, `mcp_task`, `runSubagent`, or equivalent. Always delegate to a subagent rather than performing the work yourself. Pass the relevant context (goal, constraints, affected files) as explicit instructions to the subagent.
 
 ## Understanding the Request
 
@@ -21,7 +25,7 @@ If no specific request is given, proceed with a comprehensive assessment of the 
 
 ### 1. Assessment Phase
 
-Invoke the `quality-assessor` Task agent to analyze the codebase and identify quality improvement opportunities.
+Delegate to the `quality-assessor` subagent to analyze the codebase and identify quality improvement opportunities.
 
 The assessor will:
 - Assess existing foundations (what architectural patterns and design decisions are in use?)
@@ -47,11 +51,11 @@ Based on the assessor's recommended opportunity, determine backwards compatibili
 
 ### 3. Execution Loop
 
-If problems are found, invoke `code-analyst` to assess the impact and return to step 1 to fix the problem.
+If problems are found, delegate to the `code-analyst` subagent to assess the impact and return to step 1 to fix the problem.
 
-**Invoke Task agents for implementation:**
+**Delegate to subagents for implementation:**
 
-1. **Refactoring** - Invoke `refactor-worker` with clear instructions:
+1. **Refactoring** - Delegate to the `refactor-worker` subagent with clear instructions:
    - What to improve and why
    - Whether to preserve backwards compatibility
    - Affected areas and constraints
@@ -60,7 +64,7 @@ If problems are found, invoke `code-analyst` to assess the impact and return to 
    - Linting and type checking
    - Build verification
    - Test suite execution
-   - Invoke `ux-tester` if refactoring affects UI components or user workflows
+   - Delegate to the `ux-tester` subagent if refactoring affects UI components or user workflows
 
 3. **User Acceptance** - Present results to user:
    - Summary of changes made
@@ -68,11 +72,11 @@ If problems are found, invoke `code-analyst` to assess the impact and return to 
    - Request manual testing for workflows requiring human judgment
 
 4. **Cleanup & Commit** - Once user confirms it's working:
-   - Have `refactor-worker` remove temporary diagnostics
+   - Delegate to the `refactor-worker` subagent to remove temporary diagnostics
    - **Encourage the user to commit** - this locks in stable quality progress
 
 5. **Reassess & Continue** - After successful commit:
-   - Return to **Assessment Phase** and invoke `quality-assessor` again to reassess the next opportunity
+   - Return to **Assessment Phase** and delegate to the `quality-assessor` subagent again to reassess the next opportunity
 
 This creates an iterative loop where each cycle delivers tangible, tested, committable quality improvements.
 
