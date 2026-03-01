@@ -1,7 +1,7 @@
 # Development
 .vscode-server/
 .vscode/
-debug.log
+debug*.log
 node_modules/
 volumes/
 .env

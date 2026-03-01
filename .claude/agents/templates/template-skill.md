@@ -68,7 +68,7 @@ Before adding any instrumentation, state 3-5 concrete, testable hypotheses. Good
 
 ### 2. Instrument to Test Hypotheses
 
-Write debug lines to `.cursor/debug.log` (server: `fs.appendFileSync`; client: POST to `/debug/ingest`) to confirm or reject each hypothesis (typically 2-6 logs total). Log entry/exit, key values at decision points, which branch was taken, and important return values. Don't log every line, redundant data, or things you already know are correct.
+Write debug lines to `.cursor/debug-{sessionId}.log` (server: `fs.appendFileSync`; client: POST to `/debug/ingest`) to confirm or reject each hypothesis (typically 2-6 logs total). Log entry/exit, key values at decision points, which branch was taken, and important return values. Don't log every line, redundant data, or things you already know are correct.
 
 ### 3. Gather Evidence
 
@@ -86,15 +86,15 @@ Keep instrumentation in place after a fix, run a verification test, and only rem
 
 ### Example Usage
 
-Instrumentation writes NDJSON (one JSON object per line) to `.cursor/debug.log`. For Cursor debugger to show entries, each line must include: **id**, **timestamp**, **location**, **message**, **data** (object). Optional: **runId**, **hypothesisId**, **sessionId**. The `/debug/ingest` route adds `id` when missing and normalizes `data` to an object; when writing from the server you must include `id` yourself (e.g. id: `log_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).
+Instrumentation writes NDJSON (one JSON object per line) to `.cursor/debug-{sessionId}.log`. For Cursor debugger to show entries, each line must include: **id**, **timestamp**, **location**, **message**, **data** (object). Optional: **runId**, **hypothesisId**, **sessionId**. The `/debug/ingest` route adds `id` when missing and normalizes `data` to an object; when writing from the server you must include `id` yourself (e.g. id: `log_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).
 
-**Server (Node):** write with `fs.appendFileSync`. Path is `path.join(process.cwd(), '.cursor', 'debug.log')` (or use the exact log path provided in debug sessions).
+**Server (Node):** write with `fs.appendFileSync`. Path is `path.join(process.cwd(), '.cursor', 'debug-{sessionId}.log')` (or use the exact log path provided in debug sessions).
 
 ```ts
 import fs from "node:fs";
 import path from "node:path";
 
-const DEBUG_LOG = path.join(process.cwd(), ".cursor", "debug.log");
+const DEBUG_LOG = path.join(process.cwd(), ".cursor", `debug-${process.env.DEBUG_SESSION_ID ?? "default"}.log`);
 
 // #region agent log
 fs.appendFileSync(
@@ -115,7 +115,7 @@ fs.appendFileSync(
 // #endregion
 ```
 
-**Client (browser):** POST one payload per call to the ingest route. The route appends to the same `.cursor/debug.log` file.
+**Client (browser):** POST one payload per call to the ingest route. The route appends to the same `.cursor/debug-{sessionId}.log` file.
 
 ```ts
 // #region agent log

@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEBUG_LOG_PATH = path.join(process.cwd(), ".cursor", "debug.log");
+const getDebugLogPath = () => {
+	const sessionId = process.env.DEBUG_SESSION_ID ?? "default";
+	return path.join(process.cwd(), ".cursor", `debug-${sessionId}.log`);
+};
 
 export async function action({ request }) {
 	if (request.method !== "POST") {
@@ -25,11 +28,12 @@ export async function action({ request }) {
 		data: payload.data != null && typeof payload.data === "object" ? payload.data : {},
 	};
 
-	const dir = path.dirname(DEBUG_LOG_PATH);
+	const logPath = getDebugLogPath();
+	const dir = path.dirname(logPath);
 	fs.mkdirSync(dir, { recursive: true });
 
 	const line = JSON.stringify(record) + "\n";
-	fs.appendFileSync(DEBUG_LOG_PATH, line);
+	fs.appendFileSync(logPath, line);
 
 	return new Response(null, { status: 204 });
 }

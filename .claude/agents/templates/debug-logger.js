@@ -1,12 +1,13 @@
 // Debug Logger for AI Agent Instrumentation
-// Writes NDJSON to .cursor/debug.log for structured, machine-parseable output
+// Writes NDJSON to .cursor/debug-{sessionId}.log for structured, machine-parseable output
 // Adapt this template to your project's architecture and logging conventions
 
 import fs from "node:fs";
 import path from "node:path";
 
 const LOG_DIRECTORY = path.join(process.cwd(), ".cursor");
-const LOG_FILE = path.join(LOG_DIRECTORY, "debug.log");
+const SESSION_ID = process.env.DEBUG_SESSION_ID ?? "default";
+const LOG_FILE = path.join(LOG_DIRECTORY, `debug-${SESSION_ID}.log`);
 
 let logCounter = 0;
 

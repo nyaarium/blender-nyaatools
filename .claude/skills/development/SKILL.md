@@ -33,8 +33,9 @@ Blender runs on Windows, code workspace is in WSL.
 In Blender Python, write diagnostics to the workspace via the WSL network path so the agent can read them on Linux. Use `\\wsl$\Ubuntu-24.04\`.
 
 ```python
-# Example: write to project .cursor/debug.log from Blender on Windows
-log_path = r"\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug.log"
+# Example: write to project .cursor/debug-{sessionId}.log from Blender on Windows
+import os
+log_path = r"\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug-" + os.environ.get("DEBUG_SESSION_ID", "default") + ".log"
 with open(log_path, "a", encoding="utf-8") as f:
     f.write(...)
 ```
@@ -49,7 +50,7 @@ Before adding any instrumentation, state 3-5 concrete, testable hypotheses. Good
 
 ### 2. Instrument to Test Hypotheses
 
-Add write calls from Blender Python to `.cursor/debug.log` (via the WSL network path below) to confirm or reject each hypothesis (typically 2-6 logs total). Log entry/exit, key values at decision points, which branch was taken, and important return values. Don't log every line, redundant data, or things you already know are correct.
+Add write calls from Blender Python to `.cursor/debug-{sessionId}.log` (via the WSL network path below) to confirm or reject each hypothesis (typically 2-6 logs total). Log entry/exit, key values at decision points, which branch was taken, and important return values. Don't log every line, redundant data, or things you already know are correct.
 
 ### 3. Gather Evidence
 
@@ -67,9 +68,9 @@ Keep instrumentation in place after a fix, run a verification test, and only rem
 
 ## Writing to the Debug Log from Blender
 
-Blender runs on Windows; the workspace is in WSL. Write diagnostics to the workspace via the WSL network path so the agent can read `.cursor/debug.log` on Linux.
+Blender runs on Windows; the workspace is in WSL. Write diagnostics to the workspace via the WSL network path so the agent can read `.cursor/debug-{sessionId}.log` on Linux.
 
-**Path (from Blender on Windows):** `\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug.log`
+**Path (from Blender on Windows):** `\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug-{sessionId}.log`
 
 **Format:** One JSON object per line (NDJSON). Each line must include **id**, **timestamp** (ms since Unix epoch), **location**, **message**, **data** (object). Optional: **hypothesisId**, **runId**. You must supply `id` yourself (e.g. `log_{timestamp}_{random}`).
 
@@ -77,11 +78,12 @@ Blender runs on Windows; the workspace is in WSL. Write diagnostics to the works
 
 ```python
 import json
+import os
 import time
 import random
 import string
 
-DEBUG_LOG = r"\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug.log"
+DEBUG_LOG = r"\\wsl$\Ubuntu-24.04\home\nyaarium\blender-nyaatools\.cursor\debug-" + os.environ.get("DEBUG_SESSION_ID", "default") + ".log"
 
 def _log_id():
     return "log_%d_%s" % (int(time.time() * 1000), "".join(random.choices(string.ascii_lowercase + string.digits, k=8)))

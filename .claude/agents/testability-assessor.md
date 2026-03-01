@@ -82,13 +82,13 @@ Think of each opportunity as one deliberate leap toward autonomous validation, n
    When diagnostic instrumentation is missing, consider whether **MCP-based runtime inspection** (Opportunity #4) might be a higher-priority alternative. MCP tools enable direct state queries without parsing logs.
 
    - **Server/client environments**
-     - Does server-side code have a logging utility that writes to `.cursor/debug.log`?
+     - Does server-side code have a logging utility that writes to `.cursor/debug-{sessionId}.log`?
      - Does client-side code have a mechanism to send diagnostic data (POST endpoint, WebSocket, or similar)?
      - Are logs in NDJSON format for machine-parseable analysis?
    - **Serverless or single-process applications**
-     - Can the application runtime write directly to `.cursor/debug.log`?
+     - Can the application runtime write directly to `.cursor/debug-{sessionId}.log`?
    - **Cursor Code integration**
-     - If the user confirms they use Cursor Code, debug instruments MUST write to `.cursor/debug.log` for agent visibility
+     - If the user confirms they use Cursor Code, debug instruments MUST write to `.cursor/debug-{sessionId}.log` for agent visibility
      - Inform the user after implementation that they should switch Cursor to **Debug** mode instead of **Agent** mode, to make use of it
    - **Development skills integration**
      - Does `.claude/skills/development/SKILL.md` contain a `## Debugging Approach` section?
