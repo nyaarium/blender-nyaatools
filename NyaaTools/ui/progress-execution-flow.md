@@ -6,7 +6,7 @@
 
 **Yields**: Generators `yield AddTask` to enqueue work, `yield ChainGenerator` for nesting, or `yield None` to skip a tick.
 
-**Timer**: A 0.05s heartbeat (20 ticks/sec). This is the frequency at which the manager "pumps" its logic—advancing generators or moving tasks through the Split-Tick pipeline—whenever the main thread is free.
+**Timer**: A 0.05s heartbeat (20 ticks/sec). This is the frequency at which the manager "pumps" its logic - advancing generators or moving tasks through the Split-Tick pipeline - whenever the main thread is free.
 
 **Redraws**: Requested by the manager during a **Timer** tick via `ProgressOverlay._tag_redraw()`. During the `RUNNING` state, it uses `bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)` for aggressive updates during heavy processing. During confirmation states (`ERROR`, `COMPLETED`), it switches to standard `area.tag_redraw()` to allow animations while avoiding cursor flickering. This ensures the overlay doesn't freeze when the user stops moving the mouse.
 

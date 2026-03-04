@@ -106,7 +106,7 @@ class DrawHelper:
     def format_seconds(self, seconds: float) -> str:
         """Format seconds as human-readable string."""
         if seconds <= 0:
-            return "—"
+            return "-"
         if seconds < 60:
             return f"{int(seconds)}s"
         mins = int(seconds // 60)
