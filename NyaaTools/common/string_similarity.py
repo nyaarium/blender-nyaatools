@@ -17,7 +17,6 @@ def string_similarity(str1: str, str2: str) -> float:
     str2 = re.sub(r"([^a-z0-9])0+(\d)", r"\1\2", str2)  # Leading 0's
     str2 = re.sub(r"(?:_|\.)", " ", str2)  # Underscores & periods
 
-    # , substring_length: Optional[int] = 2, case_sensitive: Optional[bool] = False
     substring_length = 2
     case_sensitive = False
 
@@ -37,4 +36,5 @@ def string_similarity(str1: str, str2: str) -> float:
         if count > 0:
             substr_count1[substr2] = count - 1
             match += 1
+    # Sørensen-Dice coefficient over bigrams
     return (match * 2) / (len(str1) + len(str2) - ((substring_length - 1) * 2))

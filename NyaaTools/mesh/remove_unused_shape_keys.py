@@ -25,9 +25,11 @@ def remove_unused_shape_keys(obj):
     to_delete = []
     cache = {}
 
+    # foreach_get flattens coords as [x,y,z, x,y,z, ...], so size is 3 * nverts
     locs = numpy.empty(3 * nverts, dtype=numpy.float32)
 
     for kb in kbs:
+        # kb.relative_key == kb means this is the Basis shape key - skip it
         if kb == kb.relative_key:
             continue
 
@@ -43,6 +45,7 @@ def remove_unused_shape_keys(obj):
         distances = numpy.abs(locs - rel_locs)
         largestDistance = numpy.amax(distances)
 
+        # All vertices within tolerance means this key is identical to its relative key
         if (distances < SHAPE_KEY_TOLERANCE).all():
             # Only if it's not a Face VRC* kb though.
             if not is_vrc_face_workaround(obj, kb.name):
@@ -52,6 +55,8 @@ def remove_unused_shape_keys(obj):
         debug_print("Removing shape key: ", obj.name, " -> ", kb_name)
         obj.shape_key_remove(obj.data.shape_keys.key_blocks[kb_name])
 
+    # Blender requires at least one shape key to exist if shape_keys is set.
+    # If only the Basis remains after cleanup, remove it to fully clear shape keys.
     if len(obj.data.shape_keys.key_blocks) == 1:
         kb = obj.data.shape_keys.key_blocks[0]
         debug_print("Removing shape key: ", obj.name, " -> ", kb.name)

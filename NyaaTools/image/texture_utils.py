@@ -83,6 +83,7 @@ def _resize_np_nearest(src: np.ndarray, tw: int, th: int) -> np.ndarray:
     x_idx = (np.linspace(0, sw - 1, tw)).astype(np.int32)
     y_idx = (np.linspace(0, sh - 1, th)).astype(np.int32)
 
+    # Select rows by y_idx, then columns by x_idx (NumPy fancy indexing)
     return src[y_idx][:, x_idx]
 
 
