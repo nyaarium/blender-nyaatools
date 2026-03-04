@@ -1,12 +1,12 @@
 # NyaaTools
 
-NyaaTools is a bundle of handy tools designed for avatar/assets creators who need tools for mesh preparation, material baking of complex shader trees, and multi-format exports. A lot of work was put into intelligent shader nodes and image analysis algorithms to optimize the exports.
+NyaaTools is a bundle of tools for avatar/asset creators covering mesh preparation, material baking of complex shader trees, and multi-format exports.
 
 Location: **N-Panel** > **NyaaTools**
 
 ## Asset Management
 
-Designed entirely around non-destructive workflows, modifiers are applied on the exported objects and not on the source meshes. You do NOT have to destructively apply before export. The addon is designed to aid in non-destructive workflows.
+Modifiers are applied on exported copies, not on source meshes. You do not need to destructively apply before export.
 
 **Asset types** - Assets support both rigged characters (armature-hosted) and static meshes (mesh-hosted). When creating an asset:
 - **Rigged assets**: Config lives on the Armature object - select the armature to see the asset
