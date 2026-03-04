@@ -92,7 +92,7 @@ def _apply_modifiers_and_wipe_shapekeys(
     """
     Apply all modifiers and remove all shapekeys.
 
-    This flattens the mesh for reliable baking.
+    Required before baking - Blender cannot bake meshes with unapplied modifiers or shape keys active.
     """
     debug_print("-" * 40)
     debug_print("Apply modifiers & wipe shapekeys")

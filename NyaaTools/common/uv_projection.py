@@ -142,7 +142,6 @@ def build_uv_grid(triangles, query_points, grid_size=UV_GRID_SIZE):
     # We need offsets for ALL cells 0..grid_size*grid_size
     # unique_cells, counts = np.unique(sorted_cells) ... but we need missing zeros
     
-    # Searchsorted is robust
     all_possible_cells = np.arange(grid_size * grid_size + 1, dtype=np.int32)
     grid_offsets = np.searchsorted(sorted_cells, all_possible_cells[:-1], side='left')
     
