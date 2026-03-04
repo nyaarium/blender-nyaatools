@@ -1,6 +1,5 @@
 # Primitive positive value check
 def has_value(value):
-    # check type
     if value == None:
         return False
     if isinstance(value, str):

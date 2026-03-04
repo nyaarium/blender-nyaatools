@@ -5,9 +5,6 @@ import numpy as np
 import os
 
 
-# pack_rgba() and pack_pbr() functions removed - replaced by bake_packed_texture() in texture_baker.py
-
-
 def save_image_as_png(image: bpy.types.Image, output_path: str) -> bool:
     """
     Save a Blender image to PNG file and clean up from memory.
@@ -70,11 +67,6 @@ def _np_to_image_pixels(img: bpy.types.Image, arr: np.ndarray) -> None:
     img.update()
 
 
-# Dev Note:
-# - We are mostly upscaling solid colors (8x8 -> 4K)
-# - Speed is critical
-#
-# Discuss if we should use bilinear or something else
 def _resize_np_nearest(src: np.ndarray, tw: int, th: int) -> np.ndarray:
     """
     Resize NumPy array using nearest-neighbor sampling.
