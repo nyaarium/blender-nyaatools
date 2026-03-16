@@ -1,6 +1,10 @@
+## v2.4.3
+
+- Fixing some merge & export error handling
+
 ## v2.4.2
 
-Relaxed Fix Name requirements. Only checks if it's a real supported image extension.
+- Relaxed Fix Name requirements. Only checks if it's a real supported image extension.
 
 ## v2.4.1
 
