@@ -376,10 +376,22 @@ def barycentric_batch_indexed(
     return result_bary, result_tri
 
 
+class CollapsedUVFacesError(Exception):
+    """Raised when faces with zero UV area are detected during UV validation."""
+
+    def __init__(self, face_indices):
+        self.face_indices = face_indices
+        count = len(face_indices)
+        super().__init__(
+            f"Found {count} face(s) with zero UV area (collapsed). "
+            f"The problematic faces have been selected in edit mode. "
+            f"Fix UVs before applying modifier."
+        )
+
+
 def validate_uvs(mesh_obj, uv_layer_index):
     """
     Validate UV map is usable for projection.
-    If faces fail validation, selects them in edit mode.
 
     Args:
         mesh_obj: Blender mesh object
@@ -389,10 +401,9 @@ def validate_uvs(mesh_obj, uv_layer_index):
         True if validation passes
 
     Raises:
-        Exception with descriptive error message
+        CollapsedUVFacesError if any faces have zero UV area
+        Exception for other validation failures
     """
-    import bpy
-
     mesh_data = mesh_obj.data
 
     if len(mesh_data.uv_layers) == 0:
@@ -415,23 +426,7 @@ def validate_uvs(mesh_obj, uv_layer_index):
                 collapsed_faces.append(face.index)
 
         if collapsed_faces:
-            bm.to_mesh(mesh_data)
-            bm.free()
-
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_all(action="DESELECT")
-            bpy.ops.object.mode_set(mode="OBJECT")
-
-            for face_idx in collapsed_faces:
-                mesh_data.polygons[face_idx].select = True
-
-            bpy.ops.object.mode_set(mode="EDIT")
-
-            raise Exception(
-                f"Found {len(collapsed_faces)} face(s) with zero UV area (collapsed). "
-                f"The problematic faces have been selected in edit mode. "
-                f"Fix UVs before applying modifier."
-            )
+            raise CollapsedUVFacesError(collapsed_faces)
     finally:
         if bm.is_valid:
             bm.free()

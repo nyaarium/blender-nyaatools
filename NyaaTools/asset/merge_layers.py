@@ -10,6 +10,7 @@ from ..mesh.cleanup_mesh import cleanup_mesh
 from ..common.renamer_rename import rename_object
 from .merge_onto_layer import merge_onto_layer
 from ..operators.ApplyModifierShapeKeysViaUV import apply_modifiers_with_shape_keys
+from ..common.uv_projection import CollapsedUVFacesError
 from .asset_lookup import get_asset_meshes_by_layer
 from ..uv.uv_conflict_resolution import resolve_layer_uv_conflicts
 
@@ -144,6 +145,7 @@ def merge_single_layer(
     armature_copy=None,
     is_static_export=False,
     debug_print=None,
+    out_unrename_info=None,
 ):
     """
     Copy and merge meshes for a single layer into a target collection.
@@ -157,6 +159,8 @@ def merge_single_layer(
         armature_copy: Optional copied armature (None for static/mesh-hosted assets)
         is_static_export: If True, apply all modifiers including armature. If False, skip armature modifiers.
         debug_print: Optional debug print function
+        out_unrename_info: Optional list to append rename info to in-place (so callers
+            can restore renames even if this function raises mid-processing)
 
     Returns:
         tuple: (merged_mesh_object, unrename_info)
@@ -168,7 +172,7 @@ def merge_single_layer(
         def debug_print(*args):
             pass
 
-    unrename_info = []
+    unrename_info = out_unrename_info if out_unrename_info is not None else []
     first_visit = True
 
     # First pass: Copy all meshes to target collection
@@ -232,6 +236,11 @@ def merge_single_layer(
                         debug_print(
                             f"Applied all modifiers and shape keys to {mesh_name} before merge"
                         )
+                    except CollapsedUVFacesError as e:
+                        # Annotate with the original (pre-copy) mesh name so cleanup
+                        # can locate the object after renames are restored.
+                        e.original_mesh_name = mesh_name
+                        raise
                     except RuntimeError as e:
                         raise RuntimeError(
                             f"Failed to apply modifiers on '{mesh_copy.name}': {e}"

@@ -20,6 +20,7 @@ from mathutils import Vector
 
 from ..common.selection_get_meshes import selection_get_meshes
 from ..common.uv_projection import (
+    CollapsedUVFacesError,
     validate_uvs,
     extract_shape_key_metadata,
     extract_vertex_group_weights,
@@ -387,6 +388,8 @@ def apply_modifiers_with_shape_keys(
                 apply_modifier_with_shape_keys(
                     context, mesh_obj, modifier, uv_map_index
                 )
+            except CollapsedUVFacesError:
+                raise
             except Exception as e:
                 return (False, str(e))
 

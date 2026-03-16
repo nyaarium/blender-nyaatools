@@ -24,6 +24,7 @@ from ...ui.task_system import Task, TaskStatus, DrawHelper, LINE_HEIGHT, FONT_SI
 from ...ui.ProgressManager import AddTask, ChainGenerator
 
 from ...asset.asset_lookup import get_export_path_from_asset
+from ...common.uv_projection import CollapsedUVFacesError
 from ...asset.merge_layers import (
     merge_single_layer,
     copy_armature_to_collection,
@@ -187,6 +188,9 @@ class MergeExportState:
     textures_dir: str = ""
     # Will be set if bake is chained
     bake_state: Any = None  # BakeState from bake generator
+    # Set when a CollapsedUVFacesError fires: (original_mesh_name, face_indices)
+    # Used by cleanup to re-select the bad faces on the original object after renames are restored.
+    collapsed_uv_error: Optional[tuple] = None
 
 
 # =============================================================================
@@ -336,17 +340,25 @@ def _do_merge(
     debug_print: Callable,
 ) -> Dict:
     """Execute a single layer merge."""
-    merged_obj, unrename = merge_single_layer(
-        layer_name,
-        layer_meshes,
-        state.temp_scene.collection,
-        armature_copy=state.armature_copy,
-        is_static_export=config.export_static,
-        debug_print=debug_print,
-    )
+    try:
+        merged_obj, _ = merge_single_layer(
+            layer_name,
+            layer_meshes,
+            state.temp_scene.collection,
+            armature_copy=state.armature_copy,
+            is_static_export=config.export_static,
+            debug_print=debug_print,
+            out_unrename_info=state.unrename_info,
+        )
+    except CollapsedUVFacesError as e:
+        # Store the original mesh name and bad face indices so cleanup can
+        # re-select them on the original object after renames are restored.
+        original_mesh_name = getattr(e, "original_mesh_name", None) or next(iter(layer_meshes))
+        state.collapsed_uv_error = (original_mesh_name, e.face_indices)
+        print(f"[MergeExport] Stored collapsed_uv_error: mesh='{original_mesh_name}', faces={len(e.face_indices)}")
+        raise
     if merged_obj:
         state.merged_layers[layer_name] = merged_obj
-    state.unrename_info.extend(unrename)
     return {"success": True}
 
 
@@ -682,7 +694,11 @@ def _cleanup_file_export(
     reason: str,
 ) -> str:
     """Clean up after file export."""
+    print(f"[MergeExport] _cleanup_file_export reason={reason}")
     _cleanup_scene(state)
+
+    if reason == "error":
+        _focus_collapsed_uv_faces(state)
 
     if reason == "success":
         path = state.export_path
@@ -704,6 +720,7 @@ def _cleanup_collection_export(
     reason: str,
 ) -> str:
     """Clean up after collection export."""
+    print(f"[MergeExport] _cleanup_collection_export reason={reason}")
     # Restore original scene
     if state.original_scene and state.original_scene.name in bpy.data.scenes:
         bpy.context.window.scene = state.original_scene
@@ -717,6 +734,9 @@ def _cleanup_collection_export(
     # Restore renamed objects
     if state.unrename_info:
         renamer_restore(state.unrename_info)
+
+    if reason == "error":
+        _focus_collapsed_uv_faces(state)
 
     # Handle based on reason
     if state.export_collection:
@@ -741,6 +761,87 @@ def _cleanup_collection_export(
                 return "Export cancelled."
             return "Export failed."
     return ""
+
+
+def _focus_collapsed_uv_faces(state: MergeExportState) -> None:
+    """
+    After renames are restored, enter Edit Mode on the original mesh with
+    the collapsed UV faces selected and framed in the viewport.
+
+    Called only when state.collapsed_uv_error is set and reason == "error".
+    """
+    print("[MergeExport] _focus_collapsed_uv_faces called")
+
+    if not state.collapsed_uv_error:
+        print("[MergeExport]   collapsed_uv_error is None — skipping focus")
+        return
+
+    original_mesh_name, face_indices = state.collapsed_uv_error
+    print(f"[MergeExport]   target object: '{original_mesh_name}', face count: {len(face_indices)}")
+
+    obj = bpy.data.objects.get(original_mesh_name)
+    if not obj:
+        print(f"[MergeExport]   object '{original_mesh_name}' not found in bpy.data.objects")
+        return
+    if obj.type != "MESH":
+        print(f"[MergeExport]   object '{original_mesh_name}' is type {obj.type}, not MESH")
+        return
+
+    print(f"[MergeExport]   object found: {obj.name}, in scene: {obj.name in bpy.context.scene.objects}")
+
+    try:
+        # Must set active object BEFORE any mode_set call.
+        # Deselect all, then make the target active so mode_set has something to work on.
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        print(f"[MergeExport]   active object set to: {bpy.context.view_layer.objects.active.name if bpy.context.view_layer.objects.active else 'None'}")
+
+        # Switch to object mode (required before setting polygon selections)
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+        # Reveal hidden geometry and clear selection in edit mode
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.reveal(select=False)
+        bpy.ops.mesh.select_all(action="DESELECT")
+
+        # Back to object mode to set polygon selections on the mesh data
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+        # Select the collapsed faces on the mesh data (must be in OBJECT mode)
+        selected_count = 0
+        for face_idx in face_indices:
+            if face_idx < len(obj.data.polygons):
+                obj.data.polygons[face_idx].select = True
+                selected_count += 1
+        print(f"[MergeExport]   selected {selected_count} polygons on mesh data")
+
+        # Enter edit mode — the polygon selection transfers automatically
+        bpy.ops.object.mode_set(mode="EDIT")
+        print("[MergeExport]   entered edit mode")
+
+        # Frame the selection in all 3D viewports
+        framed = False
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == "VIEW_3D":
+                    region = next(
+                        (r for r in area.regions if r.type == "WINDOW"), None
+                    )
+                    if region:
+                        with bpy.context.temp_override(
+                            window=window, area=area, region=region
+                        ):
+                            bpy.ops.view3d.view_selected()
+                            framed = True
+                            print(f"[MergeExport]   framed selection in viewport")
+        if not framed:
+            print("[MergeExport]   no 3D viewport found to frame selection")
+
+    except Exception as e:
+        import traceback
+        print(f"[MergeExport] Error in _focus_collapsed_uv_faces: {e}")
+        traceback.print_exc()
 
 
 def _cleanup_scene(state: MergeExportState) -> None:
