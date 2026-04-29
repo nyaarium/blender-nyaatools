@@ -1,10 +1,10 @@
 /**
  * MCP Schema
  *
- * Defines project-specific MCP tools that agent-team-bridge connector exposes to IDE agents.
+ * Defines project-specific MCP tools that switchboard connector exposes to IDE agents.
  * Each tool is invoked on game clients connected via WebSocket.
  *
- * @param {import("zod").ZodType} z - Zod module, passed in by agent-team-bridge connector.
+ * @param {import("zod").ZodType} z - Zod module, passed in by switchboard connector.
  * @returns {Array} Array of tool definitions.
  */
 export default function (z) {
