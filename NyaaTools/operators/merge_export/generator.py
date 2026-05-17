@@ -8,10 +8,12 @@ the standalone operator or chained from a batch operator.
 import bpy
 import os
 import math
+import shutil
+import tempfile
 
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Generator, List, Optional, Any
-from mathutils import Euler
+from mathutils import Euler, Matrix
 
 
 from ..bake.generator import create_bake_generator, BakeState
@@ -164,10 +166,13 @@ class MergeExportConfig:
 
     asset_host: Any  # bpy.types.Object (armature or mesh)
     asset_name: str
-    export_format: str  # "fbx", "obj", "votv"
+    export_format: str  # "fbx", "glb", "obj", "votv"
     target_type: str  # "file" or "collection"
     export_static: bool
     bake_after_export: bool
+    pack_textures_glb: bool
+    axis_forward: str  # "+X", "-X", "+Y", "-Y", "+Z", "-Z" — Blender scene's forward
+    axis_up: str  # "+X", "-X", "+Y", "-Y", "+Z", "-Z" — Blender scene's up
     include_ue_colliders: bool
 
 
@@ -272,22 +277,20 @@ def create_merge_export_generator(
             )
         )
 
-    # Yield export task based on target type
+    # Build export task (yielded later depending on bake ordering)
     if config.target_type == "collection":
-        yield AddTask(
-            Task(
-                id="export_collection",
-                label="Export to __Export__ collection",
-                execute=lambda ctx: _do_export_collection(
-                    config, state, include_colliders, debug_print
-                ),
-                render_row=render_export_row,
-                params={
-                    "asset_name": config.asset_name,
-                    "format_type": "COLLECTION",
-                    "export_path": "__Export__",
-                },
-            )
+        export_task = Task(
+            id="export_collection",
+            label="Export to __Export__ collection",
+            execute=lambda ctx: _do_export_collection(
+                config, state, include_colliders, debug_print
+            ),
+            render_row=render_export_row,
+            params={
+                "asset_name": config.asset_name,
+                "format_type": "COLLECTION",
+                "export_path": "__Export__",
+            },
         )
     else:
         export_path_display = ""
@@ -299,25 +302,28 @@ def create_merge_export_generator(
         if config.export_format == "votv":
             clean_asset_name = sanitize_name(config.asset_name, strict=True)
 
-        yield AddTask(
-            Task(
-                id="export_file",
-                label=f"Export: {config.asset_name}",
-                execute=lambda ctx: _do_export_file(
-                    config, state, include_colliders, debug_print
-                ),
-                render_row=render_export_row,
-                params={
-                    "asset_name": config.asset_name,
-                    "clean_asset_name": clean_asset_name,
-                    "format_type": config.export_format.upper(),
-                    "export_path": export_path_display,
-                },
-            )
+        export_task = Task(
+            id="export_file",
+            label=f"Export: {config.asset_name}",
+            execute=lambda ctx: _do_export_file(
+                config, state, include_colliders, debug_print
+            ),
+            render_row=render_export_row,
+            params={
+                "asset_name": config.asset_name,
+                "clean_asset_name": clean_asset_name,
+                "format_type": config.export_format.upper(),
+                "export_path": export_path_display,
+            },
         )
 
-    # Chain to bake if requested
-    if config.bake_after_export:
+    # Pack mode: bake BEFORE export so glTF exporter embeds textures from materials
+    if config.pack_textures_glb and config.target_type == "file":
+        # Populate mesh_names early (normally done inside _do_export_file)
+        state.mesh_names = [
+            obj.name for obj in state.merged_layers.values() if obj.type == "MESH"
+        ]
+
         bake_ctx, bake_cleanup = _create_bake_context(config, state, debug_print)
         state.bake_state = BakeState()
 
@@ -325,6 +331,19 @@ def create_merge_export_generator(
             generator=create_bake_generator(bake_ctx, state.bake_state, debug_print),
             on_cleanup=bake_cleanup,
         )
+        yield AddTask(export_task)
+    elif config.bake_after_export:
+        yield AddTask(export_task)
+
+        bake_ctx, bake_cleanup = _create_bake_context(config, state, debug_print)
+        state.bake_state = BakeState()
+
+        yield ChainGenerator(
+            generator=create_bake_generator(bake_ctx, state.bake_state, debug_print),
+            on_cleanup=bake_cleanup,
+        )
+    else:
+        yield AddTask(export_task)
 
 
 # =============================================================================
@@ -394,9 +413,12 @@ def _do_export_file(
         state.armature_copy,
         state.export_path,
         config.export_format,
+        config.axis_forward,
+        config.axis_up,
         state.unrename_info,
         state.treat_as_static,
         state.temp_scene,
+        config.pack_textures_glb,
         debug_print,
     )
 
@@ -467,7 +489,11 @@ def _create_bake_context(
     cfg = config.asset_host.nyaa_asset
 
     # Determine bake directory based on target type
-    if config.target_type == "collection":
+    is_pack_mode = config.pack_textures_glb and config.target_type == "file"
+    if is_pack_mode:
+        # Pack mode: bake to temp dir, embedded in GLB, cleaned up after
+        bake_dir = tempfile.mkdtemp(prefix="nyaa_bake_")
+    elif config.target_type == "collection":
         bake_dir = state.textures_dir
     else:
         export_path = state.export_path
@@ -513,6 +539,35 @@ def _create_bake_context(
             if obj and obj.type == "MESH":
                 mesh_objects.append(obj)
 
+    # Pack mode: bake on duplicates so originals retain shape keys.
+    # bake_prepare is destructive (wipes shape keys, separates/joins by material),
+    # but the glTF export needs shape keys. Solution: duplicate meshes, bake on
+    # duplicates, assign baked materials back to originals.
+    original_mesh_names = list(mesh_names)
+    bake_duplicate_names = []
+    # Snapshot temp scene contents before bake. Anything new after bake
+    # (duplicates, separate/join byproducts) gets cleaned up.
+    pre_bake_object_names = (
+        {obj.name for obj in state.temp_scene.objects} if is_pack_mode else set()
+    )
+    if is_pack_mode and mesh_objects:
+        duplicates = []
+        for orig in mesh_objects:
+            dup_data = orig.data.copy()
+            dup = orig.copy()
+            dup.data = dup_data
+            dup.name = orig.name + "__bakedup"
+            state.temp_scene.collection.objects.link(dup)
+            duplicates.append(dup)
+            bake_duplicate_names.append(dup.name)
+
+            # Hide original from rays so it doesn't occlude AO on the duplicate
+            orig.hide_render = True
+
+        mesh_objects = duplicates
+        mesh_names = bake_duplicate_names
+        debug_print(f"Duplicated {len(duplicates)} meshes for bake (originals hidden)")
+
     # Build mesh metas
     mesh_metas = [
         MeshMeta(mesh_object=obj, layer_name="", is_ue_collider=False)
@@ -520,16 +575,25 @@ def _create_bake_context(
     ]
 
     # Convert bake image configs
-    bake_configs = [
-        BakeImageConfig(
-            format=img.format,
-            image_type=img.image_type,
-            width=int(img.width),
-            height=int(img.height),
-            optimize_resolution=img.optimize_resolution,
-        )
-        for img in cfg.bake_images
-    ]
+    if is_pack_mode:
+        # Fixed glTF PBR bake set for GLB packing
+        bake_configs = [
+            BakeImageConfig(format="rgba", image_type="png", width=4096, height=4096, optimize_resolution=True),
+            BakeImageConfig(format="ao-ro-me", image_type="png", width=4096, height=4096, optimize_resolution=True),
+            BakeImageConfig(format="normalgl", image_type="exr", width=4096, height=4096, optimize_resolution=True),
+            BakeImageConfig(format="emission", image_type="png", width=4096, height=4096, optimize_resolution=True),
+        ]
+    else:
+        bake_configs = [
+            BakeImageConfig(
+                format=img.format,
+                image_type=img.image_type,
+                width=int(img.width),
+                height=int(img.height),
+                optimize_resolution=img.optimize_resolution,
+            )
+            for img in cfg.bake_images
+        ]
 
     # Filename formatter for VotV
     filename_formatter = None
@@ -550,22 +614,140 @@ def _create_bake_context(
     tex_dir = bake_dir
     target_type = config.target_type
     export_collection = state.export_collection
-    captured_mesh_names = mesh_names
+    # In pack mode, material assignment targets the ORIGINALS (not duplicates)
+    captured_mesh_names = original_mesh_names if is_pack_mode else mesh_names
+    captured_pre_bake_names = pre_bake_object_names
+    captured_temp_scene = state.temp_scene
+    captured_is_pack_mode = is_pack_mode
 
     def bake_cleanup(reason):
         """Cleanup after bake completes."""
         debug_print(f"[Bake cleanup] reason={reason}")
 
-        # Assign baked materials
+        # #region HYP-PACK-1: log files in bake dir after bake completes
+        import json as _json_p, time as _time_p
+        _dbg_p = r"\\wsl.localhost\Ubuntu-24.04\home\nyaarium\.cursor\debug.log"
+        _bake_files = []
+        if os.path.isdir(tex_dir):
+            for fn in os.listdir(tex_dir):
+                fp = os.path.join(tex_dir, fn)
+                _bake_files.append({
+                    "name": fn,
+                    "size_bytes": os.path.getsize(fp) if os.path.isfile(fp) else None,
+                })
+        with open(_dbg_p, "a") as _f:
+            _f.write(_json_p.dumps({
+                "runId": "pack-texture-001",
+                "location": "generator.py:bake_cleanup_start",
+                "message": "Files in bake dir after bake",
+                "data": {"tex_dir": tex_dir, "files": _bake_files},
+                "timestamp": _time_p.time(),
+            }) + "\n")
+        # #endregion
+
+        # Assign baked materials to originals (pack mode) or merged meshes (normal)
         for mesh_name in captured_mesh_names:
             obj = bpy.data.objects.get(mesh_name)
             if obj and obj.type == "MESH":
                 for slot in obj.material_slots:
                     if slot.material:
+                        original_mat_name = slot.material.name
                         baked_mat = create_baked_material(slot.material, tex_dir)
+
+                        # #region HYP-PACK-2: log baked material node structure
+                        _mat_info = {
+                            "mesh": mesh_name,
+                            "original_mat_name": original_mat_name,
+                            "baked_mat_created": baked_mat is not None,
+                        }
+                        if baked_mat:
+                            _img_nodes = [n for n in baked_mat.node_tree.nodes if n.type == "TEX_IMAGE"]
+                            _mat_info["baked_mat_name"] = baked_mat.name
+                            _mat_info["image_node_count"] = len(_img_nodes)
+                            _mat_info["image_nodes"] = [
+                                {
+                                    "node_name": n.name,
+                                    "image_name": n.image.name if n.image else None,
+                                    "image_filepath": n.image.filepath if n.image else None,
+                                    "image_size": list(n.image.size) if n.image else None,
+                                    "colorspace": n.image.colorspace_settings.name if n.image else None,
+                                    "connected_to": [l.to_socket.name for l in n.outputs["Color"].links],
+                                }
+                                for n in _img_nodes
+                            ]
+                        with open(_dbg_p, "a") as _f:
+                            _f.write(_json_p.dumps({
+                                "runId": "pack-texture-001",
+                                "location": "generator.py:baked_material_assigned",
+                                "message": "Baked material created",
+                                "data": _mat_info,
+                                "timestamp": _time_p.time(),
+                            }) + "\n")
+                        # #endregion
+
                         if baked_mat:
                             slot.material = baked_mat
                             debug_print(f"🎨 Assigned baked material: {baked_mat.name}")
+
+                # Restore render visibility (originals were hidden during bake)
+                if captured_is_pack_mode:
+                    obj.hide_render = False
+
+        # Snapshot-based cleanup: remove any objects in temp scene that weren't
+        # there before bake (duplicates + bake_prepare byproducts)
+        if captured_is_pack_mode and captured_temp_scene:
+            to_remove = [
+                obj for obj in list(captured_temp_scene.objects)
+                if obj.name not in captured_pre_bake_names
+            ]
+            for obj in to_remove:
+                obj_data = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if obj_data and obj_data.users == 0:
+                    if hasattr(bpy.data, "meshes") and obj_data.__class__.__name__ == "Mesh":
+                        bpy.data.meshes.remove(obj_data)
+            if to_remove:
+                debug_print(f"Removed {len(to_remove)} bake byproduct objects")
+
+        # #region HYP-PACK-3: final state of objects/materials before export
+        _final_state = []
+        if captured_temp_scene:
+            for _o in captured_temp_scene.objects:
+                if _o.type == "MESH":
+                    _slots = []
+                    for _s in _o.material_slots:
+                        if _s.material:
+                            _img_ns = [n for n in _s.material.node_tree.nodes if n.type == "TEX_IMAGE"]
+                            _slots.append({
+                                "material": _s.material.name,
+                                "image_count": len(_img_ns),
+                                "images": [
+                                    {"name": n.image.name if n.image else None, "size": list(n.image.size) if n.image else None}
+                                    for n in _img_ns
+                                ],
+                            })
+                        else:
+                            _slots.append({"material": None})
+                    _final_state.append({
+                        "mesh": _o.name,
+                        "hide_render": _o.hide_render,
+                        "slots": _slots,
+                    })
+        with open(_dbg_p, "a") as _f:
+            _f.write(_json_p.dumps({
+                "runId": "pack-texture-001",
+                "location": "generator.py:bake_cleanup_end",
+                "message": "Final mesh/material state after cleanup",
+                "data": {"meshes": _final_state},
+                "timestamp": _time_p.time(),
+            }) + "\n")
+        # #endregion
+
+        # Clean up temp bake dir (pack mode only)
+        # DEBUG: temporarily don't delete so we can inspect
+        if captured_is_pack_mode and os.path.isdir(tex_dir):
+            # shutil.rmtree(tex_dir, ignore_errors=True)
+            debug_print(f"[DEBUG] Kept temp bake dir for inspection: {tex_dir}")
 
         # Hide export collection (for collection export)
         if target_type == "collection" and export_collection:
@@ -634,6 +816,10 @@ def setup_merge_export(
 
     state.temp_scene = bpy.data.scenes.new(name=TEMP_SCENE_NAME)
     state.original_scene = bpy.context.window.scene
+
+    # Copy world from original scene so AO baking has an environment to trace against
+    if state.original_scene.world:
+        state.temp_scene.world = state.original_scene.world
 
     # Focus viewport on asset meshes in main scene, then copy viewport angle to temp scene
     _setup_viewport_from_main_scene(asset_host, state.temp_scene, state.original_scene)
@@ -978,50 +1164,330 @@ def _setup_viewport_from_main_scene(
         bpy.context.window.scene = temp_context_scene
 
 
+def _apply_mesh_transforms(temp_scene, debug_print):
+    """Bake every object's world transform so the temp scene ends with everything at origin.
+
+    Order matters:
+      1. Un-parent each mesh (keep-transform) so the parent armature's contribution
+         collapses into the mesh's matrix_basis.
+      2. Apply transforms on meshes — vertices end up in world coords.
+      3. Apply transforms on armatures — bone rest matrices absorb the armature's world
+         transform; armature itself goes to origin.
+
+    Doing the armature first (as the old code did) drops the armature to origin while
+    leaving child meshes behind, erasing whatever raise/translation the user did on the
+    rig. Doing it last preserves it.
+
+    bpy.ops.object.transform_apply refuses meshes with shape keys, so those are baked
+    by transforming the mesh data and each shape key block directly.
+    """
+    identity = Matrix.Identity(4)
+
+    if bpy.context.active_object:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="DESELECT")
+
+    # Pass 1: meshes
+    for obj in list(temp_scene.objects):
+        if obj.type != "MESH":
+            continue
+
+        # Un-parent keeping world transform — collapses parent_inverse and basis
+        # into a single matrix_basis we can bake.
+        if obj.parent is not None:
+            mw = obj.matrix_world.copy()
+            obj.parent = None
+            obj.matrix_parent_inverse = identity
+            obj.matrix_basis = mw
+
+        if obj.matrix_basis == identity:
+            continue
+
+        mesh = obj.data
+        if mesh.shape_keys:
+            mat = obj.matrix_basis.copy()
+            mesh.transform(mat)
+            for kb in mesh.shape_keys.key_blocks:
+                for i in range(len(kb.data)):
+                    kb.data[i].co = mat @ kb.data[i].co
+            obj.matrix_basis = identity
+            debug_print(
+                f"Applied transform on '{obj.name}' "
+                f"(with {len(mesh.shape_keys.key_blocks)} shape keys)"
+            )
+        else:
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+            obj.select_set(False)
+            debug_print(f"Applied transform on '{obj.name}'")
+
+    # Pass 2: armatures (after meshes, so the armature's transform has already been
+    # captured into the meshes' baked vertex coords).
+    for obj in list(temp_scene.objects):
+        if obj.type != "ARMATURE":
+            continue
+        if obj.matrix_local == identity:
+            continue
+
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        obj.select_set(False)
+        debug_print(f"Applied transform on armature '{obj.name}'")
+
+
 def _finalize_and_export(
     asset_name,
     armature,
     export_path,
     export_format,
+    axis_forward,
+    axis_up,
     unrename_info,
     is_static_asset,
     temp_scene,
+    pack_textures_glb,
     debug_print,
 ):
-    """Finalize merged meshes and export in requested format."""
+    """Finalize merged meshes and export in requested format.
+
+    Axis handling per format:
+      FBX  - user's axis_forward/axis_up are written as the file's axis metadata;
+             engine importers (Unity, Godot, Unreal) read this and convert.
+      glTF - locked to +Y up per spec (export_yup=True).
+      OBJ  - locked to -Z forward / +Y up (Blender's wm.obj_export historical default);
+             OBJ has no axis metadata, so rotation is baked into vertices.
+    """
     if not export_path:
         armature_name = armature.name if armature else asset_name
         raise Exception(f"Export path not found for: {armature_name}")
 
+    # Bake mesh object transforms into vertex coordinates so the exported file carries
+    # geometry at its source-file world position. Without this, leftover translations on
+    # the merged objects ship as node transforms and engines (or re-importers) drop or
+    # reinterpret them differently.
+    _apply_mesh_transforms(temp_scene, debug_print)
+
+    # Strip leading "+" for Blender FBX exporter ("Z" not "+Z")
+    def _to_fbx_axis(val):
+        return val.replace("+", "")
+
     if export_format == "fbx":
-        export_name = (
-            asset_name
-            if is_static_asset
-            else (armature.name if armature else asset_name)
-        )
+        export_name = asset_name
         path = resolve_path(export_path, export_name + ".fbx")
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
+        fbx_fwd, fbx_up = _to_fbx_axis(axis_forward), _to_fbx_axis(axis_up)
         bpy.ops.export_scene.fbx(
             filepath=path,
             check_existing=False,
             filter_glob="*.fbx",
             use_active_collection=True,
             apply_scale_options="FBX_SCALE_UNITS",
-            axis_forward="-Y",
-            axis_up="Z",
+            axis_forward=fbx_fwd,
+            axis_up=fbx_up,
             use_mesh_modifiers=False,
             mesh_smooth_type="FACE",
             add_leaf_bones=False,
             bake_anim=False,
         )
 
+    elif export_format == "glb":
+        export_name = asset_name
+
+        # Determine GLB vs GLTF_SEPARATE based on the user's path extension
+        path_lower = export_path.lower().rstrip("/\\")
+        if path_lower.endswith(".gltf"):
+            gltf_format = "GLTF_SEPARATE"
+            path = resolve_path(export_path, export_name + ".gltf")
+        else:
+            gltf_format = "GLB"
+            path = resolve_path(export_path, export_name + ".glb")
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # #region HYP-ARM-1: state of mesh(es) and armature(s) before export
+        import json as _json_a, time as _time_a
+        _dbg_a = r"\\wsl.localhost\Ubuntu-24.04\home\nyaarium\.cursor\debug.log"
+        _state = []
+        for _o in temp_scene.objects:
+            _info = {
+                "name": _o.name,
+                "type": _o.type,
+                "parent": _o.parent.name if _o.parent else None,
+                "parent_type": _o.parent.type if _o.parent else None,
+                "hide_render": _o.hide_render,
+                "hide_viewport": _o.hide_viewport,
+            }
+            if _o.type == "MESH":
+                _info["modifiers"] = [
+                    {
+                        "name": m.name,
+                        "type": m.type,
+                        "object": m.object.name if hasattr(m, "object") and m.object else None,
+                        "show_viewport": m.show_viewport,
+                        "show_render": m.show_render,
+                    }
+                    for m in _o.modifiers
+                ]
+                _info["vertex_groups"] = [vg.name for vg in _o.vertex_groups]
+                _info["vg_count"] = len(_o.vertex_groups)
+            elif _o.type == "ARMATURE":
+                _info["bone_count"] = len(_o.data.bones)
+                _info["bone_names"] = [b.name for b in _o.data.bones][:5]
+            _state.append(_info)
+        with open(_dbg_a, "a") as _f:
+            _f.write(_json_a.dumps({
+                "runId": "armature-link-001",
+                "location": "generator.py:pre_gltf_export",
+                "message": "Mesh/armature state before export",
+                "data": {"temp_scene_objects": _state},
+                "timestamp": _time_a.time(),
+            }) + "\n")
+        # #endregion
+
+        # Unless the user opted in to packing baked textures, strip the Surface link
+        # on every material so the glTF exporter has no shader graph to traverse.
+        # Result: GLB carries geometry + material slots only, with no embedded images
+        # and no side-effect unpacking of packed images. User rewires materials in
+        # their target engine. Links are restored after export.
+        surface_link_snapshots = []
+        if not pack_textures_glb:
+            seen_mats = set()
+            for _obj in temp_scene.objects:
+                if _obj.type != "MESH":
+                    continue
+                for _slot in _obj.material_slots:
+                    _mat = _slot.material
+                    if _mat is None or _mat.name in seen_mats or not _mat.use_nodes:
+                        continue
+                    seen_mats.add(_mat.name)
+                    _output = None
+                    for _node in _mat.node_tree.nodes:
+                        if _node.type != "OUTPUT_MATERIAL":
+                            continue
+                        if getattr(_node, "target", "ALL") == "ALL":
+                            _output = _node
+                            break
+                        if _output is None:
+                            _output = _node
+                    if _output is None:
+                        continue
+                    _surface = _output.inputs.get("Surface")
+                    if _surface is None or not _surface.is_linked:
+                        continue
+                    for _link in list(_surface.links):
+                        surface_link_snapshots.append(
+                            (_mat.node_tree, _link.from_socket, _link.to_socket)
+                        )
+                        _mat.node_tree.links.remove(_link)
+
+        try:
+            bpy.ops.export_scene.gltf(
+                filepath=path,
+                check_existing=False,
+                export_format=gltf_format,
+                use_active_scene=True,
+                export_hierarchy_full_collections=False,
+                export_apply=False,
+                export_yup=True,
+                export_animations=True,
+                export_morph=True,
+                export_morph_normal=True,
+                export_morph_tangent=False,
+            )
+        finally:
+            for _node_tree, _from_socket, _to_socket in surface_link_snapshots:
+                _node_tree.links.new(_from_socket, _to_socket)
+
+        # #region HYP-PACK-4: parse exported GLB and log its image/material/texture structure
+        try:
+            import json as _json_glb, struct as _struct_glb, time as _time_glb
+            _dbg_glb = r"\\wsl.localhost\Ubuntu-24.04\home\nyaarium\.cursor\debug.log"
+
+            with open(path, "rb") as _f_glb:
+                _magic = _f_glb.read(4)
+                _version = _struct_glb.unpack("<I", _f_glb.read(4))[0]
+                _length = _struct_glb.unpack("<I", _f_glb.read(4))[0]
+                # JSON chunk
+                _json_len = _struct_glb.unpack("<I", _f_glb.read(4))[0]
+                _json_type = _f_glb.read(4)
+                _json_bytes = _f_glb.read(_json_len)
+                _gltf_json = _json_glb.loads(_json_bytes.decode("utf-8"))
+
+            _summary = {
+                "magic": _magic.decode("ascii", errors="replace"),
+                "version": _version,
+                "total_length": _length,
+                "json_length": _json_len,
+                "scenes": [{"name": s.get("name"), "nodes": s.get("nodes", [])} for s in _gltf_json.get("scenes", [])],
+                "nodes_count": len(_gltf_json.get("nodes", [])),
+                "nodes": [
+                    {
+                        "name": n.get("name"),
+                        "mesh": n.get("mesh"),
+                        "skin": n.get("skin"),
+                        "children_count": len(n.get("children", [])),
+                        "has_rotation": "rotation" in n,
+                        "has_translation": "translation" in n,
+                        "has_scale": "scale" in n,
+                    }
+                    for n in _gltf_json.get("nodes", [])
+                ],
+                "skins_count": len(_gltf_json.get("skins", [])),
+                "skins": [
+                    {
+                        "name": s.get("name"),
+                        "joint_count": len(s.get("joints", [])),
+                        "skeleton": s.get("skeleton"),
+                    }
+                    for s in _gltf_json.get("skins", [])
+                ],
+                "meshes_count": len(_gltf_json.get("meshes", [])),
+                "materials": [
+                    {
+                        "name": m.get("name"),
+                        "pbr_keys": list(m.get("pbrMetallicRoughness", {}).keys()),
+                        "has_normal": "normalTexture" in m,
+                        "has_occlusion": "occlusionTexture" in m,
+                        "has_emissive": "emissiveTexture" in m,
+                        "pbr": m.get("pbrMetallicRoughness", {}),
+                        "normalTexture": m.get("normalTexture"),
+                        "occlusionTexture": m.get("occlusionTexture"),
+                        "emissiveTexture": m.get("emissiveTexture"),
+                    }
+                    for m in _gltf_json.get("materials", [])
+                ],
+                "textures_count": len(_gltf_json.get("textures", [])),
+                "textures": _gltf_json.get("textures", []),
+                "images": [
+                    {"name": im.get("name"), "mime": im.get("mimeType"), "bufferView": im.get("bufferView"), "uri": im.get("uri")}
+                    for im in _gltf_json.get("images", [])
+                ],
+            }
+            with open(_dbg_glb, "a") as _f:
+                _f.write(_json_glb.dumps({
+                    "runId": "pack-texture-001",
+                    "location": "generator.py:post_gltf_export",
+                    "message": "GLB file structure after export",
+                    "data": _summary,
+                    "timestamp": _time_glb.time(),
+                }) + "\n")
+        except Exception as _e_glb:
+            import traceback as _tb_glb
+            with open(_dbg_glb, "a") as _f:
+                _f.write(_json_glb.dumps({
+                    "runId": "pack-texture-001",
+                    "location": "generator.py:post_gltf_export",
+                    "message": "Failed to parse GLB",
+                    "data": {"error": str(_e_glb), "traceback": _tb_glb.format_exc()},
+                    "timestamp": _time_glb.time(),
+                }) + "\n")
+        # #endregion
+
     elif export_format == "obj":
-        export_name = (
-            asset_name
-            if is_static_asset
-            else (armature.name if armature else asset_name)
-        )
+        export_name = asset_name
         path = resolve_path(export_path, export_name + ".obj")
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -1029,6 +1495,8 @@ def _finalize_and_export(
             filepath=path,
             check_existing=False,
             filter_glob="*.obj",
+            forward_axis="NEGATIVE_Z",
+            up_axis="Y",
         )
 
     elif export_format == "votv":

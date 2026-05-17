@@ -181,7 +181,7 @@ def _bake_with_all_principled_replaced(
         obj: The mesh object to bake from
         material: The material to bake
         channels: Parsed channel list
-        bake_type: "EMIT" or "NORMAL"
+        bake_type: "EMIT", "NORMAL", "AO", or "MIXED_AO"
         resolution: Fixed resolution (width, height)
         max_resolution: Maximum resolution cap
         uv_layer_name: Specific UV layer to use
@@ -279,6 +279,14 @@ def _bake_with_all_principled_replaced(
 
     # Determine final resolution
     final_resolution = resolution or detected_resolution or (512, 512)
+
+    # AO is raytraced from geometry, not source textures. If source textures
+    # are tiny the detector returns a useless resolution. Floor to 512.
+    if bake_type in ("AO", "MIXED_AO"):
+        if final_resolution[0] < 128 or final_resolution[1] < 128:
+            final_resolution = (512, 512)
+            debug_print(f"  AO floor: bumped resolution to {final_resolution}")
+
     if max_resolution:
         max_width, max_height = max_resolution
         final_resolution = (
@@ -287,42 +295,56 @@ def _bake_with_all_principled_replaced(
         )
     debug_print(f"  Final resolution: {final_resolution}")
 
+    # For MIXED_AO, replace ao channels with constant 1 for the EMIT pass.
+    # The real AO is baked separately via raytracing and composited in.
+    ao_channel_indices = []
+    emit_channels = channels
+    if bake_type == "MIXED_AO":
+        emit_channels = []
+        for i, ch in enumerate(channels):
+            if ch == "ao":
+                emit_channels.append("1")
+                ao_channel_indices.append(i)
+            else:
+                emit_channels.append(ch)
+
     # Check if alpha is in use (4th channel that's not 'xx')
-    has_alpha = len(channels) == 4 and channels[3] != "xx"
+    has_alpha = len(emit_channels) == 4 and emit_channels[3] != "xx"
 
     # Store RGB and Alpha emissions for 2-stage bake if needed
     rgb_emissions = []
     alpha_emissions = []
 
-    # Replace each Principled BSDF with Emission inline (in their respective trees)
-    # Use shader_state to track changes for restoration
-    for info in principled_infos:
-        principled = info["node"]
-        principled_tree = info["tree"]
+    # Pure AO bake doesn't need Principled replacement (geometric raytracing)
+    if bake_type != "AO":
+        # Replace each Principled BSDF with Emission inline (in their respective trees)
+        # Use shader_state to track changes for restoration
+        for info in principled_infos:
+            principled = info["node"]
+            principled_tree = info["tree"]
 
-        if bake_type == "NORMAL":
-            # For NORMAL baking, replace with temp Principled BSDF that only has Normal connected
-            rgb_emission, alpha_emission = _replace_principled_for_normal_bake(
-                shader_state,
-                principled_tree,
-                principled,
-                debug_print,
-            )
-        else:
-            # For EMIT baking, replace with Emission nodes
-            rgb_emission, alpha_emission = _replace_principled_with_emission_tracked(
-                shader_state,
-                principled_tree,
-                principled,
-                channels,
-                has_alpha,
-                debug_print,
-            )
+            if bake_type == "NORMAL":
+                rgb_emission, alpha_emission = _replace_principled_for_normal_bake(
+                    shader_state,
+                    principled_tree,
+                    principled,
+                    debug_print,
+                )
+            else:
+                # EMIT and MIXED_AO both use emission replacement for non-AO channels
+                rgb_emission, alpha_emission = _replace_principled_with_emission_tracked(
+                    shader_state,
+                    principled_tree,
+                    principled,
+                    emit_channels,
+                    has_alpha,
+                    debug_print,
+                )
 
-        if rgb_emission:
-            rgb_emissions.append((rgb_emission, principled_tree))
-        if has_alpha and alpha_emission:
-            alpha_emissions.append((alpha_emission, principled_tree))
+            if rgb_emission:
+                rgb_emissions.append((rgb_emission, principled_tree))
+            if has_alpha and alpha_emission:
+                alpha_emissions.append((alpha_emission, principled_tree))
 
     # Ensure UV map exists
     if not _ensure_uv_map(obj):
@@ -370,7 +392,6 @@ def _bake_with_all_principled_replaced(
 
     try:
         if bake_type == "NORMAL":
-            # Normal baking
             bake_image = _execute_normal_bake(
                 material,
                 dtp_format,
@@ -380,6 +401,28 @@ def _bake_with_all_principled_replaced(
                 mesh_data,
                 uv_layer_name,
                 channels,
+                use_float,
+                debug_print,
+            )
+        elif bake_type == "AO":
+            bake_image = _execute_ao_bake(
+                material,
+                dtp_format,
+                shader_state,
+                tree,
+                final_resolution,
+                use_float,
+                debug_print,
+            )
+        elif bake_type == "MIXED_AO":
+            # 2-pass: EMIT for non-AO channels, then raytraced AO, then composite
+            bake_image = _execute_mixed_ao_bake(
+                material,
+                dtp_format,
+                shader_state,
+                tree,
+                final_resolution,
+                ao_channel_indices,
                 use_float,
                 debug_print,
             )
@@ -909,6 +952,268 @@ def _execute_emit_bake(
     return bake_image
 
 
+# Raytraced AO bake quality settings
+_AO_BAKE_SAMPLES = 128
+_AO_BAKE_DISTANCE = 1.0
+
+
+def _execute_ao_bake(
+    material: bpy.types.Material,
+    dtp_format: str,
+    shader_state: NodeGraphState,
+    tree: bpy.types.NodeTree,
+    resolution: Tuple[int, int],
+    use_float: bool,
+    debug_print,
+) -> Optional[bpy.types.Image]:
+    """
+    Execute AO bake via ShaderNodeAmbientOcclusion -> Emission -> EMIT bake.
+
+    Uses the proven EMIT pipeline with an AO shader node for raytraced
+    occlusion calculation.
+    """
+    bake_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+    bake_image.colorspace_settings.name = "Non-Color"
+
+    img_node = shader_state.add_node(tree, "ShaderNodeTexImage")
+    img_node.image = bake_image
+    img_node.select = True
+    tree.nodes.active = img_node
+
+    scene = bpy.context.scene
+    scene.cycles.samples = _AO_BAKE_SAMPLES
+
+    # Wire AO node -> Emission -> Material Output
+    mat_output = None
+    for node in tree.nodes:
+        if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
+            mat_output = node
+            break
+
+    if not mat_output:
+        debug_print("  AO bake failed: no Material Output node")
+        bpy.data.images.remove(bake_image)
+        return None
+
+    ao_prev_link_from = None
+    if mat_output.inputs["Surface"].is_linked:
+        ao_prev_link_from = mat_output.inputs["Surface"].links[0].from_socket
+
+    ao_node = tree.nodes.new("ShaderNodeAmbientOcclusion")
+    ao_node.samples = 16
+    ao_node.inputs["Distance"].default_value = _AO_BAKE_DISTANCE
+
+    ao_emit = tree.nodes.new("ShaderNodeEmission")
+    tree.links.new(ao_node.outputs["AO"], ao_emit.inputs["Color"])
+
+    if mat_output.inputs["Surface"].is_linked:
+        tree.links.remove(mat_output.inputs["Surface"].links[0])
+    tree.links.new(ao_emit.outputs["Emission"], mat_output.inputs["Surface"])
+
+    debug_print(
+        f"🍞 Baking AO at {resolution[0]}x{resolution[1]} "
+        f"({_AO_BAKE_SAMPLES} samples, distance={_AO_BAKE_DISTANCE})"
+    )
+
+    try:
+        margin = _get_bake_margin(resolution)
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_duration = int(time.time() - bake_start_time)
+        debug_print(f"    ✔️ AO: {bake_duration} seconds")
+    except Exception as e:
+        debug_print(f"  AO bake failed: {e}")
+        bpy.data.images.remove(bake_image)
+        tree.nodes.remove(ao_node)
+        tree.nodes.remove(ao_emit)
+        if ao_prev_link_from:
+            tree.links.new(ao_prev_link_from, mat_output.inputs["Surface"])
+        return None
+    finally:
+        tree.nodes.remove(ao_node)
+        tree.nodes.remove(ao_emit)
+        if ao_prev_link_from:
+            tree.links.new(ao_prev_link_from, mat_output.inputs["Surface"])
+
+    return bake_image
+
+
+def _execute_mixed_ao_bake(
+    material: bpy.types.Material,
+    dtp_format: str,
+    shader_state: NodeGraphState,
+    tree: bpy.types.NodeTree,
+    resolution: Tuple[int, int],
+    ao_channel_indices: List[int],
+    use_float: bool,
+    debug_print,
+) -> Optional[bpy.types.Image]:
+    """
+    2-pass bake for formats mixing AO with other channels (e.g. ao-ro-me).
+
+    Pass 1: EMIT bake for non-AO channels (ao replaced with constant 1)
+    Pass 2: Raytraced AO bake at higher sample count
+    Composite: Overlay AO grayscale into the correct RGB channel(s)
+    """
+    # Pass 1: EMIT bake (Principled already replaced with ao->1 substitution)
+    emit_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}_emit",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+    emit_image.colorspace_settings.name = "Non-Color"
+
+    # Deselect all nodes first, then create bake target directly (not via shader_state)
+    for node in tree.nodes:
+        node.select = False
+
+    img_node = tree.nodes.new("ShaderNodeTexImage")
+    img_node.image = emit_image
+    img_node.select = True
+    tree.nodes.active = img_node
+
+    debug_print(f"🍞 Baking EMIT pass at {resolution[0]}x{resolution[1]} (non-AO channels)")
+
+    try:
+        margin = _get_bake_margin(resolution)
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_duration = int(time.time() - bake_start_time)
+        debug_print(f"    ✔️ EMIT pass: {bake_duration} seconds")
+    except Exception as e:
+        debug_print(f"  EMIT pass failed: {e}")
+        tree.nodes.remove(img_node)
+        bpy.data.images.remove(emit_image)
+        return None
+
+    # Capture EMIT pixels to numpy immediately. The next bake will
+    # invalidate the image buffer (same pattern as _pack_rgba_images).
+    emit_array = _image_to_np(emit_image)
+    bpy.data.images.remove(emit_image)
+
+    # Pass 2: AO via ShaderNodeAmbientOcclusion -> Emission -> EMIT bake.
+    ao_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}_ao",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+    ao_image.colorspace_settings.name = "Non-Color"
+
+    # Reuse the same image node for the AO bake target
+    img_node.image = ao_image
+
+    scene = bpy.context.scene
+    scene.cycles.samples = _AO_BAKE_SAMPLES
+
+    # Wire AO node -> Emission -> Material Output, temporarily replacing
+    # whatever the EMIT pass left connected.
+    mat_output = None
+    for node in tree.nodes:
+        if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
+            mat_output = node
+            break
+
+    if not mat_output:
+        debug_print("  AO pass failed: no Material Output node")
+        tree.nodes.remove(img_node)
+        bpy.data.images.remove(ao_image)
+        return None
+
+    ao_prev_link_from = None
+    if mat_output.inputs["Surface"].is_linked:
+        ao_prev_link_from = mat_output.inputs["Surface"].links[0].from_socket
+
+    ao_node = tree.nodes.new("ShaderNodeAmbientOcclusion")
+    ao_node.samples = 16
+    ao_node.inputs["Distance"].default_value = _AO_BAKE_DISTANCE
+
+    ao_emit = tree.nodes.new("ShaderNodeEmission")
+    tree.links.new(ao_node.outputs["AO"], ao_emit.inputs["Color"])
+
+    if mat_output.inputs["Surface"].is_linked:
+        tree.links.remove(mat_output.inputs["Surface"].links[0])
+    tree.links.new(ao_emit.outputs["Emission"], mat_output.inputs["Surface"])
+
+    debug_print(
+        f"🍞 Baking AO pass at {resolution[0]}x{resolution[1]} "
+        f"({_AO_BAKE_SAMPLES} samples, distance={_AO_BAKE_DISTANCE})"
+    )
+
+    try:
+        bake_start_time = time.time()
+        bpy.ops.object.bake(
+            type="EMIT",
+            use_clear=True,
+            margin=margin,
+            margin_type="EXTEND",
+        )
+        bake_duration = int(time.time() - bake_start_time)
+        debug_print(f"    ✔️ AO pass: {bake_duration} seconds")
+    except Exception as e:
+        debug_print(f"  AO pass failed: {e}")
+        bpy.data.images.remove(ao_image)
+        tree.nodes.remove(ao_node)
+        tree.nodes.remove(ao_emit)
+        tree.nodes.remove(img_node)
+        if ao_prev_link_from:
+            tree.links.new(ao_prev_link_from, mat_output.inputs["Surface"])
+        return None
+    finally:
+        tree.nodes.remove(ao_node)
+        tree.nodes.remove(ao_emit)
+        if ao_prev_link_from:
+            tree.links.new(ao_prev_link_from, mat_output.inputs["Surface"])
+
+    scene.cycles.samples = 1
+
+    # Capture AO pixels to numpy (the bake image will be invalidated by cleanup)
+    ao_array = _image_to_np(ao_image)
+
+    bpy.data.images.remove(ao_image)
+    tree.nodes.remove(img_node)
+
+    # Composite: overlay AO grayscale into the correct channel(s) of EMIT result
+    ao_grayscale = ao_array[:, :, 0]
+    for ch_idx in ao_channel_indices:
+        if ch_idx < 3:
+            emit_array[:, :, ch_idx] = ao_grayscale
+
+    # Create final composited image
+    final_image = bpy.data.images.new(
+        name=f"bake_{material.name}_{dtp_format}",
+        width=resolution[0],
+        height=resolution[1],
+        alpha=False,
+        float_buffer=use_float,
+    )
+    final_image.colorspace_settings.name = "Non-Color"
+    _np_to_image_pixels(final_image, emit_array)
+
+    debug_print(f"    ✔️ Composited AO into channel(s) {ao_channel_indices}")
+
+    return final_image
+
+
 def _execute_two_stage_bake(
     material: bpy.types.Material,
     dtp_format: str,
@@ -1154,6 +1459,12 @@ def _get_bake_type_for_channels(channels: list) -> str:
     # Check if this contains only normal map channels
     elif all(channel in ["nx", "ng", "nd"] for channel in channels):
         return "NORMAL"
+    # AO needs raytraced bake, can't go through EMIT value-extraction pipeline
+    elif "ao" in channels:
+        non_ao = [ch for ch in channels if ch not in ("ao", "0", "1", "xx")]
+        if not non_ao:
+            return "AO"
+        return "MIXED_AO"
     else:
         return "EMIT"
 

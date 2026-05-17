@@ -67,11 +67,11 @@ def draw_export_profiles(layout, asset, context):
     ):
         profile = cfg.export_profiles[cfg.active_export_index]
 
-        # Show validation warnings
-        if profile.bake_after_export and not has_bake_profiles:
+        # Show validation warnings (pack mode uses fixed glTF set, no user profiles needed)
+        if profile.bake_after_export and not profile.pack_textures_glb and not has_bake_profiles:
             box = layout.box()
             box.alert = True
-            box.label(text='"Bake after export" requires a bake profile', icon="ERROR")
+            box.label(text="Bake requires a bake profile", icon="ERROR")
 
         # Check for layer name collisions (for any export type)
         collisions = get_layer_name_collisions(asset)
@@ -96,7 +96,13 @@ def draw_export_profiles(layout, asset, context):
                 icon="ASSET_MANAGER",
             )
         else:
-            if profile.bake_after_export:
+            if profile.pack_textures_glb:
+                row.operator(
+                    "nyaatools.run_export_profile",
+                    text="Merge, Bake, Export",
+                    icon="EXPORT",
+                )
+            elif profile.bake_after_export:
                 row.operator(
                     "nyaatools.run_export_profile",
                     text="Merge, Export, Bake",
@@ -169,6 +175,16 @@ def draw_bake_channels(layout, asset, context):
         profile.bake_after_export for profile in cfg.export_profiles
     )
 
+    # Pack mode uses fixed glTF bake set, hide entire section
+    active_profile = None
+    if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
+        cfg.export_profiles
+    ):
+        active_profile = cfg.export_profiles[cfg.active_export_index]
+
+    if active_profile and active_profile.pack_textures_glb:
+        return
+
     box = layout.box()
     row = box.row()
 
@@ -178,12 +194,6 @@ def draw_bake_channels(layout, asset, context):
         for img in cfg.bake_images:
             list.append(img.format)
         title = "Bake Channels: " + ", ".join(list)
-
-    active_profile = None
-    if len(cfg.export_profiles) > 0 and 0 <= cfg.active_export_index < len(
-        cfg.export_profiles
-    ):
-        active_profile = cfg.export_profiles[cfg.active_export_index]
 
     if not active_profile or not active_profile.bake_after_export:
         title += " (Disabled)"

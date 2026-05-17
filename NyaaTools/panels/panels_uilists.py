@@ -94,10 +94,11 @@ class NYAATOOLS_UL_ExportProfiles(UIList):
             else:
                 format_icons = {
                     "fbx": "FILE_3D",
+                    "glb": "FILE_3D",
                     "obj": "FILE_3D",
                     "votv": "GHOST_ENABLED",
                 }
-                format_labels = {"fbx": "FBX", "obj": "OBJ", "votv": "VotV"}
+                format_labels = {"fbx": "FBX", "glb": "glTF", "obj": "OBJ", "votv": "VotV"}
                 row.label(
                     text=format_labels.get(item.format, "?"),
                     icon=format_icons.get(item.format, "FILE"),
@@ -116,6 +117,8 @@ class NYAATOOLS_UL_ExportProfiles(UIList):
             indicators = []
             if item.export_static:
                 indicators.append("Static")
+            if item.pack_textures_glb:
+                indicators.append("Pack")
             if item.bake_after_export:
                 indicators.append("Bake")
             if indicators:

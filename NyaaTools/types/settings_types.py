@@ -60,8 +60,9 @@ class NyaaToolsExportSettings(bpy.types.PropertyGroup):
     format: EnumProperty(
         name="Format",
         items=[
-            ("fbx", "FBX", "Export as FBX (Unity/Unreal)"),
-            ("obj", "OBJ", "Export as OBJ (static mesh)"),
+            ("fbx", "FBX", "Export as FBX"),
+            ("glb", "glTF", "Export as GLB/GLTF"),
+            ("obj", "OBJ", "Export as OBJ"),
             ("votv", "VotV", "Export for Voices of the Void"),
         ],
         default="fbx",

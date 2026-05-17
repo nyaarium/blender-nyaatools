@@ -122,8 +122,9 @@ class NyaaExportProfile(bpy.types.PropertyGroup):
     format: EnumProperty(
         name="Format",
         items=[
-            ("fbx", "FBX", "Export as FBX (Unity/Unreal)"),
-            ("obj", "OBJ", "Export as OBJ (static mesh)"),
+            ("fbx", "FBX", "Export as FBX"),
+            ("glb", "glTF", "Export as GLB/GLTF"),
+            ("obj", "OBJ", "Export as OBJ"),
             ("votv", "VotV", "Export for Voices of the Void"),
         ],
         default="fbx",
@@ -138,6 +139,37 @@ class NyaaExportProfile(bpy.types.PropertyGroup):
         name="Bake Textures",
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
+    )
+    pack_textures_glb: BoolProperty(
+        name="Pack Textures in GLB",
+        default=False,
+        description="Embed baked textures directly into GLB binary (skips textures/ folder)",
+    )
+    axis_forward: EnumProperty(
+        name="Forward",
+        items=[
+            ("+X", "+X", ""),
+            ("-X", "-X", ""),
+            ("+Y", "+Y", ""),
+            ("-Y", "-Y", ""),
+            ("+Z", "+Z", ""),
+            ("-Z", "-Z", ""),
+        ],
+        default="-Y",
+        description="Forward direction of your Blender scene. Default -Y is Blender-native. This describes your working orientation, not what the engine wants — engines read axis metadata from the FBX and convert on import",
+    )
+    axis_up: EnumProperty(
+        name="Up",
+        items=[
+            ("+X", "+X", ""),
+            ("-X", "-X", ""),
+            ("+Y", "+Y", ""),
+            ("-Y", "-Y", ""),
+            ("+Z", "+Z", ""),
+            ("-Z", "-Z", ""),
+        ],
+        default="+Z",
+        description="Up direction of your Blender scene. Default +Z is Blender-native. This describes your working orientation, not what the engine wants — engines read axis metadata from the FBX and convert on import",
     )
     include_ue_colliders: BoolProperty(
         name="Include UE Colliders",

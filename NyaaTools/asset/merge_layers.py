@@ -419,9 +419,9 @@ def copy_armature_to_collection(
         armature_copy.nyaa_asset.export_profiles.clear()
         armature_copy.nyaa_asset.bake_images.clear()
 
-    # Apply transforms
-    bpy.context.view_layer.objects.active = armature_copy
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # Armature transform is deliberately left intact here. It gets baked later in
+    # _apply_mesh_transforms (generator.py) AFTER mesh world transforms are captured,
+    # so the meshes' raised positions are preserved instead of being dropped to origin.
 
     unrename_info = rename_object(armature_copy, armature_name)
     debug_print(f"📦 Copied armature: {armature_copy.name}")

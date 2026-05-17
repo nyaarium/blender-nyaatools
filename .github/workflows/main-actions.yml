@@ -54,7 +54,7 @@ jobs:
         with:
           name: image
           path: release/*
-          retention-days: 7
+          retention-days: 1
 
       - name: Create release
         uses: ncipollo/release-action@v1

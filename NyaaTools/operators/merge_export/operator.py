@@ -33,6 +33,9 @@ class NYAATOOLS_OT_AssetMergeExport(bpy.types.Operator):
     target_type: StringProperty(name="Target Type", default="file")
     export_static: BoolProperty(name="Export Static", default=False)
     bake_after_export: BoolProperty(name="Bake After Export", default=False)
+    pack_textures_glb: BoolProperty(name="Pack Textures in GLB", default=False)
+    axis_forward: StringProperty(name="Axis Forward", default="-Y")
+    axis_up: StringProperty(name="Axis Up", default="+Z")
     include_ue_colliders: BoolProperty(name="Include UE Colliders", default=False)
 
     # State
@@ -51,12 +54,13 @@ class NYAATOOLS_OT_AssetMergeExport(bpy.types.Operator):
                 self.report({"ERROR"}, f"Asset '{self.asset_name}' not found.")
                 return {"CANCELLED"}
 
-            if self.bake_after_export:
+            # Pack mode uses fixed glTF bake set, no user profiles needed
+            if self.bake_after_export and not self.pack_textures_glb:
                 cfg = asset_host.nyaa_asset
                 if len(cfg.bake_images) == 0:
                     self.report(
                         {"ERROR"},
-                        '"Bake after export" requires bake profiles to be configured.',
+                        "Bake requires bake profiles to be configured.",
                     )
                     return {"CANCELLED"}
 
@@ -68,6 +72,9 @@ class NYAATOOLS_OT_AssetMergeExport(bpy.types.Operator):
                 target_type=self.target_type,
                 export_static=self.export_static,
                 bake_after_export=self.bake_after_export,
+                pack_textures_glb=self.pack_textures_glb,
+                axis_forward=self.axis_forward,
+                axis_up=self.axis_up,
                 include_ue_colliders=self.include_ue_colliders,
             )
             self._state = MergeExportState()

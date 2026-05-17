@@ -5,7 +5,7 @@
 # Configuration:
 #   Create a .env file with DEPLOY_PATH set to your Blender addons folder.
 #   Example .env:
-#     DEPLOY_PATH="/mnt/c/Users/YourName/AppData/Roaming/Blender Foundation/Blender/5.0/scripts/addons/NyaaTools"
+#     DEPLOY_PATH="/mnt/c/Users/YourName/AppData/Roaming/Blender Foundation/Blender/5.1/scripts/addons/NyaaTools"
 #
 
 set -e
@@ -23,7 +23,7 @@ if [ -z "$DEPLOY_PATH" ]; then
     echo "Error: DEPLOY_PATH not set."
     echo ""
     echo "Create a .env file with:"
-    echo '  DEPLOY_PATH="/mnt/c/Users/YourName/AppData/Roaming/Blender Foundation/Blender/5.0/scripts/addons/NyaaTools"'
+    echo '  DEPLOY_PATH="/mnt/c/Users/YourName/AppData/Roaming/Blender Foundation/Blender/5.1/scripts/addons/NyaaTools"'
     exit 1
 fi
 

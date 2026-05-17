@@ -22,8 +22,12 @@ VOTV_PRINTER_SUFFIX = "/Assets/meshes/printer/"
 # Module-level pending path for VotV auto-detect button
 # (dialogs can't be modified by external operators, so we use this pattern)
 _pending_votv_path = None
-# Stash for restoring settings when switching to/from VotV
+# Stash for restoring settings when switching to/from VotV or GLB
 _votv_restore_state = {}
+_glb_restore_state = {}
+
+# Guard against recursive update callbacks (pack <-> bake interlock)
+_updating_interlock = False
 
 
 def validate_export_profile(
@@ -46,6 +50,9 @@ def validate_export_profile(
             if path_lower.endswith(".fbx"):
                 if format != "fbx":
                     return False, "FBX file requires FBX format"
+            elif path_lower.endswith(".glb") or path_lower.endswith(".gltf"):
+                if format != "glb":
+                    return False, "GLB/GLTF file requires glTF format"
             elif path_lower.endswith(".obj"):
                 if format not in ("obj", "votv"):
                     return False, "OBJ file requires OBJ or VotV format"
@@ -105,7 +112,7 @@ def update_export_path(self, context):
         if len(parts) > 1 and parts[-1]:
             extension = parts[-1].lower()
             # Common file extensions for export
-            if extension in ("fbx", "obj"):
+            if extension in ("fbx", "glb", "gltf", "obj"):
                 return
 
     # No extension found, append directory separator
@@ -114,7 +121,9 @@ def update_export_path(self, context):
 
 def update_export_format(self, context):
     """Callback for format property update."""
-    global _votv_restore_state
+    global _votv_restore_state, _glb_restore_state, _updating_interlock
+    if _updating_interlock:
+        return
 
     if self.format == "votv":
         # Entering VotV mode: Stash current settings
@@ -131,6 +140,49 @@ def update_export_format(self, context):
             "include_ue_colliders", False
         )
         _votv_restore_state.clear()
+
+    if self.format == "glb":
+        # Entering GLB mode: Stash and enable pack + bake
+        _glb_restore_state["bake_after_export"] = self.bake_after_export
+        _glb_restore_state["pack_textures_glb"] = self.pack_textures_glb
+
+        _updating_interlock = True
+        self.bake_after_export = True
+        self.pack_textures_glb = True
+        _updating_interlock = False
+    elif _glb_restore_state:
+        # Leaving GLB mode: Restore stashed settings
+        _updating_interlock = True
+        self.bake_after_export = _glb_restore_state.get("bake_after_export", False)
+        self.pack_textures_glb = _glb_restore_state.get("pack_textures_glb", False)
+        _updating_interlock = False
+        _glb_restore_state.clear()
+
+
+def update_pack_textures(self, context):
+    """Callback for pack_textures_glb toggle. Checking pack forces bake on."""
+    global _updating_interlock
+    if _updating_interlock:
+        return
+    _updating_interlock = True
+
+    if self.pack_textures_glb:
+        self.bake_after_export = True
+
+    _updating_interlock = False
+
+
+def update_bake_after_export(self, context):
+    """Callback for bake_after_export toggle. Unchecking bake forces pack off."""
+    global _updating_interlock
+    if _updating_interlock:
+        return
+    _updating_interlock = True
+
+    if not self.bake_after_export:
+        self.pack_textures_glb = False
+
+    _updating_interlock = False
 
 
 def draw_export_profile_ui(layout, operator, context, title: str):
@@ -198,7 +250,31 @@ def draw_export_profile_ui(layout, operator, context, title: str):
             row.enabled = False
 
     # Bake option
-    layout.prop(operator, "bake_after_export")
+    bake_row = layout.row()
+    bake_row.prop(operator, "bake_after_export")
+
+    # Pack textures: only for GLB binary mode (not .gltf paths)
+    is_glb_binary = (
+        operator.format == "glb"
+        and not operator.path.lower().rstrip("/\\").endswith(".gltf")
+    )
+    if operator.target_type == "file" and is_glb_binary:
+        layout.prop(operator, "pack_textures_glb")
+        # Pack forces bake on, so disable the bake checkbox
+        if operator.pack_textures_glb:
+            bake_row.enabled = False
+
+    # Working orientation (Blender side). FBX writes this as the file's
+    # axis metadata; engines convert on import. glTF is locked to +Y up by
+    # spec, OBJ is locked to -Z forward / +Y up, so the field is FBX-only.
+    if operator.target_type == "file" and operator.format == "fbx":
+        layout.separator()
+        layout.label(text="Working Orientation (Blender side)")
+        row = layout.row(align=True)
+        row.label(text="Forward:")
+        row.prop(operator, "axis_forward", text="")
+        row.label(text="Up:")
+        row.prop(operator, "axis_up", text="")
 
     # Meta Objects section
     layout.separator()
@@ -228,7 +304,8 @@ def draw_export_profile_ui(layout, operator, context, title: str):
         col.label(text="• __Export__ collection will be purged", icon="INFO")
     else:
         col.label(text="• Folder path (ends with /): uses asset name", icon="INFO")
-        col.label(text="• File path (.fbx): direct export, FBX only", icon="INFO")
+        col.label(text="• File path (.fbx): direct export", icon="INFO")
+        col.label(text="• File path (.glb/.gltf): direct export", icon="INFO")
         col.label(text="• File path (.obj): direct export, OBJ or VotV", icon="INFO")
 
 
@@ -282,8 +359,9 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
     format: EnumProperty(
         name="Format",
         items=[
-            ("fbx", "FBX", "Export as FBX (Unity/Unreal)"),
-            ("obj", "OBJ", "Export as OBJ (static mesh)"),
+            ("fbx", "FBX", "Export as FBX"),
+            ("glb", "glTF", "Export as GLB/GLTF"),
+            ("obj", "OBJ", "Export as OBJ"),
             ("votv", "VotV", "Export for Voices of the Void"),
         ],
         default="fbx",
@@ -298,6 +376,25 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
         name="Bake Textures After Export",
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
+        update=update_bake_after_export,
+    )
+    pack_textures_glb: BoolProperty(
+        name="Pack Textures in GLB",
+        default=False,
+        description="Embed baked textures directly into GLB binary (skips textures/ folder)",
+        update=update_pack_textures,
+    )
+    axis_forward: EnumProperty(
+        name="Forward",
+        items=[("+X","+X",""),("-X","-X",""),("+Y","+Y",""),("-Y","-Y",""),("+Z","+Z",""),("-Z","-Z","")],
+        default="-Y",
+        description="Forward direction of your Blender scene. Default -Y is Blender-native. FBX writes this as axis metadata; engines convert on import",
+    )
+    axis_up: EnumProperty(
+        name="Up",
+        items=[("+X","+X",""),("-X","-X",""),("+Y","+Y",""),("-Y","-Y",""),("+Z","+Z",""),("-Z","-Z","")],
+        default="+Z",
+        description="Up direction of your Blender scene. Default +Z is Blender-native. FBX writes this as axis metadata; engines convert on import",
     )
     include_ue_colliders: BoolProperty(
         name="Include Unreal Engine Colliders",
@@ -343,6 +440,9 @@ class NYAATOOLS_OT_AddExportProfile(Operator):
         profile.format = self.format
         profile.export_static = export_static
         profile.bake_after_export = self.bake_after_export
+        profile.pack_textures_glb = self.pack_textures_glb
+        profile.axis_forward = self.axis_forward
+        profile.axis_up = self.axis_up
         profile.include_ue_colliders = include_colliders
         cfg.active_export_index = len(cfg.export_profiles) - 1
 
@@ -388,8 +488,9 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
     format: EnumProperty(
         name="Format",
         items=[
-            ("fbx", "FBX", "Export as FBX (Unity/Unreal)"),
-            ("obj", "OBJ", "Export as OBJ (static mesh)"),
+            ("fbx", "FBX", "Export as FBX"),
+            ("glb", "glTF", "Export as GLB/GLTF"),
+            ("obj", "OBJ", "Export as OBJ"),
             ("votv", "VotV", "Export for Voices of the Void"),
         ],
         default="fbx",
@@ -404,6 +505,25 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         name="Bake Textures After Export",
         default=False,
         description="Auto-bake textures after export using configured bake profiles",
+        update=update_bake_after_export,
+    )
+    pack_textures_glb: BoolProperty(
+        name="Pack Textures in GLB",
+        default=False,
+        description="Embed baked textures directly into GLB binary (skips textures/ folder)",
+        update=update_pack_textures,
+    )
+    axis_forward: EnumProperty(
+        name="Forward",
+        items=[("+X","+X",""),("-X","-X",""),("+Y","+Y",""),("-Y","-Y",""),("+Z","+Z",""),("-Z","-Z","")],
+        default="-Y",
+        description="Forward direction of your Blender scene. Default -Y is Blender-native. FBX writes this as axis metadata; engines convert on import",
+    )
+    axis_up: EnumProperty(
+        name="Up",
+        items=[("+X","+X",""),("-X","-X",""),("+Y","+Y",""),("-Y","-Y",""),("+Z","+Z",""),("-Z","-Z","")],
+        default="+Z",
+        description="Up direction of your Blender scene. Default +Z is Blender-native. FBX writes this as axis metadata; engines convert on import",
     )
     include_ue_colliders: BoolProperty(
         name="Include Unreal Engine Colliders",
@@ -419,19 +539,23 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         return len(sel.asset.nyaa_asset.export_profiles) > 0
 
     def invoke(self, context, event):
+        global _updating_interlock
         sel = SelectionContext(context)
         cfg = sel.asset.nyaa_asset
         profile = cfg.export_profiles[cfg.active_export_index]
+
+        # Suppress callbacks during initial load so saved values aren't overwritten
+        _updating_interlock = True
         self.target_type = profile.target_type
         self.path = profile.path
-
-        # Set values before format so update callback saves correct state
         self.export_static = profile.export_static
         self.bake_after_export = profile.bake_after_export
+        self.pack_textures_glb = profile.pack_textures_glb
+        self.axis_forward = profile.axis_forward
+        self.axis_up = profile.axis_up
         self.include_ue_colliders = profile.include_ue_colliders
-
-        # Set format last to trigger update callback
         self.format = profile.format
+        _updating_interlock = False
 
         return context.window_manager.invoke_props_dialog(self, width=400)
 
@@ -456,6 +580,9 @@ class NYAATOOLS_OT_EditExportProfile(Operator):
         profile.format = self.format
         profile.export_static = self.export_static
         profile.bake_after_export = self.bake_after_export
+        profile.pack_textures_glb = self.pack_textures_glb
+        profile.axis_forward = self.axis_forward
+        profile.axis_up = self.axis_up
         profile.include_ue_colliders = self.include_ue_colliders
 
         tag_view3d_redraw(context)
@@ -516,8 +643,8 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
             return False
         profile = cfg.export_profiles[cfg.active_export_index]
 
-        # Validate bake_after_export
-        if profile.bake_after_export and len(cfg.bake_images) == 0:
+        # Bake requires user-configured profiles (pack mode uses fixed glTF set)
+        if profile.bake_after_export and not profile.pack_textures_glb and len(cfg.bake_images) == 0:
             return False
 
         # Armature assets need meshes
@@ -542,6 +669,9 @@ class NYAATOOLS_OT_RunExportProfile(Operator):
             target_type=profile.target_type,
             export_static=profile.export_static,
             bake_after_export=profile.bake_after_export,
+            pack_textures_glb=profile.pack_textures_glb,
+            axis_forward=profile.axis_forward,
+            axis_up=profile.axis_up,
             include_ue_colliders=profile.include_ue_colliders,
         )
 

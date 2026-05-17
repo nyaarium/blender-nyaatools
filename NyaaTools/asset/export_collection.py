@@ -258,7 +258,7 @@ def create_baked_material(original_mat, textures_dir):
                 "ro": "Roughness",
                 "sp": "Specular IOR Level",
                 "sm": None,  # Smoothness needs inversion
-                "ao": None,  # AO not directly connected in Principled
+                "ao": None,  # AO handled separately below
             }
 
             for i, ch in enumerate(channels[:3]):
@@ -277,5 +277,30 @@ def create_baked_material(original_mat, textures_dir):
                         separate_node.outputs[channel_outputs[i]], invert.inputs[1]
                     )
                     links.new(invert.outputs["Value"], principled.inputs["Roughness"])
+                elif ch == "ao":
+                    # Multiply AO into Base Color. The glTF exporter
+                    # detects this pattern and maps it to occlusionTexture.
+                    mix = nodes.new("ShaderNodeMix")
+                    mix.data_type = "RGBA"
+                    mix.blend_type = "MULTIPLY"
+                    mix.clamp_result = False
+                    mix.inputs[0].default_value = 1.0
+                    mix.location = (tex_x + 400, tex_y + 300 - i * 50)
+
+                    base_input = principled.inputs["Base Color"]
+                    if base_input.is_linked:
+                        src = base_input.links[0].from_socket
+                        links.remove(base_input.links[0])
+                        links.new(src, mix.inputs[6])
+                    else:
+                        d = base_input.default_value
+                        mix.inputs[6].default_value = (d[0], d[1], d[2], 1.0)
+
+                    # AO scalar broadcasts to all RGBA channels
+                    links.new(
+                        separate_node.outputs[channel_outputs[i]],
+                        mix.inputs[7],
+                    )
+                    links.new(mix.outputs[2], base_input)
 
     return new_mat
