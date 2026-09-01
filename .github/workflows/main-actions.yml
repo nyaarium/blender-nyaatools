@@ -40,7 +40,7 @@ jobs:
 
       - name: Set message
         run: |
-          mv release-notes.md release/body.md
+          mv Release.md release/body.md
 
       - name: Create a release zip
         run: |
